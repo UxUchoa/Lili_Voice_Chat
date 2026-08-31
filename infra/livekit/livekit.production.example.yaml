@@ -1,0 +1,21 @@
+port: 7880
+log_level: info
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 60000
+  use_external_ip: true
+redis:
+  address: redis.internal:6379
+  username: CHANGE_ME
+  password: CHANGE_ME
+keys:
+  JANJA_LIVEKIT_API_KEY: CHANGE_TO_A_32_BYTE_OR_LONGER_SECRET
+turn:
+  enabled: true
+  domain: turn.example.com
+  tls_port: 443
+  relay_range_start: 30000
+  relay_range_end: 40000
+  cert_file: /etc/livekit/tls/fullchain.pem
+  key_file: /etc/livekit/tls/privkey.pem

@@ -1,0 +1,19 @@
+port: 7880
+log_level: info
+rtc:
+  tcp_port: 7881
+  udp_port: 7882
+  node_ip: __NODE_IP__
+  use_external_ip: false
+redis:
+  address: redis:6379
+keys:
+  janja_local_key: janja_local_secret_change_before_any_remote_deployment
+turn:
+  enabled: true
+  udp_port: 3478
+  relay_range_start: 30000
+  relay_range_end: 30020
+  allow_restricted_peer_cidrs:
+    - 127.0.0.0/8
+    - __LAN_CIDR__

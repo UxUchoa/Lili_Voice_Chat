@@ -1,0 +1,17 @@
+# O repositório guarda tudo em LF. Sem isto, um checkout no Windows converte os
+# arquivos para CRLF e o próximo commit vira um diff de arquivo inteiro.
+* text=auto eol=lf
+
+# O patch do OpenMLS é aplicado por `git apply` no runner do Windows. Qualquer
+# conversão de fim de linha faz o contexto deixar de casar com o upstream.
+*.patch -text
+
+# PowerShell é usado pelo Windows; manter CRLF evita surpresa em editor antigo.
+*.ps1 text eol=crlf
+
+# Binários
+*.wasm binary
+*.png binary
+*.ico binary
+*.woff binary
+*.woff2 binary

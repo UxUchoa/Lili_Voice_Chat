@@ -1,0 +1,19 @@
+# O deploy da web só precisa do código do site. Tudo abaixo é desktop,
+# infraestrutura, teste ou terceiro.
+vendor/
+release/
+release-*/
+electron/
+e2e/
+infra/
+docs/
+patches/
+test-results/
+playwright-report/
+test-fixtures/
+supabase/migrations/
+supabase/tests/
+supabase/snippets/
+supabase/functions/
+.github/
+playwright.config.ts

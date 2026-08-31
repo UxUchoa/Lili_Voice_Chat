@@ -1,0 +1,76 @@
+project_id = "janja-voice-chat"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 17
+
+[db.pooler]
+enabled = false
+port = 54329
+pool_mode = "transaction"
+default_pool_size = 20
+max_client_conn = 100
+
+[realtime]
+enabled = true
+
+[studio]
+enabled = true
+port = 54323
+api_url = "http://127.0.0.1"
+
+[local_smtp]
+enabled = true
+port = 54324
+
+[storage]
+enabled = true
+# O bucket `attachments` aceita 104861696 bytes (100 MiB + a folga de 4 KB da
+# tag do AES-GCM), definido em 202608290058. O teto global precisa ser maior
+# que o do bucket, senão o upload é recusado antes de chegar na política.
+# No projeto hospedado o mesmo valor vive em Settings → Storage → Upload limit.
+file_size_limit = "101MiB"
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:5173"
+additional_redirect_urls = ["http://127.0.0.1:5173", "janja://auth/callback"]
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+refresh_token_reuse_interval = 10
+enable_signup = true
+minimum_password_length = 8
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = false
+
+[edge_runtime]
+enabled = true
+policy = "per_worker"
+inspector_port = 8083
+
+[functions.livekit-token]
+verify_jwt = true
+
+[functions.livekit-moderate]
+verify_jwt = true
+
+[functions.push-dispatch]
+verify_jwt = false
+
+# Limpeza dos anexos vencidos. O `verify_jwt` fica desligado porque o `pg_cron`
+# de produção chama sem sessão de usuário, com `x-cron-secret`. A função decide
+# a autorização por conta própria: ou o segredo do agendador, ou um usuário
+# autenticado de verdade — anônimo continua recebendo 401.
+[functions.attachments-expire]
+verify_jwt = false

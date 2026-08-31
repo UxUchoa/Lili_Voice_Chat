@@ -1,0 +1,25 @@
+services:
+  redis:
+    image: redis:8.2.1-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    restart: unless-stopped
+    volumes:
+      - livekit-redis:/data
+
+  livekit:
+    image: livekit/livekit-server:v1.13.4
+    command: ["--config", "/etc/livekit/livekit.local.yaml"]
+    restart: unless-stopped
+    depends_on:
+      - redis
+    volumes:
+      - ./livekit.local.yaml:/etc/livekit/livekit.local.yaml:ro
+    ports:
+      - "7880:7880/tcp"
+      - "7881:7881/tcp"
+      - "7882:7882/udp"
+      - "3478:3478/udp"
+      - "30000-30020:30000-30020/udp"
+
+volumes:
+  livekit-redis:

@@ -1,0 +1,46 @@
+# Dependências e saídas de build
+node_modules/
+dist/
+release/
+release-*/
+*.tsbuildinfo
+
+# Segredos e configuração local
+# `.env.local` guarda a configuração da instância em uso e `supabase/functions/
+# .env.local` guarda LIVEKIT_API_SECRET e as chaves VAPID: nenhum dos dois pode
+# chegar ao GitHub.
+.env
+.env.*
+!.env.example
+supabase/functions/.env
+supabase/functions/.env.*
+!supabase/functions/.env.example
+supabase/.temp/
+supabase/.branches/
+
+# Material de assinatura de código
+*.pfx
+*.p12
+*.cer
+*.key
+*.pem
+
+# Terceiros: `vendor/openmls` é recriado por scripts/setup-openmls-vendor.mjs
+# a partir do commit fixado + patches/openmls-wasm.patch.
+vendor/
+
+# Infra local gerada por script (traz o IP da LAN da máquina)
+infra/livekit/livekit.local.yaml
+
+# Resultados de teste e relatórios
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
+# Ferramentas
+.vercel
+.DS_Store
+Thumbs.db
+npm-debug.log*
+yarn-error.log*

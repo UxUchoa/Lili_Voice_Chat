@@ -1,0 +1,65 @@
+name: Signed Windows release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    env:
+      CSC_LINK: ${{ secrets.CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      GH_TOKEN: ${{ github.token }}
+      VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_LIVEKIT_URL: ${{ vars.VITE_LIVEKIT_URL }}
+      VITE_FORCE_TURN: ${{ vars.VITE_FORCE_TURN }}
+      VITE_VAPID_PUBLIC_KEY: ${{ vars.VITE_VAPID_PUBLIC_KEY }}
+      VITE_TENOR_API_KEY: ${{ vars.VITE_TENOR_API_KEY }}
+      # Recusa URL local, chave de service role e qualquer segredo com prefixo
+      # VITE_. É o mesmo validador que roda na Vercel e no CI.
+      JANJA_STRICT_ENV: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Validate signing secrets
+        shell: pwsh
+        run: |
+          if (-not $env:CSC_LINK) { throw "CSC_LINK is required for signed releases." }
+          if (-not $env:CSC_KEY_PASSWORD) { throw "CSC_KEY_PASSWORD is required." }
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+      # Falha antes de empacotar se a configuração pública estiver ausente ou
+      # errada: um instalador assinado sem backend é pior que nenhum.
+      - run: npm run build:web
+      - name: Build signed NSIS release and update metadata
+        shell: pwsh
+        run: |
+          $repository = $env:GITHUB_REPOSITORY.Split('/')[1]
+          npx electron-builder --win nsis --publish always `
+            --config.forceCodeSigning=true `
+            --config.publish.provider=github `
+            "--config.publish.owner=$env:GITHUB_REPOSITORY_OWNER" `
+            "--config.publish.repo=$repository"
+      - name: Verify signed installer and update metadata
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem release -File -Filter '*.exe' | Select-Object -First 1
+          if (-not $installer) { throw "NSIS installer was not generated." }
+          $signature = Get-AuthenticodeSignature -LiteralPath $installer.FullName
+          if ($signature.Status -ne 'Valid') {
+            throw "Installer signature is not valid: $($signature.Status)"
+          }
+          if (-not (Test-Path -LiteralPath 'release/latest.yml')) {
+            throw "electron-updater metadata release/latest.yml is missing."
+          }

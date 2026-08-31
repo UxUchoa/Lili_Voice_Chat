@@ -1,0 +1,1 @@
+Janja local attachment E2EE test fixture.
