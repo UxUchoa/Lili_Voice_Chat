@@ -28,7 +28,7 @@ const member = createClient(apiUrl, publishableKey, {
 });
 
 const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-const password = `Janja-${crypto.randomUUID()}-Aa1!`;
+const password = `Lili-${crypto.randomUUID()}-Aa1!`;
 const createdUserIds = [];
 let serverId;
 
@@ -43,8 +43,8 @@ const unwrap = async (promise, label) => {
 
 try {
   for (const input of [
-    { email: `owner-${runId}@janja.local`, username: `owner_${runId.replace(/\W/g, "")}` },
-    { email: `member-${runId}@janja.local`, username: `member_${runId.replace(/\W/g, "")}` },
+    { email: `owner-${runId}@lili.app`, username: `owner_${runId.replace(/\W/g, "")}` },
+    { email: `member-${runId}@lili.app`, username: `member_${runId.replace(/\W/g, "")}` },
   ]) {
     const data = await unwrap(
       admin.auth.admin.createUser({
@@ -59,11 +59,11 @@ try {
   }
 
   await unwrap(
-    owner.auth.signInWithPassword({ email: `owner-${runId}@janja.local`, password }),
+    owner.auth.signInWithPassword({ email: `owner-${runId}@lili.app`, password }),
     "login do proprietário",
   );
   await unwrap(
-    member.auth.signInWithPassword({ email: `member-${runId}@janja.local`, password }),
+    member.auth.signInWithPassword({ email: `member-${runId}@lili.app`, password }),
     "login do participante",
   );
 

@@ -5,9 +5,9 @@ select plan(8);
 
 insert into auth.users(id, email, aud, role, raw_user_meta_data)
 values
-  ('16000000-0000-0000-0000-000000000001', 'notice-owner@janja.local', 'authenticated', 'authenticated', '{"username":"notice_owner","display_name":"Notice owner"}'),
-  ('16000000-0000-0000-0000-000000000002', 'notice-member@janja.local', 'authenticated', 'authenticated', '{"username":"notice_member","display_name":"Notice member"}'),
-  ('16000000-0000-0000-0000-000000000003', 'notice-outsider@janja.local', 'authenticated', 'authenticated', '{"username":"notice_outsider","display_name":"Notice outsider"}');
+  ('16000000-0000-0000-0000-000000000001', 'notice-owner@lili.local', 'authenticated', 'authenticated', '{"username":"notice_owner","display_name":"Notice owner"}'),
+  ('16000000-0000-0000-0000-000000000002', 'notice-member@lili.local', 'authenticated', 'authenticated', '{"username":"notice_member","display_name":"Notice member"}'),
+  ('16000000-0000-0000-0000-000000000003', 'notice-outsider@lili.local', 'authenticated', 'authenticated', '{"username":"notice_outsider","display_name":"Notice outsider"}');
 
 insert into public.servers(id, owner_id, name)
 values ('26000000-0000-0000-0000-000000000001', '16000000-0000-0000-0000-000000000001', 'Notification server');

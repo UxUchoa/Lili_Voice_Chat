@@ -12,7 +12,7 @@ import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import process from "node:process";
 
-if (process.env.VERCEL || process.env.JANJA_SKIP_ELECTRON_DOWNLOAD === "true") {
+if (process.env.VERCEL || process.env.LILI_SKIP_ELECTRON_DOWNLOAD === "true") {
   console.log("postinstall: download do Electron dispensado neste ambiente.");
   process.exit(0);
 }

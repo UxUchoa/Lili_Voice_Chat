@@ -5,10 +5,10 @@ select plan(8);
 
 insert into auth.users(id, email, aud, role, raw_user_meta_data)
 values
-  ('17000000-0000-0000-0000-000000000001', 'gdm-owner@janja.local', 'authenticated', 'authenticated', '{"username":"gdm_owner","display_name":"GDM owner"}'),
-  ('17000000-0000-0000-0000-000000000002', 'gdm-member@janja.local', 'authenticated', 'authenticated', '{"username":"gdm_member","display_name":"GDM member"}'),
-  ('17000000-0000-0000-0000-000000000003', 'gdm-member-two@janja.local', 'authenticated', 'authenticated', '{"username":"gdm_member_two","display_name":"GDM member two"}'),
-  ('17000000-0000-0000-0000-000000000004', 'gdm-new@janja.local', 'authenticated', 'authenticated', '{"username":"gdm_new","display_name":"GDM new"}');
+  ('17000000-0000-0000-0000-000000000001', 'gdm-owner@lili.local', 'authenticated', 'authenticated', '{"username":"gdm_owner","display_name":"GDM owner"}'),
+  ('17000000-0000-0000-0000-000000000002', 'gdm-member@lili.local', 'authenticated', 'authenticated', '{"username":"gdm_member","display_name":"GDM member"}'),
+  ('17000000-0000-0000-0000-000000000003', 'gdm-member-two@lili.local', 'authenticated', 'authenticated', '{"username":"gdm_member_two","display_name":"GDM member two"}'),
+  ('17000000-0000-0000-0000-000000000004', 'gdm-new@lili.local', 'authenticated', 'authenticated', '{"username":"gdm_new","display_name":"GDM new"}');
 update public.profiles set dm_policy = 'EVERYONE'
 where id::text like '17000000-0000-0000-0000-%';
 

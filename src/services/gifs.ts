@@ -11,7 +11,7 @@ import { ATTACHMENT_MAX_BYTES } from "../domain/attachments";
  * valem para todo o resto do chat.
  */
 const ENDPOINT = "https://tenor.googleapis.com/v2";
-const CLIENT_KEY = "janja-voice-chat";
+const CLIENT_KEY = "lili-voice-chat";
 
 export interface GifResult {
   id: string;

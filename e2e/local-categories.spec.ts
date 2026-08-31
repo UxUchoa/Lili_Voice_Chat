@@ -33,8 +33,8 @@ test("categorias podem ser editadas, ocultadas e excluídas pela UI", async ({
     auth: { persistSession: false, autoRefreshToken: false },
   });
   const runId = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
-  const password = `Janja-${crypto.randomUUID()}-Aa1!`;
-  const email = `category-owner-${runId}@janja.local`;
+  const password = `Lili-${crypto.randomUUID()}-Aa1!`;
+  const email = `category-owner-${runId}@lili.app`;
   const username = `category_${runId.replace(/\W/g, "")}`.slice(0, 24);
   let userId = "";
   let serverId = "";

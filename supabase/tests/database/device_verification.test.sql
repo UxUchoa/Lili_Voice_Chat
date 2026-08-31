@@ -4,8 +4,8 @@ select plan(4);
 
 insert into auth.users(id, email, aud, role, raw_user_meta_data)
 values
-  ('81000000-0000-0000-0000-000000000001', 'verify-one@janja.local', 'authenticated', 'authenticated', '{"username":"verify_one"}'),
-  ('81000000-0000-0000-0000-000000000002', 'verify-two@janja.local', 'authenticated', 'authenticated', '{"username":"verify_two"}');
+  ('81000000-0000-0000-0000-000000000001', 'verify-one@lili.local', 'authenticated', 'authenticated', '{"username":"verify_one"}'),
+  ('81000000-0000-0000-0000-000000000002', 'verify-two@lili.local', 'authenticated', 'authenticated', '{"username":"verify_two"}');
 insert into public.devices(id, user_id, name, platform, fingerprint, identity_public_key, mls_credential, revoked_at)
 values
   ('82000000-0000-0000-0000-000000000001', '81000000-0000-0000-0000-000000000001', 'Own', 'test', 'ABCDEFGHIJKLMNOPQRSTUV', 'pk-1', 'credential-1', null),

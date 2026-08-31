@@ -5,8 +5,8 @@ select plan(24);
 
 insert into auth.users(id, email, aud, role, raw_user_meta_data)
 values
-  ('13000000-0000-0000-0000-000000000001', 'call-owner@janja.local', 'authenticated', 'authenticated', '{"username":"call_owner","display_name":"Call owner"}'),
-  ('13000000-0000-0000-0000-000000000002', 'call-member@janja.local', 'authenticated', 'authenticated', '{"username":"call_member","display_name":"Call member"}');
+  ('13000000-0000-0000-0000-000000000001', 'call-owner@lili.local', 'authenticated', 'authenticated', '{"username":"call_owner","display_name":"Call owner"}'),
+  ('13000000-0000-0000-0000-000000000002', 'call-member@lili.local', 'authenticated', 'authenticated', '{"username":"call_member","display_name":"Call member"}');
 insert into public.servers(id, owner_id, name)
 values ('23000000-0000-0000-0000-000000000001', '13000000-0000-0000-0000-000000000001', 'Call server');
 insert into public.server_members(server_id, user_id)

@@ -6,7 +6,7 @@ import {
   type EmojiEntry,
 } from "../domain/emoji";
 
-const RECENT_KEY = "janja-emoji-recent-v1";
+const RECENT_KEY = "lili-emoji-recent-v1";
 const RECENT_LIMIT = 24;
 
 function readRecent(): EmojiEntry[] {

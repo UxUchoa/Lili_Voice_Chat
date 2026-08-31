@@ -1,7 +1,7 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld(
-  "janjaDesktop",
+  "liliDesktop",
   Object.freeze({
     platform: process.platform,
     minimize: () => ipcRenderer.send("window:minimize"),

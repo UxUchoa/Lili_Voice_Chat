@@ -1,4 +1,4 @@
-# Deploy de produção — Janja Voice Chat
+# Deploy de produção — Lili Voice Chat
 
 Quatro peças, nesta ordem. Cada uma depende de um valor que a anterior produz,
 e é por isso que a ordem importa: o site precisa da URL do Supabase, o Supabase
@@ -18,7 +18,7 @@ qualquer visitante. `SUPABASE_SERVICE_ROLE_KEY`, `LIVEKIT_API_SECRET`,
 certificado de assinatura **nunca** entram numa variável `VITE_`.
 
 `npm run build:web` recusa o build quando isso acontece, quando a publishable
-key é na verdade uma service-role key, e — com `JANJA_STRICT_ENV=true` ou na
+key é na verdade uma service-role key, e — com `LILI_STRICT_ENV=true` ou na
 produção da Vercel — quando alguma URL ainda aponta para `127.0.0.1`.
 
 ## 0. GitHub
@@ -29,7 +29,7 @@ O repositório é a origem de tudo: a Vercel constrói a partir dele e o
 ```powershell
 git init -b main
 git add .
-git commit -m "Janja Voice Chat"
+git commit -m "Lili Voice Chat"
 gh repo create Lili_Voice_Chat --private --source . --push
 ```
 
@@ -124,7 +124,7 @@ E no painel:
   Supabase — o token é válido, mas o destino não existe.
   - **Site URL**: `https://lilivoicechat-five.vercel.app`
   - **Redirect URLs**: o mesmo domínio, mais `https://*.vercel.app/**` para as
-    pré-visualizações e `janja://auth/callback` para o desktop.
+    pré-visualizações e `lili://auth/callback` para o desktop.
 - **Authentication → SMTP Settings**: configure um provedor próprio (Resend,
   SendGrid, Postmark, SES). O servidor embutido do Supabase entrega poucas
   mensagens por hora, é explicitamente marcado como impróprio para produção e
@@ -190,7 +190,7 @@ Teste **de fora da LAN**, não da mesma rede:
 $env:LIVEKIT_URL='wss://<projeto>.livekit.cloud'
 $env:LIVEKIT_API_KEY='...'
 $env:LIVEKIT_API_SECRET='...'
-$env:JANJA_FORCE_TURN='true'
+$env:LILI_FORCE_TURN='true'
 npm run test:livekit
 ```
 
@@ -217,7 +217,7 @@ VITE_TENOR_API_KEY=...
 
 O build falha de propósito se faltar Supabase ou LiveKit — um site publicado
 sem backend é uma tela branca com erro de configuração. Para publicar
-deliberadamente sem chamadas, use `JANJA_SKIP_LIVEKIT_CHECK=true`.
+deliberadamente sem chamadas, use `LILI_SKIP_LIVEKIT_CHECK=true`.
 
 O que o `vercel.json` garante e vale conferir depois do primeiro deploy:
 
@@ -232,7 +232,7 @@ O que o `vercel.json` garante e vale conferir depois do primeiro deploy:
 - `/assets/*` imutável por um ano; `push-sw.js` e `index.html` sempre
   revalidados — um service worker em cache é um aplicativo velho preso no
   navegador do usuário.
-- O sourcemap **não** é publicado. `JANJA_SOURCEMAP=true` liga quando precisar
+- O sourcemap **não** é publicado. `LILI_SOURCEMAP=true` liga quando precisar
   depurar um build.
 
 Com o domínio em mãos, volte ao Supabase e ajuste `ALLOWED_ORIGIN` e as

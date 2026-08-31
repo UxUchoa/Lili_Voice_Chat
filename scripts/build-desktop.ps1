@@ -4,7 +4,7 @@ $projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $releaseRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot "release"))
 $systemTempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $temporaryOutput = [IO.Path]::GetFullPath(
-  (Join-Path $systemTempRoot ("janja-desktop-dist-" + [guid]::NewGuid().ToString("N")))
+  (Join-Path $systemTempRoot ("lili-desktop-dist-" + [guid]::NewGuid().ToString("N")))
 )
 
 if (-not $temporaryOutput.StartsWith($systemTempRoot, [StringComparison]::OrdinalIgnoreCase)) {
@@ -21,11 +21,11 @@ try {
 
   New-Item -ItemType Directory -Path $releaseRoot -Force | Out-Null
   $artifacts = Get-ChildItem -LiteralPath $temporaryOutput -File | Where-Object {
-    $_.Name -like "Janja-Voice-Chat-*.exe" -or
-    $_.Name -like "Janja-Voice-Chat-*.exe.blockmap"
+    $_.Name -like "Lili-Voice-Chat-*.exe" -or
+    $_.Name -like "Lili-Voice-Chat-*.exe.blockmap"
   }
   if (($artifacts | Where-Object Extension -eq ".exe").Count -ne 1) {
-    throw "O empacotador não produziu exatamente um instalador Janja."
+    throw "O empacotador não produziu exatamente um instalador Lili."
   }
   foreach ($artifact in $artifacts) {
     Copy-Item -LiteralPath $artifact.FullName -Destination (Join-Path $releaseRoot $artifact.Name) -Force
@@ -38,7 +38,7 @@ finally {
   if (
     (Test-Path -LiteralPath $temporaryOutput) -and
     $temporaryOutput.StartsWith($systemTempRoot, [StringComparison]::OrdinalIgnoreCase) -and
-    ([IO.Path]::GetFileName($temporaryOutput) -like "janja-desktop-dist-*")
+    ([IO.Path]::GetFileName($temporaryOutput) -like "lili-desktop-dist-*")
   ) {
     Remove-Item -LiteralPath $temporaryOutput -Recurse -Force
   }

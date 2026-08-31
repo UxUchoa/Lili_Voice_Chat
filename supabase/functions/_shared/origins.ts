@@ -15,7 +15,7 @@ export function parseAllowedOrigins(raw: string | undefined): string[] {
 
 /**
  * Formatos aceitos:
- *   - origem exata      `https://janja.app`
+ *   - origem exata      `https://lili.app`
  *   - subdomínio        `https://*.vercel.app`
  *   - `null`            Electron empacotado, que carrega `dist/` por file://
  */

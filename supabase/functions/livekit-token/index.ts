@@ -119,7 +119,7 @@ Deno.serve(
       name: String(
         body.participant_name ??
           authData.user.user_metadata?.display_name ??
-          "Janja",
+          "Lili",
       ).slice(0, 64),
       ttl: "10m",
       metadata: JSON.stringify({ channel_id: channelId, e2ee: true }),

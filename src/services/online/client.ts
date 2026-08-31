@@ -11,7 +11,7 @@ export const supabase = createClient(
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: true,
-      storageKey: "janja.supabase.session",
+      storageKey: "lili.supabase.session",
     },
     realtime: { params: { eventsPerSecond: 20 } },
   },

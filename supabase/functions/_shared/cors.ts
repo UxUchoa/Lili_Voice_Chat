@@ -10,7 +10,7 @@ import { findAllowedOrigin, parseAllowedOrigins } from "./origins.ts";
  * `Authorization`.
  *
  * Formatos aceitos em cada item:
- *   - origem exata           `https://janja.app`
+ *   - origem exata           `https://lili.app`
  *   - subdomínio curinga     `https://*.vercel.app`
  *   - `null`                 o Electron empacotado carrega o `dist/` por
  *                            `file://`, e o Chromium manda `Origin: null`.

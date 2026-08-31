@@ -25,8 +25,8 @@ test("perfil P0 e mídia privada persistem no Supabase local", async ({
     auth: { persistSession: false, autoRefreshToken: false },
   });
   const runId = `${Date.now()}${crypto.randomUUID().replace(/\W/g, "").slice(0, 5)}`;
-  const email = `profile-${runId}@janja.local`;
-  const password = `Janja-${crypto.randomUUID()}-Aa1!`;
+  const email = `profile-${runId}@lili.app`;
+  const password = `Lili-${crypto.randomUUID()}-Aa1!`;
   const username = `perfil_${runId}`.slice(0, 24);
   let userId = "";
   let serverId = "";

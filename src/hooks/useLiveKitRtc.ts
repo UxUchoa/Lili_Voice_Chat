@@ -145,7 +145,7 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
     const profile = state.profiles.find(
       (item) => item.id === state.currentUserId,
     );
-    return profile?.displayName ?? profile?.username ?? "Janja";
+    return profile?.displayName ?? profile?.username ?? "Lili";
   });
   const roomRef = useRef<Room | null>(null);
   const leaveSessionRef = useRef<() => Promise<void>>(async () => {});

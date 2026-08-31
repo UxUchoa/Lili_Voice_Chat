@@ -1,4 +1,4 @@
-# Janja — Voice Chat
+# Lili — Voice Chat
 
 Cliente Web + Electron para mensagens, áudio, vídeo e compartilhamento de tela. O ambiente local usa Supabase, LiveKit/TURN e OpenMLS por dispositivo; não há fallback com dados demonstrativos.
 

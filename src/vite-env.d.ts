@@ -1,25 +1,25 @@
 /// <reference types="vite/client" />
 
 interface Window {
-  __janjaReactRoot?: import("react-dom/client").Root;
-  janjaDesktop?: {
+  __liliReactRoot?: import("react-dom/client").Root;
+  liliDesktop?: {
     platform: string;
     minimize: () => void;
     maximize: () => void;
     close: () => void;
     notify: (title: string, body: string) => void;
-    listScreenSources: () => Promise<JanjaScreenSource[]>;
+    listScreenSources: () => Promise<LiliScreenSource[]>;
     secretStatus: () => Promise<{ available: boolean; backend: string }>;
     wrapSecret: (plaintext: string) => Promise<string>;
     unwrapSecret: (wrapped: string) => Promise<string>;
-    updateStatus: () => Promise<JanjaUpdateState>;
-    checkForUpdates: () => Promise<JanjaUpdateState>;
+    updateStatus: () => Promise<LiliUpdateState>;
+    checkForUpdates: () => Promise<LiliUpdateState>;
     installUpdate: () => void;
-    onUpdateState: (callback: (state: JanjaUpdateState) => void) => () => void;
+    onUpdateState: (callback: (state: LiliUpdateState) => void) => () => void;
   };
 }
 
-interface JanjaScreenSource {
+interface LiliScreenSource {
   id: string;
   name: string;
   kind: "screen" | "window";
@@ -27,7 +27,7 @@ interface JanjaScreenSource {
   icon?: string;
 }
 
-interface JanjaUpdateState {
+interface LiliUpdateState {
   status:
     | "idle"
     | "development"

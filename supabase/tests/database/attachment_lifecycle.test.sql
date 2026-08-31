@@ -13,9 +13,9 @@ select plan(9);
 
 insert into auth.users(id, email, aud, role, raw_user_meta_data)
 values
-  ('20000000-0000-0000-0000-000000000001', 'anexo-autor@janja.local', 'authenticated', 'authenticated', '{"username":"anexo_autor","display_name":"Autor"}'),
-  ('20000000-0000-0000-0000-000000000002', 'anexo-leitor@janja.local', 'authenticated', 'authenticated', '{"username":"anexo_leitor","display_name":"Leitor"}'),
-  ('20000000-0000-0000-0000-000000000003', 'anexo-estranho@janja.local', 'authenticated', 'authenticated', '{"username":"anexo_estranho","display_name":"Estranho"}');
+  ('20000000-0000-0000-0000-000000000001', 'anexo-autor@lili.local', 'authenticated', 'authenticated', '{"username":"anexo_autor","display_name":"Autor"}'),
+  ('20000000-0000-0000-0000-000000000002', 'anexo-leitor@lili.local', 'authenticated', 'authenticated', '{"username":"anexo_leitor","display_name":"Leitor"}'),
+  ('20000000-0000-0000-0000-000000000003', 'anexo-estranho@lili.local', 'authenticated', 'authenticated', '{"username":"anexo_estranho","display_name":"Estranho"}');
 
 insert into public.servers(id, owner_id, name)
 values ('21000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', 'Servidor de anexos');

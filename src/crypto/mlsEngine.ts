@@ -88,6 +88,12 @@ class MlsStateDatabase extends Dexie {
   messages!: EntityTable<MessageCacheRow, "id">;
 
   constructor() {
+    // O nome do banco local **não** acompanha o rename do produto. Renomeá-lo
+    // não migra nada: o IndexedDB antigo simplesmente deixa de ser encontrado,
+    // e com ele vão o estado do provider MLS, o cache cifrado de mensagens e a
+    // identidade de cada dispositivo. No aplicativo desktop, que persiste entre
+    // sessões, isso significaria perder o histórico inteiro por causa de uma
+    // mudança de marca.
     super("janja-openmls-v1");
     this.version(1).stores({
       devices: "&userId, deviceId",
@@ -185,13 +191,13 @@ async function decryptAtRest(
 
 async function createMasterKey(userId: string) {
   const raw = crypto.getRandomValues(new Uint8Array(32));
-  if (window.janjaDesktop) {
-    const wrapped = await window.janjaDesktop.wrapSecret(toBase64(raw));
+  if (window.liliDesktop) {
+    const wrapped = await window.liliDesktop.wrapSecret(toBase64(raw));
     return { key: await importAesKey(raw), wrapped: `desktop:${wrapped}` };
   }
   const reference = crypto.randomUUID();
   sessionStorage.setItem(
-    `janja.mls.master.${userId}.${reference}`,
+    `lili.mls.master.${userId}.${reference}`,
     toBase64(raw),
   );
   return { key: await importAesKey(raw), wrapped: `session:${reference}` };
@@ -199,15 +205,15 @@ async function createMasterKey(userId: string) {
 
 async function openMasterKey(userId: string, wrapped: string) {
   if (wrapped.startsWith("desktop:")) {
-    if (!window.janjaDesktop)
+    if (!window.liliDesktop)
       throw new Error(
         "O cofre E2EE foi criado no app desktop e não pode ser aberto neste navegador.",
       );
-    const raw = await window.janjaDesktop.unwrapSecret(wrapped.slice(8));
+    const raw = await window.liliDesktop.unwrapSecret(wrapped.slice(8));
     return importAesKey(fromBase64(raw));
   }
   const reference = wrapped.slice("session:".length);
-  const raw = sessionStorage.getItem(`janja.mls.master.${userId}.${reference}`);
+  const raw = sessionStorage.getItem(`lili.mls.master.${userId}.${reference}`);
   if (!raw)
     throw new Error(
       "A chave E2EE desta sessão web expirou. Use o app desktop para persistência segura entre reinicializações.",
@@ -239,7 +245,7 @@ function canRecoverDeviceState(wrappedMasterKey: string, caught: unknown) {
   // Um cofre criado no desktop só é recuperável dentro do próprio desktop; na
   // web o erro explícito preserva o estado do outro dispositivo.
   if (wrappedMasterKey.startsWith("desktop:"))
-    return Boolean(window.janjaDesktop);
+    return Boolean(window.liliDesktop);
   return caught instanceof DOMException || caught instanceof Error;
 }
 
@@ -361,8 +367,8 @@ export class MlsEngine {
           id: this.deviceId,
           user_id: this.userId,
           name: navigator.userAgent.includes("Electron")
-            ? "Janja Desktop"
-            : "Janja Web",
+            ? "Lili Desktop"
+            : "Lili Web",
           platform: navigator.platform || "web",
           identity_public_key: toBase64(this.publicKey),
           mls_credential: this.identityName,
@@ -1033,6 +1039,10 @@ export class MlsEngine {
     const epoch = Number(group.epoch());
     const key = group.export_key(
       this.provider,
+      // Rótulo do exporter MLS, e não um nome de produto: os dois lados da
+      // chamada precisam derivar a chave de mídia a partir da mesma string.
+      // Mudá-lo faria um cliente atualizado e um ainda aberto na aba antiga
+      // gerarem chaves diferentes — a chamada conecta e ninguém se ouve.
       "janja-livekit-media-e2ee-v1",
       encoder.encode(`${channelId}:${epoch}`),
       32,

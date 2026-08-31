@@ -1,9 +1,9 @@
 {
-  "name": "janja-voice-chat",
+  "name": "lili-voice-chat",
   "private": true,
   "version": "0.1.0",
   "description": "Cliente local-first de mensagens cifradas, voz, vídeo e compartilhamento de tela.",
-  "author": "Janja contributors",
+  "author": "Lili contributors",
   "engines": {
     "node": ">=22"
   },
@@ -64,8 +64,8 @@
     "wait-on": "^9.1.0"
   },
   "build": {
-    "productName": "Janja - Voice Chat",
-    "appId": "chat.janja.desktop",
+    "productName": "Lili - Voice Chat",
+    "appId": "chat.lili.desktop",
     "asar": true,
     "directories": {
       "output": "release"
@@ -88,7 +88,7 @@
       "target": "nsis",
       "icon": "public/logo-vetorizada.ico"
     },
-    "artifactName": "Janja-Voice-Chat-${version}-${arch}.${ext}",
+    "artifactName": "Lili-Voice-Chat-${version}-${arch}.${ext}",
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,

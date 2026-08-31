@@ -30,12 +30,12 @@ export function ScreenSharePicker({
   onShare: (selection: ShareSelection) => void;
 }) {
   const [tab, setTab] = useState<"window" | "screen">("window");
-  const [sources, setSources] = useState<JanjaScreenSource[] | null>(null);
+  const [sources, setSources] = useState<LiliScreenSource[] | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const desktop = window.janjaDesktop;
+    const desktop = window.liliDesktop;
     if (!desktop) return;
     let active = true;
     const load = () =>

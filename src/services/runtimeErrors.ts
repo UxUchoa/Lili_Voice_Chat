@@ -4,7 +4,7 @@ export function reportRuntimeError(message: string, error?: unknown) {
       ? message
       : `${message}: ${error instanceof Error ? error.message : String(error)}`;
   window.dispatchEvent(
-    new CustomEvent("janja-runtime-error", {
+    new CustomEvent("lili-runtime-error", {
       detail,
     }),
   );

@@ -1,9 +1,9 @@
-# Teste manual da manhã — Janja local
+# Teste manual da manhã — Lili local
 
 ## 1. Preparar a infraestrutura
 
 1. Abra o Docker Desktop e aguarde o indicador **Engine running**.
-2. No PowerShell, dentro de `C:\Users\lucas\Desktop\Janja_Voice_Chat`, execute:
+2. No PowerShell, dentro de `C:\Users\lucas\Desktop\Lili_Voice_Chat`, execute:
 
    ```powershell
    npm run local:up

@@ -53,7 +53,7 @@ if ($LASTEXITCODE -ne 0) {
 
 Push-Location $workspace
 try {
-  # imgproxy/pooler não são usados pelo Janja local. Vector exigiria expor a
+  # imgproxy/pooler não são usados pelo Lili local. Vector exigiria expor a
   # Docker Engine API sem TLS na porta 2375 do Windows apenas para coletar logs;
   # mantemos esse auxiliar desligado e preservamos a configuração segura padrão.
   npx supabase start -x imgproxy,pooler,vector *> $null

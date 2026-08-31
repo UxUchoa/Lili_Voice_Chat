@@ -5,8 +5,8 @@ select plan(14);
 
 insert into auth.users(id, email, aud, role, raw_user_meta_data)
 values
-  ('1a000000-0000-0000-0000-000000000001', 'profile-owner@janja.local', 'authenticated', 'authenticated', '{"username":"profile_owner","display_name":"Profile owner"}'),
-  ('1a000000-0000-0000-0000-000000000002', 'profile-member@janja.local', 'authenticated', 'authenticated', '{"username":"profile_member","display_name":"Profile member"}');
+  ('1a000000-0000-0000-0000-000000000001', 'profile-owner@lili.local', 'authenticated', 'authenticated', '{"username":"profile_owner","display_name":"Profile owner"}'),
+  ('1a000000-0000-0000-0000-000000000002', 'profile-member@lili.local', 'authenticated', 'authenticated', '{"username":"profile_member","display_name":"Profile member"}');
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '1a000000-0000-0000-0000-000000000001', true);

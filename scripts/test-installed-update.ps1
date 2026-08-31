@@ -7,11 +7,11 @@ param(
 $ErrorActionPreference = 'Stop'
 $workspace = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $runId = [Guid]::NewGuid().ToString('N')
-$testRoot = [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetTempPath()) "janja-update-$runId"))
+$testRoot = [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetTempPath()) "lili-update-$runId"))
 $oldOutput = Join-Path $testRoot 'old'
 $feedOutput = Join-Path $testRoot 'feed'
 $installDir = Join-Path $testRoot 'installed'
-$resultPath = Join-Path $testRoot "janja-update-result-$runId.jsonl"
+$resultPath = Join-Path $testRoot "lili-update-result-$runId.jsonl"
 $serverLog = Join-Path $testRoot 'server.log'
 $feedUrl = "http://127.0.0.1:$Port/"
 $server = $null
@@ -20,7 +20,7 @@ function Assert-TestPath([string]$Path) {
   $resolved = [IO.Path]::GetFullPath($Path)
   $temp = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
   if (-not $resolved.StartsWith($temp, [StringComparison]::OrdinalIgnoreCase) -or
-      -not $resolved.Contains('janja-update-')) {
+      -not $resolved.Contains('lili-update-')) {
     throw "Caminho de teste inseguro: $resolved"
   }
 }
@@ -88,23 +88,23 @@ try {
   $install = Start-Process -FilePath $oldInstaller.FullName `
     -ArgumentList @('/S', ('/D=' + $installDir)) -Wait -PassThru -WindowStyle Hidden
   if ($install.ExitCode -ne 0) { throw "Instalação inicial falhou: $($install.ExitCode)" }
-  $appPath = Join-Path $installDir 'Janja - Voice Chat.exe'
+  $appPath = Join-Path $installDir 'Lili - Voice Chat.exe'
   if (-not (Test-Path -LiteralPath $appPath)) { throw 'Executável instalado não encontrado.' }
   $installedBefore = (Get-Item -LiteralPath $appPath).VersionInfo.ProductVersion
   if (-not (Test-ProductVersion $installedBefore $FromVersion)) {
     throw "Versão inicial inesperada: $installedBefore"
   }
 
-  $env:JANJA_UPDATE_TEST_MODE = '1'
-  $env:JANJA_UPDATE_FEED_URL = $feedUrl
-  $env:JANJA_UPDATE_TEST_RESULT = $resultPath
-  $env:JANJA_UPDATE_CHECK_DELAY_MS = '500'
+  $env:LILI_UPDATE_TEST_MODE = '1'
+  $env:LILI_UPDATE_FEED_URL = $feedUrl
+  $env:LILI_UPDATE_TEST_RESULT = $resultPath
+  $env:LILI_UPDATE_CHECK_DELAY_MS = '500'
   $env:ELECTRON_ENABLE_LOGGING = '1'
   $app = Start-Process -FilePath $appPath -ArgumentList @(
     '--enable-logging',
-    '--janja-update-test',
-    "--janja-update-feed=$feedUrl",
-    "--janja-update-result=$resultPath"
+    '--lili-update-test',
+    "--lili-update-feed=$feedUrl",
+    "--lili-update-result=$resultPath"
   ) -PassThru
 
   $updated = $false
@@ -141,7 +141,7 @@ try {
   }
 
   Stop-TestProcesses
-  $uninstaller = Join-Path $installDir 'Uninstall Janja - Voice Chat.exe'
+  $uninstaller = Join-Path $installDir 'Uninstall Lili - Voice Chat.exe'
   if (-not (Test-Path -LiteralPath $uninstaller)) { throw 'Desinstalador não encontrado.' }
   $uninstall = Start-Process -FilePath $uninstaller -ArgumentList '/S' `
     -Wait -PassThru -WindowStyle Hidden
@@ -162,10 +162,10 @@ try {
   if ($server -and -not $server.HasExited) {
     Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
   }
-  Remove-Item Env:JANJA_UPDATE_TEST_MODE -ErrorAction SilentlyContinue
-  Remove-Item Env:JANJA_UPDATE_FEED_URL -ErrorAction SilentlyContinue
-  Remove-Item Env:JANJA_UPDATE_TEST_RESULT -ErrorAction SilentlyContinue
-  Remove-Item Env:JANJA_UPDATE_CHECK_DELAY_MS -ErrorAction SilentlyContinue
+  Remove-Item Env:LILI_UPDATE_TEST_MODE -ErrorAction SilentlyContinue
+  Remove-Item Env:LILI_UPDATE_FEED_URL -ErrorAction SilentlyContinue
+  Remove-Item Env:LILI_UPDATE_TEST_RESULT -ErrorAction SilentlyContinue
+  Remove-Item Env:LILI_UPDATE_CHECK_DELAY_MS -ErrorAction SilentlyContinue
   Remove-Item Env:ELECTRON_ENABLE_LOGGING -ErrorAction SilentlyContinue
   if (Test-Path -LiteralPath $testRoot) {
     Assert-TestPath $testRoot

@@ -26,7 +26,7 @@ const updateTestRootName = path.basename(possibleUpdateTestRoot);
 const isolatedUpdateTest =
   app.isPackaged &&
   path.dirname(possibleUpdateTestRoot) === path.resolve(os.tmpdir()) &&
-  updateTestRootName.startsWith("janja-update-");
+  updateTestRootName.startsWith("lili-update-");
 const testArgument = (name) => {
   const prefix = `--${name}=`;
   return process.argv
@@ -35,15 +35,15 @@ const testArgument = (name) => {
 };
 const updateTestMode =
   isolatedUpdateTest ||
-  process.env.JANJA_UPDATE_TEST_MODE === "1" ||
-  process.argv.includes("--janja-update-test");
+  process.env.LILI_UPDATE_TEST_MODE === "1" ||
+  process.argv.includes("--lili-update-test");
 const configuredTestResult =
-  process.env.JANJA_UPDATE_TEST_RESULT ??
-  testArgument("janja-update-result") ??
+  process.env.LILI_UPDATE_TEST_RESULT ??
+  testArgument("lili-update-result") ??
   (isolatedUpdateTest
     ? path.join(
         possibleUpdateTestRoot,
-        `janja-update-result-${updateTestRootName.slice("janja-update-".length)}.jsonl`,
+        `lili-update-result-${updateTestRootName.slice("lili-update-".length)}.jsonl`,
       )
     : null);
 const updateTestResult = (() => {
@@ -51,7 +51,7 @@ const updateTestResult = (() => {
   const candidate = path.resolve(configuredTestResult);
   const tempRoot = path.resolve(os.tmpdir()) + path.sep;
   return candidate.startsWith(tempRoot) &&
-    path.basename(candidate).startsWith("janja-update-result-")
+    path.basename(candidate).startsWith("lili-update-result-")
     ? candidate
     : null;
 })();
@@ -115,8 +115,8 @@ function setupAutoUpdater() {
   }
   if (updateTestMode) {
     const testFeed =
-      process.env.JANJA_UPDATE_FEED_URL ??
-      testArgument("janja-update-feed") ??
+      process.env.LILI_UPDATE_FEED_URL ??
+      testArgument("lili-update-feed") ??
       "";
     if (!/^http:\/\/127\.0\.0\.1:\d+\/$/.test(testFeed)) {
       publishUpdateState({
@@ -167,7 +167,7 @@ function setupAutoUpdater() {
       return;
     }
     const notification = new Notification({
-      title: "Atualização da Janja pronta",
+      title: "Atualização da Lili pronta",
       body: `Versão ${info.version} baixada. Clique para reiniciar e instalar.`,
       icon: assetPath("logo-vetorizada.png"),
     });
@@ -180,7 +180,7 @@ function setupAutoUpdater() {
   autoUpdater.on("error", (error) =>
     publishUpdateState({ status: "error", error: error.message }),
   );
-  const configuredDelay = Number(process.env.JANJA_UPDATE_CHECK_DELAY_MS);
+  const configuredDelay = Number(process.env.LILI_UPDATE_CHECK_DELAY_MS);
   const checkDelay =
     updateTestMode && Number.isFinite(configuredDelay)
       ? Math.max(250, Math.min(configuredDelay, 5000))
@@ -239,18 +239,18 @@ function createWindow() {
 app
   .whenReady()
   .then(() => {
-    app.setAppUserModelId("chat.janja.desktop");
+    app.setAppUserModelId("chat.lili.desktop");
     recordUpdateTest("startup");
     createWindow();
     setupAutoUpdater();
     tray = new Tray(
       nativeImage.createFromPath(assetPath("logo-vetorizada.ico")),
     );
-    tray.setToolTip("Janja — Voice Chat");
+    tray.setToolTip("Lili — Voice Chat");
     tray.setContextMenu(
       Menu.buildFromTemplate([
         {
-          label: "Abrir Janja",
+          label: "Abrir Lili",
           click: () => {
             mainWindow?.show();
             mainWindow?.focus();

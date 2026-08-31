@@ -5,8 +5,8 @@ select plan(8);
 
 insert into auth.users(id, email, aud, role, raw_user_meta_data)
 values
-  ('18000000-0000-0000-0000-000000000001', 'sessions-owner@janja.local', 'authenticated', 'authenticated', '{"username":"sessions_owner","display_name":"Sessions owner"}'),
-  ('18000000-0000-0000-0000-000000000002', 'sessions-other@janja.local', 'authenticated', 'authenticated', '{"username":"sessions_other","display_name":"Sessions other"}');
+  ('18000000-0000-0000-0000-000000000001', 'sessions-owner@lili.local', 'authenticated', 'authenticated', '{"username":"sessions_owner","display_name":"Sessions owner"}'),
+  ('18000000-0000-0000-0000-000000000002', 'sessions-other@lili.local', 'authenticated', 'authenticated', '{"username":"sessions_other","display_name":"Sessions other"}');
 insert into auth.sessions(id, user_id, created_at, updated_at, user_agent, ip)
 values
   ('58000000-0000-0000-0000-000000000001', '18000000-0000-0000-0000-000000000001', now() - interval '2 hours', now() - interval '1 minute', 'Current browser', '127.0.0.1'),

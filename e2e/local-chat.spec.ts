@@ -60,11 +60,11 @@ test("duas sessões isoladas trocam mensagens OpenMLS no mesmo canal", async ({
     auth: { persistSession: false, autoRefreshToken: false },
   });
   const runId = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
-  const password = `Janja-${crypto.randomUUID()}-Aa1!`;
-  const ownerEmail = `chat-owner-${runId}@janja.local`;
-  const memberEmail = `chat-member-${runId}@janja.local`;
-  const thirdEmail = `chat-third-${runId}@janja.local`;
-  const fourthEmail = `chat-fourth-${runId}@janja.local`;
+  const password = `Lili-${crypto.randomUUID()}-Aa1!`;
+  const ownerEmail = `chat-owner-${runId}@lili.app`;
+  const memberEmail = `chat-member-${runId}@lili.app`;
+  const thirdEmail = `chat-third-${runId}@lili.app`;
+  const fourthEmail = `chat-fourth-${runId}@lili.app`;
   const ownerUsername = `chat_owner_${runId.replace(/\W/g, "")}`.slice(0, 30);
   const memberUsername = `chat_member_${runId.replace(/\W/g, "")}`.slice(0, 30);
   const thirdUsername = `chat_third_${runId.replace(/\W/g, "")}`.slice(0, 30);
@@ -270,8 +270,8 @@ test("duas sessões isoladas trocam mensagens OpenMLS no mesmo canal", async ({
 
     await memberPage.evaluate(() => {
       const notifications: Array<{ title: string; body: string }> = [];
-      (window as any).__janjaNotifications = notifications;
-      Object.defineProperty(window, "janjaDesktop", {
+      (window as any).__liliNotifications = notifications;
+      Object.defineProperty(window, "liliDesktop", {
         configurable: true,
         value: {
           platform: "win32",
@@ -304,7 +304,7 @@ test("duas sessões isoladas trocam mensagens OpenMLS no mesmo canal", async ({
       .poll(
         () =>
           memberPage.evaluate(() =>
-            (window as any).__janjaNotifications?.at(-1),
+            (window as any).__liliNotifications?.at(-1),
           ),
         { timeout: 30_000 },
       )

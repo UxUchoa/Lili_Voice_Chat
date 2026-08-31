@@ -14,30 +14,30 @@ create extension if not exists pg_cron with schema pg_catalog;
 create extension if not exists pg_net with schema extensions;
 create extension if not exists supabase_vault with schema vault;
 
--- Reaproveita `janja_project_url` quando os outros agendadores já o criaram;
+-- Reaproveita `lili_project_url` quando os outros agendadores já o criaram;
 -- rodar duas vezes com o mesmo nome falha, e isso é intencional.
 select vault.create_secret(
   'https://YOUR_PROJECT.supabase.co',
-  'janja_project_url',
-  'URL pública do projeto Janja'
+  'lili_project_url',
+  'URL pública do projeto Lili'
 );
 select vault.create_secret(
   'REPLACE_WITH_ACCOUNTS_PRUNE_SECRET',
-  'janja_accounts_prune_secret',
+  'lili_accounts_prune_secret',
   'Autorização do expurgo de contas inativas'
 );
 
 -- 03:20 UTC, longe do horário de pico de qualquer fuso brasileiro.
 select cron.schedule(
-  'janja-accounts-prune',
+  'lili-accounts-prune',
   '20 3 * * *',
   $$
   select net.http_post(
-    url := (select decrypted_secret from vault.decrypted_secrets where name = 'janja_project_url')
+    url := (select decrypted_secret from vault.decrypted_secrets where name = 'lili_project_url')
       || '/functions/v1/accounts-prune',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
-      'x-cron-secret', (select decrypted_secret from vault.decrypted_secrets where name = 'janja_accounts_prune_secret')
+      'x-cron-secret', (select decrypted_secret from vault.decrypted_secrets where name = 'lili_accounts_prune_secret')
     ),
     body := '{}'::jsonb,
     timeout_milliseconds := 60000

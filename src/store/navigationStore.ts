@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import "../services/storageMigration";
 
 /**
  * Navegação da aplicação.
@@ -104,7 +105,7 @@ export const useNavigationStore = create<NavigationState>()(
       reset: () => set({ ...initial }),
     }),
     {
-      name: "janja-navigation-v1",
+      name: "lili-navigation-v1",
       partialize: (state) => ({
         view: state.view,
         serverId: state.serverId,
@@ -127,10 +128,7 @@ export interface NavigationLocation {
 
 /** Endereço atual → estado. Devolve `null` quando o hash não é uma rota. */
 export function parseLocationHash(hash: string): NavigationLocation | null {
-  const parts = hash
-    .replace(/^#/, "")
-    .split("/")
-    .filter(Boolean);
+  const parts = hash.replace(/^#/, "").split("/").filter(Boolean);
   if (parts[0] !== "channels" || parts.length < 2) return null;
   const [, scope, target = ""] = parts;
   if (scope === "@me") {
@@ -145,7 +143,12 @@ export function parseLocationHash(hash: string): NavigationLocation | null {
       };
     return { view: "home", serverId: "", channelId: "", section: "friends" };
   }
-  return { view: "server", serverId: scope, channelId: target, section: "friends" };
+  return {
+    view: "server",
+    serverId: scope,
+    channelId: target,
+    section: "friends",
+  };
 }
 
 /**

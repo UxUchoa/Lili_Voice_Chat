@@ -6,7 +6,7 @@ select plan(2);
 insert into auth.users(id, email, aud, role, raw_user_meta_data)
 values (
   '1a000000-0000-0000-0000-000000000001',
-  'limits-owner@janja.local',
+  'limits-owner@lili.local',
   'authenticated',
   'authenticated',
   '{"username":"limits_owner","display_name":"Limits owner"}'

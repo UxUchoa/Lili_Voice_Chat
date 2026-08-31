@@ -12,25 +12,25 @@ create extension if not exists supabase_vault with schema vault;
 -- existir; rodar duas vezes com o mesmo nome falha, e isso é intencional.
 select vault.create_secret(
   'https://YOUR_PROJECT.supabase.co',
-  'janja_project_url',
-  'URL pública do projeto Janja'
+  'lili_project_url',
+  'URL pública do projeto Lili'
 );
 select vault.create_secret(
   'REPLACE_WITH_ATTACHMENTS_EXPIRE_SECRET',
-  'janja_attachments_expire_secret',
+  'lili_attachments_expire_secret',
   'Autorização do expurgo de anexos'
 );
 
 select cron.schedule(
-  'janja-attachments-expire',
+  'lili-attachments-expire',
   '*/5 * * * *',
   $$
   select net.http_post(
-    url := (select decrypted_secret from vault.decrypted_secrets where name = 'janja_project_url')
+    url := (select decrypted_secret from vault.decrypted_secrets where name = 'lili_project_url')
       || '/functions/v1/attachments-expire',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
-      'x-cron-secret', (select decrypted_secret from vault.decrypted_secrets where name = 'janja_attachments_expire_secret')
+      'x-cron-secret', (select decrypted_secret from vault.decrypted_secrets where name = 'lili_attachments_expire_secret')
     ),
     body := '{}'::jsonb,
     timeout_milliseconds := 20000

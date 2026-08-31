@@ -20,14 +20,14 @@ describe("parseAllowedOrigins", () => {
 
 describe("originMatches", () => {
   it("aceita a origem exata", () => {
-    expect(originMatches("https://janja.app", "https://janja.app")).toBe(true);
+    expect(originMatches("https://lili.app", "https://lili.app")).toBe(true);
   });
 
   it("recusa porta e esquema diferentes", () => {
-    expect(originMatches("https://janja.app", "https://janja.app:8443")).toBe(
+    expect(originMatches("https://lili.app", "https://lili.app:8443")).toBe(
       false,
     );
-    expect(originMatches("https://janja.app", "http://janja.app")).toBe(false);
+    expect(originMatches("https://lili.app", "http://lili.app")).toBe(false);
   });
 
   it("aceita subdomínio no curinga", () => {
@@ -53,13 +53,13 @@ describe("originMatches", () => {
 
   it("só libera o desktop quando `null` está na lista", () => {
     expect(originMatches("null", "null")).toBe(true);
-    expect(originMatches("https://janja.app", "null")).toBe(false);
+    expect(originMatches("https://lili.app", "null")).toBe(false);
   });
 });
 
 describe("findAllowedOrigin", () => {
   const patterns = parseAllowedOrigins(
-    "https://janja.app,https://*.vercel.app,null",
+    "https://lili.app,https://*.vercel.app,null",
   );
 
   it("devolve a origem que casou, nunca a lista inteira", () => {

@@ -16,7 +16,7 @@ const errors = [];
 const warnings = [];
 
 const isVercelProduction = env.VERCEL_ENV === "production";
-const strict = isVercelProduction || env.JANJA_STRICT_ENV === "true";
+const strict = isVercelProduction || env.LILI_STRICT_ENV === "true";
 
 // ------------------------------------------------------------------
 // 1. Nenhum segredo pode viajar num VITE_ — tudo com esse prefixo é servido
@@ -83,8 +83,8 @@ const livekitUrl = env.VITE_LIVEKIT_URL?.trim() ?? "";
 if (!livekitUrl) {
   const message =
     "VITE_LIVEKIT_URL está vazia: voz, vídeo e tela não vão funcionar. " +
-    "Defina JANJA_SKIP_LIVEKIT_CHECK=true para publicar assim mesmo.";
-  if (env.JANJA_SKIP_LIVEKIT_CHECK === "true") warnings.push(message);
+    "Defina LILI_SKIP_LIVEKIT_CHECK=true para publicar assim mesmo.";
+  if (env.LILI_SKIP_LIVEKIT_CHECK === "true") warnings.push(message);
   else errors.push(message);
 } else if (!/^wss?:\/\//.test(livekitUrl))
   errors.push(`VITE_LIVEKIT_URL precisa usar ws:// ou wss://: ${livekitUrl}`);

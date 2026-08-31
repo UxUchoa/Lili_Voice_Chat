@@ -24,9 +24,9 @@ const apiUrl = status.API_URL as string;
 const publishableKey = (status.PUBLISHABLE_KEY ?? status.ANON_KEY) as string;
 const serviceRoleKey = (status.SECRET_KEY ?? status.SERVICE_ROLE_KEY) as string;
 const livekitUrl = "ws://127.0.0.1:7880";
-const livekitApiKey = "janja_local_key";
+const livekitApiKey = "lili_local_key";
 const livekitApiSecret =
-  "janja_local_secret_change_before_any_remote_deployment";
+  "lili_local_secret_change_before_any_remote_deployment";
 
 const unwrap = async <T>(
   promise: PromiseLike<{ data: T; error: { message: string } | null }>,
@@ -56,10 +56,10 @@ test("moderação de voz local aplica mute e desconexão no LiveKit", async () =
     auth: { persistSession: false, autoRefreshToken: false },
   });
   const runId = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
-  const password = `Janja-${crypto.randomUUID()}-Aa1!`;
+  const password = `Lili-${crypto.randomUUID()}-Aa1!`;
   const emails = [
-    `voice-owner-${runId}@janja.local`,
-    `voice-member-${runId}@janja.local`,
+    `voice-owner-${runId}@lili.app`,
+    `voice-member-${runId}@lili.app`,
   ];
   const userIds: string[] = [];
   let serverId = "";

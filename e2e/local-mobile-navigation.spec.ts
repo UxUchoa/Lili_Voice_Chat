@@ -23,8 +23,8 @@ test("navegação mobile percorre início, servidor, texto e voz", async ({
     auth: { persistSession: false, autoRefreshToken: false },
   });
   const runId = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
-  const email = `mobile-${runId}@janja.local`;
-  const password = `Janja-${crypto.randomUUID()}-Aa1!`;
+  const email = `mobile-${runId}@lili.app`;
+  const password = `Lili-${crypto.randomUUID()}-Aa1!`;
   const serverName = `Mobile ${runId}`;
   let userId = "";
   let serverId = "";

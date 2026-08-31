@@ -93,13 +93,13 @@ describe("volume dos sons", () => {
     const { soundVolume, setSoundVolume } = await loadSounds();
     setSoundVolume(0.2);
     expect(soundVolume()).toBeCloseTo(0.2);
-    store.set("janja.sounds.volume", "não é número");
+    store.set("lili.sounds.volume", "não é número");
     expect(soundVolume()).toBe(0.5);
   });
 
   it("silêncio explícito continua valendo", async () => {
     const { soundVolume, playSound } = await loadSounds();
-    store.set("janja.sounds.volume", "0");
+    store.set("lili.sounds.volume", "0");
     expect(soundVolume()).toBe(0);
     playSound("join");
     expect(context()?.oscillators.length ?? 0).toBe(0);

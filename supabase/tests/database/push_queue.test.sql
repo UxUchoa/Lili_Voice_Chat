@@ -5,8 +5,8 @@ select plan(12);
 
 insert into auth.users(id, email, aud, role, raw_user_meta_data)
 values
-  ('11000000-0000-0000-0000-000000000001', 'push-owner@janja.local', 'authenticated', 'authenticated', '{"username":"push_owner","display_name":"Push owner"}'),
-  ('11000000-0000-0000-0000-000000000002', 'push-member@janja.local', 'authenticated', 'authenticated', '{"username":"push_member","display_name":"Push member"}');
+  ('11000000-0000-0000-0000-000000000001', 'push-owner@lili.local', 'authenticated', 'authenticated', '{"username":"push_owner","display_name":"Push owner"}'),
+  ('11000000-0000-0000-0000-000000000002', 'push-member@lili.local', 'authenticated', 'authenticated', '{"username":"push_member","display_name":"Push member"}');
 
 insert into public.servers(id, owner_id, name)
 values ('21000000-0000-0000-0000-000000000001', '11000000-0000-0000-0000-000000000001', 'Push server');

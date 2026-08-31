@@ -93,7 +93,7 @@ function productionCsp(supabaseUrl: string, livekitUrl: string): string {
  */
 function cspPlugin(policy: string): Plugin {
   return {
-    name: "janja-csp",
+    name: "lili-csp",
     transformIndexHtml: {
       order: "pre",
       handler(html) {

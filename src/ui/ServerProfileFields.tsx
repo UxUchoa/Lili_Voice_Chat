@@ -190,7 +190,7 @@ export function ServerProfileFields({
           disabled={disabled}
           aria-invalid={Boolean(nameError)}
           aria-describedby={nameError ? "server-name-error" : undefined}
-          placeholder="Equipe Janja"
+          placeholder="Equipe Lili"
           onChange={(event) => onChange({ ...draft, name: event.target.value })}
         />
         {nameError && (

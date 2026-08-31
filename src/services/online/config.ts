@@ -15,6 +15,6 @@ export const onlineConfig = Object.freeze({
 export function assertOnlineConfig() {
   if (!onlineConfig.supabaseUrl || !onlineConfig.supabasePublishableKey)
     throw new Error(
-      "Janja requer VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY da instância Supabase configurada.",
+      "Lili requer VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY da instância Supabase configurada.",
     );
 }

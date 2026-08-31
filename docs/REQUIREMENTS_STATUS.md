@@ -1,4 +1,4 @@
-# Janja — estado dos requisitos
+# Lili — estado dos requisitos
 
 Revisão local de 29/08/2026, baseada no documento de requisitos anexado e em testes executados contra Supabase, Realtime, OpenMLS e LiveKit/TURN locais.
 

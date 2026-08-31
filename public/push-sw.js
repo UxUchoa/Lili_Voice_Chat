@@ -15,7 +15,7 @@ self.addEventListener("push", (event) => {
       icon: "/logo-vetorizada.png",
       badge: "/logo-vetorizada.png",
       data: payload.data,
-      tag: payload.data?.messageId || "janja-activity",
+      tag: payload.data?.messageId || "lili-activity",
     }),
   );
 });

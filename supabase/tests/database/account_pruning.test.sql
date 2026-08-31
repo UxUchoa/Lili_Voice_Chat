@@ -7,11 +7,11 @@ select plan(9);
 -- 1c…04 dono solitário, 1c…05 conta ativa que não pode ser tocada.
 insert into auth.users(id, email, aud, role, raw_user_meta_data, last_sign_in_at)
 values
-  ('1c000000-0000-0000-0000-000000000001', 'recovery-owner@janja.local', 'authenticated', 'authenticated', '{"username":"recovery_owner","display_name":"Recovery owner"}', now() - interval '200 days'),
-  ('1c000000-0000-0000-0000-000000000002', 'recovery-admin@janja.local', 'authenticated', 'authenticated', '{"username":"recovery_admin","display_name":"Recovery admin"}', now()),
-  ('1c000000-0000-0000-0000-000000000003', 'recovery-member@janja.local', 'authenticated', 'authenticated', '{"username":"recovery_member","display_name":"Recovery member"}', now()),
-  ('1c000000-0000-0000-0000-000000000004', 'recovery-alone@janja.local', 'authenticated', 'authenticated', '{"username":"recovery_alone","display_name":"Recovery alone"}', now() - interval '200 days'),
-  ('1c000000-0000-0000-0000-000000000005', 'recovery-active@janja.local', 'authenticated', 'authenticated', '{"username":"recovery_active","display_name":"Recovery active"}', now() - interval '2 days');
+  ('1c000000-0000-0000-0000-000000000001', 'recovery-owner@lili.local', 'authenticated', 'authenticated', '{"username":"recovery_owner","display_name":"Recovery owner"}', now() - interval '200 days'),
+  ('1c000000-0000-0000-0000-000000000002', 'recovery-admin@lili.local', 'authenticated', 'authenticated', '{"username":"recovery_admin","display_name":"Recovery admin"}', now()),
+  ('1c000000-0000-0000-0000-000000000003', 'recovery-member@lili.local', 'authenticated', 'authenticated', '{"username":"recovery_member","display_name":"Recovery member"}', now()),
+  ('1c000000-0000-0000-0000-000000000004', 'recovery-alone@lili.local', 'authenticated', 'authenticated', '{"username":"recovery_alone","display_name":"Recovery alone"}', now() - interval '200 days'),
+  ('1c000000-0000-0000-0000-000000000005', 'recovery-active@lili.local', 'authenticated', 'authenticated', '{"username":"recovery_active","display_name":"Recovery active"}', now() - interval '2 days');
 
 -- ============================================================
 -- Servidores: quem herda quando o dono vira lápide

@@ -5,8 +5,8 @@ select plan(17);
 
 insert into auth.users(id, email, aud, role, raw_user_meta_data)
 values
-  ('1d000000-0000-0000-0000-000000000001', 'channel-owner@janja.local', 'authenticated', 'authenticated', '{"username":"channel_owner","display_name":"Channel owner"}'),
-  ('1d000000-0000-0000-0000-000000000002', 'channel-member@janja.local', 'authenticated', 'authenticated', '{"username":"channel_member","display_name":"Channel member"}');
+  ('1d000000-0000-0000-0000-000000000001', 'channel-owner@lili.local', 'authenticated', 'authenticated', '{"username":"channel_owner","display_name":"Channel owner"}'),
+  ('1d000000-0000-0000-0000-000000000002', 'channel-member@lili.local', 'authenticated', 'authenticated', '{"username":"channel_member","display_name":"Channel member"}');
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '1d000000-0000-0000-0000-000000000001', true);

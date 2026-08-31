@@ -1,5 +1,5 @@
 /**
- * Identidade sonora do Janja, sintetizada com Web Audio.
+ * Identidade sonora do Lili, sintetizada com Web Audio.
  *
  * Os sons são gerados em tempo real em vez de virem de arquivos: não há nada
  * para baixar, nada some do bundle e o timbre é nosso, sem reaproveitar
@@ -13,7 +13,7 @@
  *  - `ringtone` "tutu tutu tum tum": motivo em laço enquanto o telefone toca.
  */
 
-export type JanjaSound =
+export type LiliSound =
   | "join"
   | "leave"
   | "self-join"
@@ -26,8 +26,8 @@ export type JanjaSound =
   | "message"
   | "call-declined";
 
-const SOUND_PREFERENCE_KEY = "janja.sounds.enabled";
-const VOLUME_KEY = "janja.sounds.volume";
+const SOUND_PREFERENCE_KEY = "lili.sounds.enabled";
+const VOLUME_KEY = "lili.sounds.volume";
 
 let context: AudioContext | undefined;
 
@@ -103,7 +103,7 @@ interface Tone {
   attack?: number;
 }
 
-const SOUNDS: Record<JanjaSound, Tone[]> = {
+const SOUNDS: Record<LiliSound, Tone[]> = {
   // Chegada — "tum → tim". Registro grave, dois passos ascendentes e ataque
   // arredondado: presente o bastante para se notar, discreto o bastante para
   // não cortar quem está falando.
@@ -254,7 +254,7 @@ function scheduleTone(
   return nodes;
 }
 
-export function playSound(name: JanjaSound) {
+export function playSound(name: LiliSound) {
   if (!soundsEnabled()) return;
   const ctx = audioContext();
   if (!ctx) return;

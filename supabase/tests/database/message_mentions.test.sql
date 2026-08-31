@@ -5,9 +5,9 @@ select plan(11);
 
 insert into auth.users(id, email, aud, role, raw_user_meta_data)
 values
-  ('12000000-0000-0000-0000-000000000001', 'mention-owner@janja.local', 'authenticated', 'authenticated', '{"username":"mention_owner","display_name":"Mention owner"}'),
-  ('12000000-0000-0000-0000-000000000002', 'mention-sender@janja.local', 'authenticated', 'authenticated', '{"username":"mention_sender","display_name":"Mention sender"}'),
-  ('12000000-0000-0000-0000-000000000003', 'mention-target@janja.local', 'authenticated', 'authenticated', '{"username":"mention_target","display_name":"Mention target"}');
+  ('12000000-0000-0000-0000-000000000001', 'mention-owner@lili.local', 'authenticated', 'authenticated', '{"username":"mention_owner","display_name":"Mention owner"}'),
+  ('12000000-0000-0000-0000-000000000002', 'mention-sender@lili.local', 'authenticated', 'authenticated', '{"username":"mention_sender","display_name":"Mention sender"}'),
+  ('12000000-0000-0000-0000-000000000003', 'mention-target@lili.local', 'authenticated', 'authenticated', '{"username":"mention_target","display_name":"Mention target"}');
 
 insert into public.servers(id, owner_id, name)
 values ('22000000-0000-0000-0000-000000000001', '12000000-0000-0000-0000-000000000001', 'Mention server');

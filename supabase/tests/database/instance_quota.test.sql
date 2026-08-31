@@ -10,8 +10,8 @@ select is(public.quota_alert_level(95, 100), 'CRITICAL', '95 percent is critical
 
 insert into auth.users(id, email, aud, role, raw_user_meta_data)
 values
-  ('19000000-0000-0000-0000-000000000001', 'quota-owner@janja.local', 'authenticated', 'authenticated', '{"username":"quota_owner","display_name":"Quota owner"}'),
-  ('19000000-0000-0000-0000-000000000002', 'quota-member@janja.local', 'authenticated', 'authenticated', '{"username":"quota_member","display_name":"Quota member"}');
+  ('19000000-0000-0000-0000-000000000001', 'quota-owner@lili.local', 'authenticated', 'authenticated', '{"username":"quota_owner","display_name":"Quota owner"}'),
+  ('19000000-0000-0000-0000-000000000002', 'quota-member@lili.local', 'authenticated', 'authenticated', '{"username":"quota_member","display_name":"Quota member"}');
 insert into public.servers(id, owner_id, name)
 values ('29000000-0000-0000-0000-000000000001', '19000000-0000-0000-0000-000000000001', 'Quota server');
 insert into public.server_members(server_id, user_id)

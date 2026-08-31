@@ -6,7 +6,7 @@ select plan(6);
 insert into auth.users(id, email, aud, role, raw_user_meta_data)
 values (
   '1b000000-0000-0000-0000-000000000001',
-  'workspace-limits@janja.local',
+  'workspace-limits@lili.local',
   'authenticated',
   'authenticated',
   '{"username":"workspace_limits","display_name":"Workspace limits"}'

@@ -268,7 +268,7 @@ const notificationMuteUntil = (hours: number) =>
   new Date(Date.now() + hours * 60 * 60 * 1_000).toISOString();
 const requestNotificationAccess = () => {
   if (
-    !window.janjaDesktop &&
+    !window.liliDesktop &&
     "Notification" in window &&
     Notification.permission === "default"
   )
@@ -346,7 +346,7 @@ function Logo({ compact = false }: { compact?: boolean }) {
   return (
     <div className={`brand ${compact ? "brand-compact" : ""}`}>
       <img src="/logo-vetorizada.svg" alt="" />
-      <span>Janja</span>
+      <span>Lili</span>
     </div>
   );
 }
@@ -397,26 +397,26 @@ function Titlebar({
         <button className="icon-button" aria-label="Ajuda" onClick={onHelp}>
           <IconHelp size={20} />
         </button>
-        {window.janjaDesktop && (
+        {window.liliDesktop && (
           <>
             <button
               className="window-button"
               aria-label="Minimizar"
-              onClick={() => window.janjaDesktop?.minimize()}
+              onClick={() => window.liliDesktop?.minimize()}
             >
               —
             </button>
             <button
               className="window-button"
               aria-label="Maximizar"
-              onClick={() => window.janjaDesktop?.maximize()}
+              onClick={() => window.liliDesktop?.maximize()}
             >
               □
             </button>
             <button
               className="window-button close"
               aria-label="Fechar"
-              onClick={() => window.janjaDesktop?.close()}
+              onClick={() => window.liliDesktop?.close()}
             >
               ×
             </button>
@@ -1325,7 +1325,7 @@ function ChannelSidebar({
       try {
         return new Set(
           JSON.parse(
-            localStorage.getItem("janja-collapsed-categories") ?? "[]",
+            localStorage.getItem("lili-collapsed-categories") ?? "[]",
           ) as string[],
         );
       } catch {
@@ -1354,7 +1354,7 @@ function ChannelSidebar({
   const { ask, confirmDialog } = useConfirm();
   const [privacyOpen, setPrivacyOpen] = useState(false);
   const [hideMutedChannels, setHideMutedChannels] = useState(
-    () => localStorage.getItem("janja.hideMutedChannels") === "true",
+    () => localStorage.getItem("lili.hideMutedChannels") === "true",
   );
   const [channelSetup, setChannelSetup] = useState<{
     kind: NewChannelKind;
@@ -1545,7 +1545,7 @@ function ChannelSidebar({
         onSelect: () => {
           const next = !hideMutedChannels;
           setHideMutedChannels(next);
-          localStorage.setItem("janja.hideMutedChannels", String(next));
+          localStorage.setItem("lili.hideMutedChannels", String(next));
         },
       },
       {
@@ -1708,7 +1708,7 @@ function ChannelSidebar({
       if (next.has(categoryId)) next.delete(categoryId);
       else next.add(categoryId);
       localStorage.setItem(
-        "janja-collapsed-categories",
+        "lili-collapsed-categories",
         JSON.stringify([...next]),
       );
       return next;
@@ -2728,7 +2728,7 @@ function ChatView({
     });
     if (
       mode === "ALL" &&
-      !window.janjaDesktop &&
+      !window.liliDesktop &&
       "Notification" in window &&
       Notification.permission === "default"
     )
@@ -3474,7 +3474,7 @@ function CallView({
       // Quem tinha 1440p ou 4K salvo cai em 1080p sem precisar fazer nada:
       // aqueles modos deixaram de existir, e travar numa preferência inválida
       // deixaria a câmera sem qualidade definida.
-      const saved = Number(localStorage.getItem("janja.camera.quality"));
+      const saved = Number(localStorage.getItem("lili.camera.quality"));
       return saved === 720 ? 720 : 1080;
     }),
     [openMenu, setOpenMenu] = useState<"audio" | "video" | "share" | null>(
@@ -3683,7 +3683,7 @@ function CallView({
   };
   const applyCameraQuality = async (resolution: CameraResolution) => {
     setCameraQualityState(resolution);
-    localStorage.setItem("janja.camera.quality", String(resolution));
+    localStorage.setItem("lili.camera.quality", String(resolution));
     setCameraQuality(resolution);
     if (!video) return;
     // A resolução é fixada no momento da captura: para valer agora, a track
@@ -3712,7 +3712,7 @@ function CallView({
     // No desktop temos as miniaturas das janelas e mostramos o nosso seletor.
     // No navegador o Chrome já faz essa escolha; abrir um modal antes dele
     // seria uma etapa a mais para o mesmo resultado.
-    if (window.janjaDesktop) setSharePickerOpen(true);
+    if (window.liliDesktop) setSharePickerOpen(true);
     else void startSharing({ ...shareQuality });
   };
   const startSharing = async (selection: ShareSelection) => {
@@ -3729,7 +3729,7 @@ function CallView({
     // O diálogo do Chrome é desenhado pelo navegador e não pode ser estilizado
     // pela página — é justamente o que impede um site de falsificar o seletor.
     // Estas dicas são o que ele aceita: abrir já na aba de janelas, esconder a
-    // própria aba do Janja e permitir trocar de fonte sem reiniciar.
+    // própria aba do Lili e permitir trocar de fonte sem reiniciar.
     const captureViaBrowserPicker = () =>
       navigator.mediaDevices.getDisplayMedia({
         video: {
@@ -5001,7 +5001,7 @@ function HomeView({
           <section className="add-friend-section">
             <h2>Adicionar amigo</h2>
             <p>
-              Você pode adicionar amigos pelo username Janja (sem espaços,
+              Você pode adicionar amigos pelo username Lili (sem espaços,
               letras minúsculas).
             </p>
             <div className="friend-search">
@@ -7960,7 +7960,7 @@ function ProfilePanel({
     [currentDeviceId, setCurrentDeviceId] = useState(""),
     [newPassword, setNewPassword] = useState(""),
     [securityNotice, setSecurityNotice] = useState(""),
-    [updateState, setUpdateState] = useState<JanjaUpdateState | null>(null);
+    [updateState, setUpdateState] = useState<LiliUpdateState | null>(null);
   useEffect(() => {
     void (async () => {
       try {
@@ -7989,9 +7989,9 @@ function ProfilePanel({
     })();
   }, [account.profileId]);
   useEffect(() => {
-    if (!window.janjaDesktop) return;
-    void window.janjaDesktop.updateStatus().then(setUpdateState);
-    return window.janjaDesktop.onUpdateState(setUpdateState);
+    if (!window.liliDesktop) return;
+    void window.liliDesktop.updateStatus().then(setUpdateState);
+    return window.liliDesktop.onUpdateState(setUpdateState);
   }, []);
   const changePassword = async () => {
     try {
@@ -8476,7 +8476,7 @@ function ProfilePanel({
             </label>
           </div>
         </details>
-        {window.janjaDesktop && (
+        {window.liliDesktop && (
           <details className="security-details">
             <summary>Atualizações do aplicativo</summary>
             <div>
@@ -8489,13 +8489,13 @@ function ProfilePanel({
               </span>
               {updateState?.error && <small>{updateState.error}</small>}
               {updateState?.status === "ready" ? (
-                <button onClick={() => window.janjaDesktop?.installUpdate()}>
+                <button onClick={() => window.liliDesktop?.installUpdate()}>
                   Reiniciar e instalar
                 </button>
               ) : (
                 <button
                   onClick={() =>
-                    void window.janjaDesktop
+                    void window.liliDesktop
                       ?.checkForUpdates()
                       .then(setUpdateState)
                   }
@@ -8572,7 +8572,7 @@ function ProfilePanel({
                   )}
                 </code>
                 <small>
-                  Compare em outra sessão Janja antes de marcar o dispositivo
+                  Compare em outra sessão Lili antes de marcar o dispositivo
                   como confiável.
                 </small>
               </div>
@@ -8779,7 +8779,7 @@ function HelpPanel({ onClose }: { onClose: () => void }) {
         </button>
         <Logo />
         <span className="eyebrow">AJUDA LOCAL</span>
-        <h2>Janja — Voice Chat</h2>
+        <h2>Lili — Voice Chat</h2>
         <p>
           Chamadas usam LiveKit/TURN e mídia E2EE vinculada ao grupo OpenMLS.
         </p>
@@ -9066,12 +9066,12 @@ function App({
         );
     };
     window.addEventListener("unhandledrejection", rejected);
-    window.addEventListener("janja-runtime-error", reported);
+    window.addEventListener("lili-runtime-error", reported);
     window.addEventListener("offline", offline);
     window.addEventListener("online", online);
     return () => {
       window.removeEventListener("unhandledrejection", rejected);
-      window.removeEventListener("janja-runtime-error", reported);
+      window.removeEventListener("lili-runtime-error", reported);
       window.removeEventListener("offline", offline);
       window.removeEventListener("online", online);
     };
@@ -9176,7 +9176,7 @@ function App({
   // ---------------------------------------------------------------
   // Convite por link. Quem recebe `#/invite/<codigo>` entra no servidor
   // sozinho: antes o convite era um código de um domínio que não existe
-  // (`janja.local/...`), e a pessoa precisava descobrir que havia um campo
+  // (`lili.app/...`), e a pessoa precisava descobrir que havia um campo
   // escondido atrás de "adicionar servidor" para colá-lo.
   // ---------------------------------------------------------------
   useEffect(() => {
@@ -9459,7 +9459,7 @@ function App({
       )}
       <Titlebar
         serverName={
-          view === "home" ? "Janja" : (activeServer?.name ?? "Servidor")
+          view === "home" ? "Lili" : (activeServer?.name ?? "Servidor")
         }
         channelName={
           view === "home"
@@ -9562,7 +9562,7 @@ function App({
         ) : !activeChannel ? (
           <main className="workspace-empty">
             <Logo />
-            <span className="eyebrow">JANJA · LOCAL E2EE</span>
+            <span className="eyebrow">LILI · LOCAL E2EE</span>
             <h1>Converse com outras pessoas</h1>
             <p>
               Crie um servidor ou use um convite para entrar no mesmo espaço em
@@ -9719,7 +9719,7 @@ function NewPasswordCard({ onDone }: { onDone: () => void }) {
     <main className="auth-screen">
       <section className="auth-card">
         <Logo />
-        <span className="eyebrow">JANJA · ONLINE E2EE</span>
+        <span className="eyebrow">LILI · ONLINE E2EE</span>
         <h1>Defina uma senha nova</h1>
         <p>
           O link do e-mail já provou que a conta é sua. Escolha a senha nova
@@ -9865,7 +9865,7 @@ function OnlineAuthGate() {
     return (
       <div className="auth-screen">
         <Logo />
-        <p>Conectando ao Janja…</p>
+        <p>Conectando ao Lili…</p>
       </div>
     );
   // A ordem importa: o link de recuperação já traz sessão válida, então sem
@@ -9877,7 +9877,7 @@ function OnlineAuthGate() {
     <main className="auth-screen">
       <section className="auth-card">
         <Logo />
-        <span className="eyebrow">JANJA · ONLINE E2EE</span>
+        <span className="eyebrow">LILI · ONLINE E2EE</span>
         <h1>
           {mode === "register"
             ? "Criar conta"
@@ -9981,8 +9981,8 @@ function AuthGate() {
 }
 
 const rootElement = document.getElementById("root")!;
-const reactRoot = window.__janjaReactRoot ?? createRoot(rootElement);
-window.__janjaReactRoot = reactRoot;
+const reactRoot = window.__liliReactRoot ?? createRoot(rootElement);
+window.__liliReactRoot = reactRoot;
 reactRoot.render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>

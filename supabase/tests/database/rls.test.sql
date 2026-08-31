@@ -5,10 +5,10 @@ select plan(26);
 
 insert into auth.users(id, email, aud, role, raw_user_meta_data)
 values
-  ('10000000-0000-0000-0000-000000000001', 'owner@janja.local', 'authenticated', 'authenticated', '{"username":"owner","display_name":"Owner"}'),
-  ('10000000-0000-0000-0000-000000000002', 'member@janja.local', 'authenticated', 'authenticated', '{"username":"member","display_name":"Member"}'),
-  ('10000000-0000-0000-0000-000000000003', 'outsider@janja.local', 'authenticated', 'authenticated', '{"username":"outsider","display_name":"Outsider"}'),
-  ('10000000-0000-0000-0000-000000000004', 'friend@janja.local', 'authenticated', 'authenticated', '{"username":"friend","display_name":"Friend"}');
+  ('10000000-0000-0000-0000-000000000001', 'owner@lili.local', 'authenticated', 'authenticated', '{"username":"owner","display_name":"Owner"}'),
+  ('10000000-0000-0000-0000-000000000002', 'member@lili.local', 'authenticated', 'authenticated', '{"username":"member","display_name":"Member"}'),
+  ('10000000-0000-0000-0000-000000000003', 'outsider@lili.local', 'authenticated', 'authenticated', '{"username":"outsider","display_name":"Outsider"}'),
+  ('10000000-0000-0000-0000-000000000004', 'friend@lili.local', 'authenticated', 'authenticated', '{"username":"friend","display_name":"Friend"}');
 
 update public.profiles
 set profile_visible = false

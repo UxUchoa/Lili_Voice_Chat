@@ -5,9 +5,9 @@ select plan(11);
 
 insert into auth.users(id, email, aud, role, raw_user_meta_data)
 values
-  ('1b000000-0000-0000-0000-000000000001', 'request-sender@janja.local', 'authenticated', 'authenticated', '{"username":"request_sender","display_name":"Request sender"}'),
-  ('1b000000-0000-0000-0000-000000000002', 'request-target@janja.local', 'authenticated', 'authenticated', '{"username":"request_target","display_name":"Request target"}'),
-  ('1b000000-0000-0000-0000-000000000003', 'request-friend@janja.local', 'authenticated', 'authenticated', '{"username":"request_friend","display_name":"Request friend"}');
+  ('1b000000-0000-0000-0000-000000000001', 'request-sender@lili.local', 'authenticated', 'authenticated', '{"username":"request_sender","display_name":"Request sender"}'),
+  ('1b000000-0000-0000-0000-000000000002', 'request-target@lili.local', 'authenticated', 'authenticated', '{"username":"request_target","display_name":"Request target"}'),
+  ('1b000000-0000-0000-0000-000000000003', 'request-friend@lili.local', 'authenticated', 'authenticated', '{"username":"request_friend","display_name":"Request friend"}');
 
 select is(
   (select dm_policy from public.profiles where id = '1b000000-0000-0000-0000-000000000001'),

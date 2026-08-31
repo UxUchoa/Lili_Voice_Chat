@@ -45,10 +45,10 @@ test("limite de usuário do canal de voz é imposto no backend", async ({
     auth: { persistSession: false, autoRefreshToken: false },
   });
   const runId = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
-  const password = `Janja-${crypto.randomUUID()}-Aa1!`;
+  const password = `Lili-${crypto.randomUUID()}-Aa1!`;
   const emails = [
-    `limit-owner-${runId}@janja.local`,
-    `limit-member-${runId}@janja.local`,
+    `limit-owner-${runId}@lili.app`,
+    `limit-member-${runId}@lili.app`,
   ];
   const userIds: string[] = [];
   let serverId = "";

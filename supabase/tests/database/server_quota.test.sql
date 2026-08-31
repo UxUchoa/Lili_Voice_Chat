@@ -5,8 +5,8 @@ select plan(12);
 
 insert into auth.users(id, email, aud, role, raw_user_meta_data)
 values
-  ('1d000000-0000-0000-0000-000000000001', 'quota-owner@janja.local', 'authenticated', 'authenticated', '{"username":"quota_owner","display_name":"Quota owner"}'),
-  ('1d000000-0000-0000-0000-000000000002', 'quota-member@janja.local', 'authenticated', 'authenticated', '{"username":"quota_member","display_name":"Quota member"}');
+  ('1d000000-0000-0000-0000-000000000001', 'quota-owner@lili.local', 'authenticated', 'authenticated', '{"username":"quota_owner","display_name":"Quota owner"}'),
+  ('1d000000-0000-0000-0000-000000000002', 'quota-member@lili.local', 'authenticated', 'authenticated', '{"username":"quota_member","display_name":"Quota member"}');
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '1d000000-0000-0000-0000-000000000001', true);

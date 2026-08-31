@@ -9,7 +9,7 @@ import { beforeAll, describe, expect, it } from "vitest";
  * `Access-Control-Allow-Origin` para `*`. O que sai da função só aparece de
  * verdade no projeto hospedado.
  */
-const ALLOWED = "https://janja.app,https://*.vercel.app,null";
+const ALLOWED = "https://lili.app,https://*.vercel.app,null";
 
 let withCors: typeof import("./cors.ts").withCors;
 let json: typeof import("./cors.ts").json;
@@ -38,18 +38,18 @@ const preflight = (origin: string) =>
 describe("withCors", () => {
   it("devolve a origem que casou, não a lista nem `*`", async () => {
     const handler = withCors(() => json({ ok: true }));
-    const response = await handler(post("https://janja.app"));
+    const response = await handler(post("https://lili.app"));
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe(
-      "https://janja.app",
+      "https://lili.app",
     );
     expect(response.headers.get("Vary")).toBe("Origin");
   });
 
   it("aceita a pré-visualização pelo curinga", async () => {
     const handler = withCors(() => json({ ok: true }));
-    const response = await handler(post("https://janja-git-x.vercel.app"));
+    const response = await handler(post("https://lili-git-x.vercel.app"));
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe(
-      "https://janja-git-x.vercel.app",
+      "https://lili-git-x.vercel.app",
     );
   });
 
@@ -74,11 +74,11 @@ describe("withCors", () => {
       called = true;
       return json({ ok: true });
     });
-    const response = await handler(preflight("https://janja.app"));
+    const response = await handler(preflight("https://lili.app"));
     expect(called).toBe(false);
     expect(response.status).toBe(200);
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe(
-      "https://janja.app",
+      "https://lili.app",
     );
     expect(response.headers.get("Access-Control-Allow-Headers")).toContain(
       "x-cron-secret",
@@ -87,10 +87,10 @@ describe("withCors", () => {
 
   it("carimba a origem também numa resposta de erro do handler", async () => {
     const handler = withCors(() => json({ error: "unauthorized" }, 401));
-    const response = await handler(post("https://janja.app"));
+    const response = await handler(post("https://lili.app"));
     expect(response.status).toBe(401);
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe(
-      "https://janja.app",
+      "https://lili.app",
     );
   });
 

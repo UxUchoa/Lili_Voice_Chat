@@ -4,9 +4,9 @@ select plan(21);
 
 insert into auth.users(id, email, aud, role, raw_user_meta_data)
 values
-  ('71000000-0000-0000-0000-000000000001', 'founder@janja.local', 'authenticated', 'authenticated', '{"username":"founder"}'),
-  ('71000000-0000-0000-0000-000000000002', 'recipient@janja.local', 'authenticated', 'authenticated', '{"username":"recipient"}'),
-  ('71000000-0000-0000-0000-000000000003', 'outsider-mls@janja.local', 'authenticated', 'authenticated', '{"username":"outsider_mls"}');
+  ('71000000-0000-0000-0000-000000000001', 'founder@lili.local', 'authenticated', 'authenticated', '{"username":"founder"}'),
+  ('71000000-0000-0000-0000-000000000002', 'recipient@lili.local', 'authenticated', 'authenticated', '{"username":"recipient"}'),
+  ('71000000-0000-0000-0000-000000000003', 'outsider-mls@lili.local', 'authenticated', 'authenticated', '{"username":"outsider_mls"}');
 insert into public.servers(id, owner_id, name)
 values ('72000000-0000-0000-0000-000000000001', '71000000-0000-0000-0000-000000000001', 'MLS server');
 insert into public.server_members(server_id, user_id)

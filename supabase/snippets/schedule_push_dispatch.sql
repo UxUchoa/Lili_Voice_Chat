@@ -6,25 +6,25 @@ create extension if not exists supabase_vault with schema vault;
 
 select vault.create_secret(
   'https://YOUR_PROJECT.supabase.co',
-  'janja_project_url',
-  'URL pública do projeto Janja'
+  'lili_project_url',
+  'URL pública do projeto Lili'
 );
 select vault.create_secret(
   'REPLACE_WITH_PUSH_DISPATCH_SECRET',
-  'janja_push_dispatch_secret',
+  'lili_push_dispatch_secret',
   'Autorização do dispatcher de push'
 );
 
 select cron.schedule(
-  'janja-push-dispatch',
+  'lili-push-dispatch',
   '* * * * *',
   $$
   select net.http_post(
-    url := (select decrypted_secret from vault.decrypted_secrets where name = 'janja_project_url')
+    url := (select decrypted_secret from vault.decrypted_secrets where name = 'lili_project_url')
       || '/functions/v1/push-dispatch',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
-      'x-push-secret', (select decrypted_secret from vault.decrypted_secrets where name = 'janja_push_dispatch_secret')
+      'x-push-secret', (select decrypted_secret from vault.decrypted_secrets where name = 'lili_push_dispatch_secret')
     ),
     body := '{}'::jsonb,
     timeout_milliseconds := 10000

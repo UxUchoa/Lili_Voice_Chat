@@ -90,11 +90,11 @@ test("duas contas permanecem visíveis na mesma chamada local E2EE", async ({
     auth: { persistSession: false, autoRefreshToken: false },
   });
   const runId = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
-  const password = `Janja-${crypto.randomUUID()}-Aa1!`;
+  const password = `Lili-${crypto.randomUUID()}-Aa1!`;
   const ownerName = `Call Owner ${runId}`;
   const memberName = `Call Member ${runId}`;
-  const ownerEmail = `call-owner-${runId}@janja.local`;
-  const memberEmail = `call-member-${runId}@janja.local`;
+  const ownerEmail = `call-owner-${runId}@lili.app`;
+  const memberEmail = `call-member-${runId}@lili.app`;
   const userIds: string[] = [];
   let serverId = "";
   let ownerContext: BrowserContext | undefined;

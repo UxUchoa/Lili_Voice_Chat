@@ -4,7 +4,7 @@ create extension if not exists pgtap with schema extensions;
 select plan(3);
 
 insert into auth.users(id, email, aud, role, raw_user_meta_data)
-values ('1a000000-0000-0000-0000-000000000001', 'role-icon@janja.local', 'authenticated', 'authenticated', '{"username":"role_icon","display_name":"Role icon"}');
+values ('1a000000-0000-0000-0000-000000000001', 'role-icon@lili.local', 'authenticated', 'authenticated', '{"username":"role_icon","display_name":"Role icon"}');
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '1a000000-0000-0000-0000-000000000001', true);

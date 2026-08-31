@@ -7,7 +7,7 @@ on:
 # O download do Electron são ~150 MB que nenhum job de CI usa: só o release
 # empacota o desktop.
 env:
-  JANJA_SKIP_ELECTRON_DOWNLOAD: "true"
+  LILI_SKIP_ELECTRON_DOWNLOAD: "true"
 
 jobs:
   verify:
@@ -30,7 +30,7 @@ jobs:
           VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
           VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
           VITE_LIVEKIT_URL: wss://ci-placeholder.livekit.cloud
-          JANJA_STRICT_ENV: "true"
+          LILI_STRICT_ENV: "true"
 
   database:
     runs-on: ubuntu-latest

@@ -5,9 +5,9 @@ select plan(17);
 
 insert into auth.users(id, email, aud, role, raw_user_meta_data)
 values
-  ('19000000-0000-0000-0000-000000000001', 'ring-caller@janja.local', 'authenticated', 'authenticated', '{"username":"ring_caller","display_name":"Ring caller"}'),
-  ('19000000-0000-0000-0000-000000000002', 'ring-callee@janja.local', 'authenticated', 'authenticated', '{"username":"ring_callee","display_name":"Ring callee"}'),
-  ('19000000-0000-0000-0000-000000000003', 'ring-outsider@janja.local', 'authenticated', 'authenticated', '{"username":"ring_outsider","display_name":"Ring outsider"}');
+  ('19000000-0000-0000-0000-000000000001', 'ring-caller@lili.local', 'authenticated', 'authenticated', '{"username":"ring_caller","display_name":"Ring caller"}'),
+  ('19000000-0000-0000-0000-000000000002', 'ring-callee@lili.local', 'authenticated', 'authenticated', '{"username":"ring_callee","display_name":"Ring callee"}'),
+  ('19000000-0000-0000-0000-000000000003', 'ring-outsider@lili.local', 'authenticated', 'authenticated', '{"username":"ring_outsider","display_name":"Ring outsider"}');
 
 insert into public.channels(id, name, kind, private, created_by)
 values ('49000000-0000-0000-0000-000000000001', 'Ring DM', 'dm', true, '19000000-0000-0000-0000-000000000001');

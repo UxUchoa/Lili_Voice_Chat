@@ -49,7 +49,7 @@ describe("push dispatcher core", () => {
     const [, payload, ttl] = vi.mocked(dependencies.sendNotification).mock
       .calls[0];
     expect(JSON.parse(payload)).toEqual({
-      title: "Janja — Voice Chat",
+      title: "Lili — Voice Chat",
       body: "Você recebeu uma nova atividade cifrada.",
       data: {
         channelId: "channel-1",

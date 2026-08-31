@@ -7,11 +7,11 @@ const possibleTestRoot = path.dirname(executableDirectory);
 const testRootName = path.basename(possibleTestRoot);
 const isIsolatedUpdateTest =
   path.dirname(possibleTestRoot) === path.resolve(os.tmpdir()) &&
-  testRootName.startsWith("janja-update-");
+  testRootName.startsWith("lili-update-");
 const inferredResult = isIsolatedUpdateTest
   ? path.join(
       possibleTestRoot,
-      `janja-update-result-${testRootName.slice("janja-update-".length)}.jsonl`,
+      `lili-update-result-${testRootName.slice("lili-update-".length)}.jsonl`,
     )
   : null;
 
