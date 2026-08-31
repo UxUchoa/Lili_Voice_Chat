@@ -3629,7 +3629,11 @@ function CallView({
                   height: enforceMinimum
                     ? { min: 720, ideal: targetResolution }
                     : { ideal: targetResolution },
-                  frameRate: { ideal: 30 },
+                  // `ideal` nunca reprova a câmera: quem só entrega 30
+                  // quadros entrega 30, e quem entrega mais fica limitada ao
+                  // teto. Exigir 60 recusaria a maioria das webcams de
+                  // notebook, que fazem 720p a 30.
+                  frameRate: { ideal: 60, max: 60 },
                 }
               : false,
         });

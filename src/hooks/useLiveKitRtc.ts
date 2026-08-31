@@ -202,13 +202,9 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
                       .frameRate,
                     priority: "high",
                   },
-                  // A 60 quadros o que não pode cair é a fluidez: preferimos
-                  // perder resolução a engasgar a imagem de um rosto.
-                  degradationPreference: "maintain-framerate",
+                  degradationPreference: "maintain-resolution",
                   simulcast: true,
-                  // Piso em 360p: com o teto em 720p, uma camada de 540p ficaria
-                  // colada na cheia e pagaria por quase nada.
-                  videoSimulcastLayers: [VideoPresets.h360],
+                  videoSimulcastLayers: [VideoPresets.h540],
                   contentHint: "motion",
                 }
             : {}),
@@ -317,16 +313,19 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
           echoCancellation: true,
           autoGainControl: true,
         },
+        // O aplicativo captura por conta própria com `getUserMedia` e publica
+        // o MediaStream pronto; este padrão só valeria se o LiveKit abrisse a
+        // câmera sozinho. Mantido no preset alto de propósito: restringi-lo
+        // aqui não impõe teto nenhum e já mascarou um problema de captura.
         videoCaptureDefaults: {
-          resolution: VideoPresets.h720.resolution,
-          frameRate: CAMERA_MODES[720].frameRate,
+          resolution: VideoPresets.h1080.resolution,
         },
         publishDefaults: {
           simulcast: true,
           // Escada 540p/1080p: o piso precisa ser alto o bastante para nunca
           // parecer borrado num tile grande, e a camada cheia entrega o 1080p.
           // Os valores reais são definidos por track em publishDesiredTracks.
-          videoSimulcastLayers: [VideoPresets.h360],
+          videoSimulcastLayers: [VideoPresets.h540],
           videoEncoding: {
             maxBitrate: CAMERA_MODES[720].bitrate,
             maxFramerate: CAMERA_MODES[720].frameRate,
