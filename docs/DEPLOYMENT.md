@@ -30,11 +30,11 @@ O repositório é a origem de tudo: a Vercel constrói a partir dele e o
 git init -b main
 git add .
 git commit -m "Janja Voice Chat"
-gh repo create janja-voice-chat --private --source . --push
+gh repo create Lili_Voice_Chat --private --source . --push
 ```
 
 Sem o `gh`, crie o repositório vazio pelo site e use
-`git remote add origin https://github.com/<owner>/janja-voice-chat.git` seguido
+`git remote add origin https://github.com/<owner>/Lili_Voice_Chat.git` seguido
 de `git push -u origin main`.
 
 Confira antes do primeiro push que nada de `.env` com valor real entrou:
@@ -46,7 +46,7 @@ Em **Settings → Secrets and variables → Actions**, aba *Variables*:
 | --- | --- |
 | `VITE_SUPABASE_URL` | `https://abcd.supabase.co` |
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_…` |
-| `VITE_LIVEKIT_URL` | `wss://livekit.example.com` |
+| `VITE_LIVEKIT_URL` | `wss://<projeto>.livekit.cloud` |
 | `VITE_FORCE_TURN` | `false` |
 | `VITE_VAPID_PUBLIC_KEY` | chave pública VAPID |
 | `VITE_TENOR_API_KEY` | opcional, só para o seletor de GIFs |
@@ -73,7 +73,7 @@ Antes de rodar, crie `supabase/functions/.env.production` a partir de
 `supabase/functions/.env.example`:
 
 ```text
-LIVEKIT_URL=wss://livekit.example.com
+LIVEKIT_URL=wss://<projeto>.livekit.cloud
 LIVEKIT_API_KEY=…
 LIVEKIT_API_SECRET=…
 VAPID_SUBJECT=mailto:admin@example.com
@@ -134,20 +134,46 @@ Rode `npm run test:db` localmente antes de qualquer `db push`.
 
 ## 2. LiveKit e TURN
 
-Use `infra/livekit/livekit.production.example.yaml` como base. Em produção:
+### LiveKit Cloud (caminho escolhido)
 
-- publique `wss://` para sinalização;
+Em <https://cloud.livekit.io> crie um projeto e anote, em *Settings → Keys*:
+
+| Valor | Onde vai |
+| --- | --- |
+| URL `wss://<projeto>.livekit.cloud` | `VITE_LIVEKIT_URL` (Vercel + GitHub Variables) **e** `LIVEKIT_URL` (segredo da Edge Function) |
+| API Key | `LIVEKIT_API_KEY` (só no segredo da função) |
+| API Secret | `LIVEKIT_API_SECRET` (só no segredo da função) |
+
+A URL é pública — ela vai para o bundle de qualquer jeito. **Key e secret não**:
+quem os tem emite token para qualquer sala. Eles vivem apenas nos segredos das
+Edge Functions, que é quem assina o token de acesso do usuário.
+
+O Cloud já entrega `wss://`, TURN/TLS em 443 e Redis; não há nada de
+infraestrutura para manter. Mantenha `VITE_FORCE_TURN=false`: o TURN entra
+sozinho quando o UDP direto falha, e forçar relay em todo mundo só adiciona um
+salto. O plano gratuito tem teto de minutos e de participantes simultâneos —
+confira antes de abrir para um grupo grande.
+
+O E2EE de mídia continua sendo nosso: a chave sai do epoch MLS e o SFU roteia
+pacotes que não consegue abrir.
+
+### Alternativa: auto-hospedado
+
+`infra/livekit/livekit.production.example.yaml` é a base. Nesse caminho você
+assume:
+
+- `wss://` para sinalização com certificado válido;
 - Redis persistente e privado;
-- API key e secret fora do repositório;
 - `use_external_ip` ou o IP público correto;
 - 7881/TCP, a faixa UDP do RTC e a faixa UDP de relay abertas;
-- TURN/TLS em 443 para redes que bloqueiam UDP;
-- certificado TLS válido no domínio do TURN.
+- TURN/TLS em 443 para redes que bloqueiam UDP.
+
+### Teste, nos dois casos
 
 Teste **de fora da LAN**, não da mesma rede:
 
 ```powershell
-$env:LIVEKIT_URL='wss://livekit.example.com'
+$env:LIVEKIT_URL='wss://<projeto>.livekit.cloud'
 $env:LIVEKIT_API_KEY='...'
 $env:LIVEKIT_API_SECRET='...'
 $env:JANJA_FORCE_TURN='true'
@@ -169,7 +195,7 @@ Em **Settings → Environment Variables**, para *Production*, *Preview* e
 ```text
 VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
-VITE_LIVEKIT_URL=wss://livekit.example.com
+VITE_LIVEKIT_URL=wss://<projeto>.livekit.cloud
 VITE_FORCE_TURN=false
 VITE_VAPID_PUBLIC_KEY=...
 VITE_TENOR_API_KEY=...
