@@ -68,7 +68,7 @@ import {
   subscribeActiveOnlineVoiceCounts,
   subscribeActiveOnlineVoiceMembers,
   subscribeVoiceMoveRequests,
-  type OnlineVoiceCounts,
+  type OnlineVoiceMember,
   type OnlineVoiceMembers,
   type OnlineCallSession,
 } from "./services/online/calls";
@@ -1256,15 +1256,63 @@ function DirectMessageSidebar({
   );
 }
 
+/**
+ * Quem está no canal de voz, listado abaixo dele.
+ *
+ * Antes havia só um número, e para descobrir quem estava numa conversa era
+ * preciso entrar nela — o que, num canal de voz, significa aparecer. Os ícones
+ * dizem o que cada um está transmitindo sem que ninguém precise perguntar.
+ */
+function VoiceChannelMembers({
+  members,
+  profiles,
+}: {
+  members: OnlineVoiceMember[];
+  profiles: Profile[];
+}) {
+  if (!members.length) return null;
+  return (
+    <ul className="voice-members">
+      {members.map((member) => {
+        const person = profiles.find((one) => one.id === member.userId);
+        // Um participante recém-entrado pode chegar antes do perfil dele na
+        // reconciliação do workspace; some da lista por um instante é pior que
+        // aparecer sem nome.
+        if (!person) return null;
+        return (
+          <li key={member.userId} className="voice-member">
+            <Avatar person={person} size="sm" />
+            <span className="voice-member-name">{person.displayName}</span>
+            {member.screenOn && (
+              <span className="voice-member-live" title="Transmitindo a tela">
+                AO VIVO
+              </span>
+            )}
+            {member.cameraOn && <IconVideo size={13} aria-label="Com câmera" />}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 function ChannelSidebar({
   serverId,
   activeChannelId,
+  voiceMembers,
   onChannel,
   onSettings,
   onProfile,
 }: {
   serverId: string;
   activeChannelId: string;
+  /**
+   * Quem está em cada canal de voz, vindo de cima. A barra chegou a assinar a
+   * própria contagem, o que abria mais um canal de Realtime para dizer um
+   * número que esta lista já contém — e os dois podiam discordar por um
+   * instante.
+   */
+  voiceMembers: OnlineVoiceMembers;
   onChannel: (id: string) => void;
   onSettings: () => void;
   onProfile: () => void;
@@ -1282,7 +1330,6 @@ function ChannelSidebar({
       }
     },
   );
-  const [voiceCounts, setVoiceCounts] = useState<OnlineVoiceCounts>({});
   const channels = useAppStore((state) => state.channels);
   const servers = useAppStore((state) => state.servers);
   const profiles = useAppStore((state) => state.profiles);
@@ -1298,6 +1345,9 @@ function ChannelSidebar({
   const serverPrivacy = useAppStore((state) => state.serverPrivacy);
   const permissionOverrides = useAppStore((state) => state.permissionOverrides);
   const contextMenu = useContextMenu();
+  /** A contagem é o tamanho da lista: uma fonte só, sem discordar de si. */
+  const voiceCount = (channelId: string) =>
+    (voiceMembers[channelId] ?? []).length;
   const { ask, confirmDialog } = useConfirm();
   const [privacyOpen, setPrivacyOpen] = useState(false);
   const [hideMutedChannels, setHideMutedChannels] = useState(
@@ -1339,13 +1389,6 @@ function ChannelSidebar({
       Permissions.CREATE_INVITES,
       Permissions.VIEW_AUDIT_LOG,
     ].some((permission) => hasPermission(permissions, permission));
-  useEffect(
-    () =>
-      subscribeActiveOnlineVoiceCounts(currentUserId, setVoiceCounts, () =>
-        setVoiceCounts({}),
-      ),
-    [currentUserId],
-  );
   const channelIsMuted = (channelId: string) => {
     const setting = notificationSettings.find(
       (item) =>
@@ -1772,9 +1815,9 @@ function ChannelSidebar({
                     {channel.kind === "voice" && (
                       <em
                         className="people-count"
-                        aria-label={`${voiceCounts[channel.id] ?? 0} participantes`}
+                        aria-label={`${voiceCount(channel.id)} participantes`}
                       >
-                        {voiceCounts[channel.id] ?? 0}
+                        {voiceCount(channel.id)}
                       </em>
                     )}
                   </button>
@@ -1823,21 +1866,26 @@ function ChannelSidebar({
             )}
           </div>
           {voiceChannels.map((channel) => (
-            <button
-              key={channel.id}
-              onClick={() => onChannel(channel.id)}
-              onContextMenu={(event) => openChannelMenu(event, channel)}
-              className={`channel-row ${activeChannelId === channel.id ? "active voice-active" : ""}`}
-            >
-              <IconVolume size={18} />
-              <span>{channel.name}</span>
-              <em
-                className="people-count"
-                aria-label={`${voiceCounts[channel.id] ?? 0} participantes`}
+            <Fragment key={channel.id}>
+              <button
+                onClick={() => onChannel(channel.id)}
+                onContextMenu={(event) => openChannelMenu(event, channel)}
+                className={`channel-row ${activeChannelId === channel.id ? "active voice-active" : ""}`}
               >
-                {voiceCounts[channel.id] ?? 0}
-              </em>
-            </button>
+                <IconVolume size={18} />
+                <span>{channel.name}</span>
+                <em
+                  className="people-count"
+                  aria-label={`${voiceCount(channel.id)} participantes`}
+                >
+                  {voiceCount(channel.id)}
+                </em>
+              </button>
+              <VoiceChannelMembers
+                members={voiceMembers[channel.id] ?? []}
+                profiles={profiles}
+              />
+            </Fragment>
           ))}
         </div>
         {canOpenAdministration && (
@@ -9260,7 +9308,9 @@ function App({
   };
   /** Alguém já está na chamada deste canal? Então é entrar, não chamar. */
   const callInProgress = (channelId: string) =>
-    (voiceMembers[channelId] ?? []).some((id) => id !== currentUserId);
+    (voiceMembers[channelId] ?? []).some(
+      (member) => member.userId !== currentUserId,
+    );
   /**
    * Voz de servidor entra direto. Conversa direta toca o telefone — a menos
    * que a chamada já esteja rolando, caso em que entrar é o que a pessoa
@@ -9369,6 +9419,7 @@ function App({
           <ChannelSidebar
             serverId={navServerId}
             activeChannelId={activeChannel?.id ?? ""}
+            voiceMembers={voiceMembers}
             onChannel={selectChannel}
             onSettings={() => setSettingsOpen(true)}
             onProfile={() => setProfileOpen(true)}

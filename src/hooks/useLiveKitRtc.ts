@@ -14,6 +14,7 @@ import {
   MlsWelcomePendingError,
   type MlsEngine,
 } from "../crypto/mlsEngine";
+import { setOnlineVoiceMediaState } from "../services/online/calls";
 import { supabase } from "../services/online/client";
 import { onlineConfig } from "../services/online/config";
 import { playSound } from "../services/sounds";
@@ -161,6 +162,13 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
   const [connectionError, setConnectionError] = useState("");
   const [e2eeEpoch, setE2eeEpoch] = useState<number | null>(null);
 
+  // Sessão e dispositivo desta chamada, para publicar o que está no ar. Vive
+  // num ref porque quem precisa disso é `publishDesiredTracks`, que roda fora
+  // do escopo da conexão.
+  const voiceIdentityRef = useRef<{
+    sessionId: string;
+    deviceId: string;
+  } | null>(null);
   const screenQualityRef = useRef({ resolution: 1080, frameRate: 30 });
   const cameraQualityRef = useRef(1080);
   const publishDesiredTracks = useCallback((room: Room) => {
@@ -226,6 +234,21 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
                   contentHint: "motion",
                 }
             : {}),
+        });
+      }
+
+      // A barra lateral precisa saber quem está com câmera ou transmitindo
+      // sem entrar no canal, e o LiveKit só conta o que acontece na sala em
+      // que este cliente está. Por isso o estado sobe para o banco.
+      const identity = voiceIdentityRef.current;
+      if (identity) {
+        const sources = [...desiredTracksRef.current.values()].map(
+          (entry) => entry.source,
+        );
+        await setOnlineVoiceMediaState({
+          ...identity,
+          cameraOn: sources.includes("camera"),
+          screenOn: sources.includes("screen"),
         });
       }
     };
@@ -498,6 +521,10 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
         p_device_id: engine.deviceId,
       });
       if (historyError) throw historyError;
+      voiceIdentityRef.current = {
+        sessionId: callSessionId,
+        deviceId: engine.deviceId,
+      };
       const heartbeat = async () => {
         const { error: heartbeatError } = await supabase.rpc(
           "heartbeat_call_session",
@@ -567,6 +594,9 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
     });
     return () => {
       disposed = true;
+      // Sem isto, uma publicação em voo depois da saída tentaria carimbar o
+      // estado numa sessão que já acabou.
+      voiceIdentityRef.current = null;
       void markLeft().catch(console.error);
       if (encryptionTimer !== undefined) window.clearInterval(encryptionTimer);
       if (heartbeatTimer !== undefined) window.clearInterval(heartbeatTimer);

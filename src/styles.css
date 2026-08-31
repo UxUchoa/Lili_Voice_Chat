@@ -515,7 +515,48 @@ a:focus-visible,
   font-size: 10px;
   text-align: center;
 }
-.channel-row .people-count {
+.channel-row /* Lista de quem está no canal de voz, logo abaixo dele. Precisa declarar
+   `flex-direction: row` explicitamente: o padrão local é coluna, e sem isso
+   cada participante iria para uma linha própria dentro do próprio item. */
+.voice-members {
+  margin: 0 0 2px;
+  padding: 0 0 0 26px;
+  list-style: none;
+  display: grid;
+  gap: 1px;
+}
+.voice-members > .voice-member {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 8px 3px 4px;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.voice-members > .voice-member:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.voice-member-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.voice-member-live {
+  flex: none;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--primary, #f00c14);
+  color: white;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.people-count {
   color: var(--muted);
   background: transparent;
 }

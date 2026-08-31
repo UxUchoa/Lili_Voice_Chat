@@ -37,32 +37,65 @@ export async function listRecentOnlineCalls(limit = 20) {
 }
 
 export type OnlineVoiceCounts = Record<string, number>;
+/** Quem está no canal, e com o quê. */
+export interface OnlineVoiceMember {
+  userId: string;
+  cameraOn: boolean;
+  screenOn: boolean;
+}
+
 /** Participantes ativos por canal de voz, para "Ativo agora" e "Em voz". */
-export type OnlineVoiceMembers = Record<string, string[]>;
+export type OnlineVoiceMembers = Record<string, OnlineVoiceMember[]>;
 
 export async function listActiveOnlineVoiceMembers() {
   const { data, error } = await supabase
     .from("call_sessions")
-    .select("channel_id,call_session_participants(user_id,left_at,last_seen_at)")
+    .select(
+      "channel_id,call_session_participants(user_id,left_at,last_seen_at,camera_on,screen_on)",
+    )
     .is("ended_at", null);
   if (error) throw error;
   const members: OnlineVoiceMembers = {};
   const freshAfter = Date.now() - 45_000;
   for (const session of data ?? []) {
-    const users = [
-      ...new Set(
-        (session.call_session_participants ?? [])
-          .filter(
-            (participant) =>
-              participant.left_at === null &&
-              new Date(participant.last_seen_at).getTime() >= freshAfter,
-          )
-          .map((participant) => participant.user_id),
-      ),
-    ];
-    if (users.length) members[session.channel_id] = users;
+    // Um mesmo usuário pode ter mais de um dispositivo na sala. Vale o
+    // agregado: se qualquer aparelho dele está com a câmera aberta, ele está
+    // com a câmera aberta para quem olha de fora.
+    const byUser = new Map<string, OnlineVoiceMember>();
+    for (const participant of session.call_session_participants ?? []) {
+      if (participant.left_at !== null) continue;
+      if (new Date(participant.last_seen_at).getTime() < freshAfter) continue;
+      const current = byUser.get(participant.user_id);
+      byUser.set(participant.user_id, {
+        userId: participant.user_id,
+        cameraOn: Boolean(current?.cameraOn) || Boolean(participant.camera_on),
+        screenOn: Boolean(current?.screenOn) || Boolean(participant.screen_on),
+      });
+    }
+    if (byUser.size) members[session.channel_id] = [...byUser.values()];
   }
   return members;
+}
+
+/**
+ * Publica o que este dispositivo está transmitindo agora.
+ *
+ * Falhar aqui não pode derrubar a chamada: é informação de vitrine para a
+ * barra lateral, e o heartbeat reafirma o estado logo em seguida.
+ */
+export async function setOnlineVoiceMediaState(input: {
+  sessionId: string;
+  deviceId: string;
+  cameraOn: boolean;
+  screenOn: boolean;
+}) {
+  const { error } = await supabase.rpc("set_voice_media_state", {
+    p_session_id: input.sessionId,
+    p_device_id: input.deviceId,
+    p_camera_on: input.cameraOn,
+    p_screen_on: input.screenOn,
+  });
+  if (error) console.warn("[voz] estado de mídia não publicado", error.message);
 }
 
 export function subscribeActiveOnlineVoiceMembers(
@@ -97,7 +130,13 @@ export function subscribeActiveOnlineVoiceMembers(
     .subscribe((status) => {
       if (status === "SUBSCRIBED") refresh();
     });
-  const reconcileTimer = window.setInterval(refresh, 4_000);
+  // Eram 4 s. Cada participante já emite heartbeat, e cada heartbeat vira
+  // evento de Realtime que dispara `refresh` em todo mundo — a sondagem por
+  // cima disso só somava tráfego. Quinze segundos cobre a perda de evento, e a
+  // aba escondida não gasta nada.
+  const reconcileTimer = window.setInterval(() => {
+    if (document.visibilityState === "visible") refresh();
+  }, 15_000);
   refresh();
   return () => {
     active = false;
