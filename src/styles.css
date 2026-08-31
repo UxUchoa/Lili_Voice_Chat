@@ -2062,6 +2062,33 @@ a:focus-visible,
   background: #38b972;
 }
 .quota-card small,
+/* Fatia do servidor, abaixo das métricas da instância. O container precisa
+   declarar a direção: o padrão local é coluna e aqui isso é o desejado, mas
+   deixar implícito já mordeu antes neste arquivo. */
+.server-quota {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+.server-quota.quota-warning-level,
+.server-quota.quota-critical {
+  border-color: rgba(240, 12, 20, 0.4);
+}
+.server-quota > .quota-warning {
+  margin: 0;
+  color: #ff9aa0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.server-quota > button {
+  align-self: flex-start;
+}
+
 .quota-measured-at {
   color: var(--muted);
   font-size: 9px;

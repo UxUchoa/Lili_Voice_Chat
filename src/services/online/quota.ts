@@ -40,3 +40,62 @@ export async function assertOnlineStorageUploadAllowed(sizeBytes: number) {
       "Uploads estão temporariamente bloqueados porque o armazenamento atingiu 95% da quota.",
     );
 }
+
+export type QuotaLevel = "OK" | "NOTICE" | "WARNING" | "CRITICAL";
+
+/**
+ * Consumo deste servidor contra a fatia que cabe a ele.
+ *
+ * A fatia é o teto da instância dividido pelo número de servidores. Ela encolhe
+ * quando alguém cria um servidor novo, e é isso que "dividir a mesma banda"
+ * quer dizer: o rateio fica visível em vez de acontecer em silêncio até alguém
+ * bater no teto.
+ */
+export interface ServerQuotaStatus {
+  usedBytes: number;
+  shareBytes: number;
+  percent: number;
+  level: QuotaLevel;
+  messageCount: number;
+  oldestMessageAt: string | null;
+}
+
+export async function getServerQuotaStatus(serverId: string) {
+  const { data, error } = await supabase.rpc("server_quota_status", {
+    p_server_id: serverId,
+  });
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) throw new Error("O servidor não retornou métricas de quota.");
+  return {
+    usedBytes: Number(row.used_bytes),
+    shareBytes: Number(row.share_bytes),
+    percent: Number(row.percent),
+    level: row.level,
+    messageCount: Number(row.message_count),
+    oldestMessageAt: row.oldest_message_at ?? null,
+  } satisfies ServerQuotaStatus;
+}
+
+/**
+ * Apaga da mensagem mais antiga para a mais nova até o servidor caber na
+ * fatia. Mensagem fixada é preservada: alguém marcou aquilo como o que vale
+ * guardar.
+ *
+ * É irreversível — não há lixeira. Quem chama precisa ter confirmado.
+ */
+export async function pruneOnlineServerMessages(
+  serverId: string,
+  targetPercent = 70,
+) {
+  const { data, error } = await supabase.rpc("prune_server_messages", {
+    p_server_id: serverId,
+    p_target_percent: targetPercent,
+  });
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  return {
+    deletedCount: Number(row?.deleted_count ?? 0),
+    freedBytes: Number(row?.freed_bytes ?? 0),
+  };
+}

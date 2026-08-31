@@ -60,7 +60,10 @@ import {
 import { registerRemotePush } from "./services/online/push";
 import {
   getOnlineQuotaStatus,
+  getServerQuotaStatus,
+  pruneOnlineServerMessages,
   type OnlineQuotaStatus,
+  type ServerQuotaStatus,
 } from "./services/online/quota";
 import { supabase } from "./services/online/client";
 import {
@@ -7637,14 +7640,24 @@ function QuotaSettingsView({ serverId }: { serverId: string }) {
     ),
     currentUserId = useAppStore((state) => state.currentUserId);
   const [quota, setQuota] = useState<OnlineQuotaStatus | null>(null),
+    [serverQuota, setServerQuota] = useState<ServerQuotaStatus | null>(null),
     [error, setError] = useState(""),
+    [pruning, setPruning] = useState(false),
+    [pruneResult, setPruneResult] = useState(""),
     [loading, setLoading] = useState(false);
+  const confirm = useConfirm();
   const owner = server?.ownerId === currentUserId;
   const load = async () => {
     setLoading(true);
     setError("");
     try {
-      setQuota(await getOnlineQuotaStatus());
+      const [instance, ofServer] = await Promise.all([
+        getOnlineQuotaStatus(),
+        getServerQuotaStatus(serverId),
+      ]);
+      setQuota(instance);
+      setServerQuota(ofServer);
+      return;
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -7740,11 +7753,94 @@ function QuotaSettingsView({ serverId }: { serverId: string }) {
           </article>
         ))}
       </div>
+      {serverQuota && (
+        <div
+          className={`server-quota quota-${serverQuota.level.toLowerCase()}`}
+        >
+          <div className="editor-top">
+            <div>
+              <span className="eyebrow">FATIA DESTE SERVIDOR</span>
+              <h3>
+                {formatBytes(serverQuota.usedBytes)} de{" "}
+                {formatBytes(serverQuota.shareBytes)} ·{" "}
+                {serverQuota.percent.toFixed(1)}%
+              </h3>
+              <p>
+                A fatia é o teto da instância dividido pelo número de
+                servidores, então ela encolhe quando alguém cria um servidor
+                novo. São {serverQuota.messageCount.toLocaleString("pt-BR")}{" "}
+                mensagens
+                {serverQuota.oldestMessageAt
+                  ? `, a mais antiga de ${new Date(serverQuota.oldestMessageAt).toLocaleDateString("pt-BR")}`
+                  : ""}
+                .
+              </p>
+            </div>
+          </div>
+          <div
+            className="quota-progress"
+            role="progressbar"
+            aria-label="Uso deste servidor"
+            aria-valuenow={serverQuota.percent}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
+            <i style={{ width: `${Math.min(100, serverQuota.percent)}%` }} />
+          </div>
+          {serverQuota.level !== "OK" && (
+            <p className="quota-warning" role="alert">
+              {serverQuota.level === "CRITICAL"
+                ? "Este servidor passou de 95% da fatia dele. Libere espaço antes que envios comecem a ser recusados."
+                : "Este servidor está consumindo mais que o esperado. Vale liberar espaço."}
+            </p>
+          )}
+          <button
+            className="outline-button"
+            disabled={pruning || serverQuota.usedBytes === 0}
+            onClick={() =>
+              confirm.ask({
+                title: "Limpar mensagens antigas",
+                message:
+                  "As mensagens mais antigas deste servidor serão apagadas até ele voltar a 70% da fatia. Mensagens fixadas são preservadas, e o que sair não volta.",
+                confirmLabel: "Limpar",
+                danger: true,
+                onConfirm: () => {
+                  void (async () => {
+                    setPruning(true);
+                    setPruneResult("");
+                    try {
+                      const result = await pruneOnlineServerMessages(serverId);
+                      setPruneResult(
+                        result.deletedCount === 0
+                          ? "Nada a limpar: o servidor já cabe na fatia."
+                          : `${result.deletedCount.toLocaleString("pt-BR")} mensagens apagadas, ${formatBytes(result.freedBytes)} liberados.`,
+                      );
+                      await load();
+                    } catch (caught) {
+                      setError(
+                        caught instanceof Error
+                          ? caught.message
+                          : "Falha ao limpar as mensagens.",
+                      );
+                    } finally {
+                      setPruning(false);
+                    }
+                  })();
+                },
+              })
+            }
+          >
+            {pruning ? "Limpando…" : "Limpar mensagens antigas"}
+          </button>
+          {pruneResult && <p className="profile-notice">{pruneResult}</p>}
+        </div>
+      )}
       {quota && (
         <small className="quota-measured-at">
           Medido em {new Date(quota.measuredAt).toLocaleString("pt-BR")}
         </small>
       )}
+      {confirm.confirmDialog}
     </div>
   );
 }

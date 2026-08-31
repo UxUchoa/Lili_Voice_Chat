@@ -57,13 +57,47 @@ Deno.serve(
         return json({ error: "unauthorized" }, 401);
     }
 
+    // Arquivos que perderam a linha que apontava para eles. `message_attachments`
+    // cai por CASCADE quando a mensagem ou o canal somem, e só a API de Storage
+    // apaga o arquivo — então, sem isto, toda mensagem apagada deixava o anexo
+    // ocupando espaço para sempre. O gatilho `message_attachments_capture_orphan`
+    // registra o caminho antes de a linha sumir.
+    const { data: orphans } = await admin
+      .from("pending_storage_deletions")
+      .select("id, bucket, path")
+      .limit(BATCH);
+    let orphansRemoved = 0;
+    if (orphans?.length) {
+      const byBucket = new Map<string, string[]>();
+      for (const row of orphans)
+        byBucket.set(row.bucket, [
+          ...(byBucket.get(row.bucket) ?? []),
+          row.path,
+        ]);
+      for (const [bucket, paths] of byBucket) {
+        const { error } = await admin.storage.from(bucket).remove(paths);
+        // Um arquivo que já não existe não é motivo para manter a pendência: o
+        // efeito desejado já está valendo.
+        if (error && !/not found/i.test(error.message)) continue;
+      }
+      const { error: clearError } = await admin
+        .from("pending_storage_deletions")
+        .delete()
+        .in(
+          "id",
+          orphans.map((row) => row.id),
+        );
+      if (!clearError) orphansRemoved = orphans.length;
+    }
+
     const { data: expired, error: listError } = await admin
       .from("message_attachments")
       .select("id, storage_object")
       .lte("expires_at", new Date().toISOString())
       .limit(BATCH);
     if (listError) return json({ error: listError.message }, 500);
-    if (!expired || expired.length === 0) return json({ removed: 0 });
+    if (!expired || expired.length === 0)
+      return json({ removed: 0, orphansRemoved });
 
     const paths = expired.map((row) => row.storage_object as string);
     const { error: storageError } = await admin.storage
@@ -83,6 +117,6 @@ Deno.serve(
       );
     if (deleteError) return json({ error: deleteError.message }, 500);
 
-    return json({ removed: paths.length });
+    return json({ removed: paths.length, orphansRemoved });
   }),
 );
