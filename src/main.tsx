@@ -39,8 +39,8 @@ import {
   listOnlineAccountSessions,
   loginOnlineAccount,
   logoutOnlineAccount,
+  recoverOnlineAccountWithKey,
   registerOnlineAccount,
-  requestOnlinePasswordReset,
   revokeOnlineAccountSession,
   revokeOtherOnlineAccountSessions,
   updateOnlinePassword,
@@ -134,10 +134,7 @@ import {
 } from "./services/online/attachments";
 import { useConfirm } from "./ui/ConfirmModal";
 import { buildDirectMessageMenu } from "./ui/useDirectMessageMenu";
-import {
-  UserProfileModal,
-  type UserRelationship,
-} from "./ui/UserProfileModal";
+import { UserProfileModal, type UserRelationship } from "./ui/UserProfileModal";
 import { ServerPrivacyModal } from "./ui/ServerPrivacyModal";
 import {
   listUserContacts,
@@ -161,10 +158,7 @@ import {
 import { useCallSignaling } from "./hooks/useCallSignaling";
 import { IncomingCallOverlay, OutgoingCallOverlay } from "./ui/CallOverlays";
 import { ServerIcon } from "./ui/ServerIcon";
-import {
-  ChannelSetupModal,
-  type NewChannelKind,
-} from "./ui/ChannelSetupModal";
+import { ChannelSetupModal, type NewChannelKind } from "./ui/ChannelSetupModal";
 import { ChannelSettingsModal } from "./ui/ChannelSettingsModal";
 import {
   ServerProfileFields,
@@ -475,7 +469,9 @@ function ServerRail({
           }`}
           onClick={() => onServer(server.id)}
           aria-label={server.name}
-          aria-current={!home && selectedServerId === server.id ? "page" : undefined}
+          aria-current={
+            !home && selectedServerId === server.id ? "page" : undefined
+          }
           title={server.name}
         >
           <ServerIcon server={server} size={44} />
@@ -758,7 +754,9 @@ function NewDirectMessageModal({
       const term = query.trim().toLowerCase();
       return (
         !term ||
-        `${profile.displayName} ${profile.username}`.toLowerCase().includes(term)
+        `${profile.displayName} ${profile.username}`
+          .toLowerCase()
+          .includes(term)
       );
     })
     .sort((left, right) => left.displayName.localeCompare(right.displayName));
@@ -980,11 +978,11 @@ function DirectMessageSidebar({
   const blockedWith = (userId?: string) =>
     Boolean(
       userId &&
-        blocks.some(
-          (block) =>
-            [block.blockerId, block.blockedId].includes(currentUserId) &&
-            [block.blockerId, block.blockedId].includes(userId),
-        ),
+      blocks.some(
+        (block) =>
+          [block.blockerId, block.blockedId].includes(currentUserId) &&
+          [block.blockerId, block.blockedId].includes(userId),
+      ),
     );
   const openDirectMessageMenu = (event: ReactMouseEvent, channel: Channel) => {
     const peer = peerOf(channel);
@@ -1294,9 +1292,7 @@ function ChannelSidebar({
     (state) => state.setNotificationSetting,
   );
   const serverPrivacy = useAppStore((state) => state.serverPrivacy);
-  const permissionOverrides = useAppStore(
-    (state) => state.permissionOverrides,
-  );
+  const permissionOverrides = useAppStore((state) => state.permissionOverrides);
   const contextMenu = useContextMenu();
   const { ask, confirmDialog } = useConfirm();
   const [privacyOpen, setPrivacyOpen] = useState(false);
@@ -1355,8 +1351,8 @@ function ChannelSidebar({
     );
     return Boolean(
       setting &&
-        (setting.mode === "NONE" ||
-          (setting.mutedUntil && new Date(setting.mutedUntil) > new Date())),
+      (setting.mode === "NONE" ||
+        (setting.mutedUntil && new Date(setting.mutedUntil) > new Date())),
     );
   };
   // "Ocultar canais silenciados" nunca esconde o canal aberto — como no
@@ -1392,7 +1388,7 @@ function ChannelSidebar({
   );
   const serverMuted = Boolean(
     serverNotification?.mutedUntil &&
-      new Date(serverNotification.mutedUntil) > new Date(),
+    new Date(serverNotification.mutedUntil) > new Date(),
   );
   const saveServerNotification = (
     changes: Partial<Omit<NotificationSetting, "id" | "userId">>,
@@ -1412,7 +1408,9 @@ function ChannelSidebar({
         id: "mute-server",
         label: serverMuted ? "Dessilenciar servidor" : "Silenciar servidor",
         ...(serverMuted
-          ? { onSelect: () => saveServerNotification({ mutedUntil: undefined }) }
+          ? {
+              onSelect: () => saveServerNotification({ mutedUntil: undefined }),
+            }
           : {
               submenu: [
                 { label: "Por 15 minutos", minutes: 15 },
@@ -2595,8 +2593,8 @@ function ChatView({
     if (!request) return undefined;
     return {
       requestId: request.id,
-      requesterName:
-        profiles.find((item) => item.id === request.requesterId)?.displayName,
+      requesterName: profiles.find((item) => item.id === request.requesterId)
+        ?.displayName,
       mine: request.requesterId === currentUserId,
     };
   };
@@ -2802,7 +2800,10 @@ function ChatView({
         <aside className="pins-panel">
           <div>
             <b>Mensagens fixadas</b>
-            <button aria-label="Fechar fixadas" onClick={() => setPinsOpen(false)}>
+            <button
+              aria-label="Fechar fixadas"
+              onClick={() => setPinsOpen(false)}
+            >
               <IconX size={18} />
             </button>
           </div>
@@ -3511,7 +3512,9 @@ function CallView({
         .forEach((track) => localStreamRef.current?.addTrack(track));
       setMediaRevision((revision) => revision + 1);
       const videoSettings =
-        kind === "video" ? requestedStream.getVideoTracks()[0]?.getSettings() : undefined;
+        kind === "video"
+          ? requestedStream.getVideoTracks()[0]?.getSettings()
+          : undefined;
       setMediaNotice(
         kind === "audio"
           ? "Microfone conectado."
@@ -3575,7 +3578,9 @@ function CallView({
       // Sinaliza o mute pela publicação LiveKit para o outro lado exibir o
       // indicador correto (track.enabled sozinho não gera evento remoto).
       void setLocalTrackMuted("mic", nextMuted).catch(() => {});
-      setMediaNotice(nextMuted ? "Microfone silenciado." : "Microfone ativado.");
+      setMediaNotice(
+        nextMuted ? "Microfone silenciado." : "Microfone ativado.",
+      );
       if (!nextMuted && deafened) setDeafened(false);
       return;
     }
@@ -3798,8 +3803,7 @@ function CallView({
   }, [mediaRevision, publishStreams, sharing]);
   useEffect(() => {
     if (!focused) return;
-    const localScreenFocused =
-      focused === `${currentUserId}:screen` && sharing;
+    const localScreenFocused = focused === `${currentUserId}:screen` && sharing;
     const localCameraFocused = focused === currentUserId;
     const remoteStreamFocused = remotePeers.some(
       (peer) =>
@@ -3902,8 +3906,7 @@ function CallView({
     },
     [],
   );
-  const localSpeaking =
-    !micMuted && speakingIds.includes(currentUserId ?? "");
+  const localSpeaking = !micMuted && speakingIds.includes(currentUserId ?? "");
   interface CallTile {
     id: string;
     type: "camera" | "screen";
@@ -4142,10 +4145,10 @@ function CallView({
               ? "Falha na conexão da chamada"
               : "Chamada conectada com falha"
             : connectionState === "connected"
-            ? `LiveKit conectado · E2EE epoch ${e2eeEpoch ?? "—"}`
-            : connectionState === "error"
-              ? "Falha na conexão da chamada"
-              : "Conectando LiveKit · E2EE OpenMLS"}{" "}
+              ? `LiveKit conectado · E2EE epoch ${e2eeEpoch ?? "—"}`
+              : connectionState === "error"
+                ? "Falha na conexão da chamada"
+                : "Conectando LiveKit · E2EE OpenMLS"}{" "}
           <button
             aria-label="Detalhes de privacidade da chamada"
             aria-expanded={privacyOpen}
@@ -4446,50 +4449,60 @@ function CallView({
                 footer={
                   <>
                     <div className="device-menu-group">
-                  <span className="device-menu-label">RESOLUÇÃO</span>
-                  {([720, 1080, 1440] as const).map((resolution) => (
-                    <button
-                      key={resolution}
-                      role="menuitemradio"
-                      aria-checked={shareQuality.resolution === resolution}
-                      className={
-                        shareQuality.resolution === resolution ? "selected" : ""
-                      }
-                      onClick={() =>
-                        setShareQuality((current) => ({ ...current, resolution }))
-                      }
-                    >
-                      <span className="device-check">
-                        {shareQuality.resolution === resolution && (
-                          <IconCheck size={15} />
-                        )}
-                      </span>
-                      <span>{resolution}p</span>
-                    </button>
-                  ))}
-                </div>
-                <div className="device-menu-group">
-                  <span className="device-menu-label">TAXA DE QUADROS</span>
-                  {([15, 30, 60] as const).map((frameRate) => (
-                    <button
-                      key={frameRate}
-                      role="menuitemradio"
-                      aria-checked={shareQuality.frameRate === frameRate}
-                      className={
-                        shareQuality.frameRate === frameRate ? "selected" : ""
-                      }
-                      onClick={() =>
-                        setShareQuality((current) => ({ ...current, frameRate }))
-                      }
-                    >
-                      <span className="device-check">
-                        {shareQuality.frameRate === frameRate && (
-                          <IconCheck size={15} />
-                        )}
-                      </span>
-                      <span>{frameRate} fps</span>
-                    </button>
-                  ))}
+                      <span className="device-menu-label">RESOLUÇÃO</span>
+                      {([720, 1080, 1440] as const).map((resolution) => (
+                        <button
+                          key={resolution}
+                          role="menuitemradio"
+                          aria-checked={shareQuality.resolution === resolution}
+                          className={
+                            shareQuality.resolution === resolution
+                              ? "selected"
+                              : ""
+                          }
+                          onClick={() =>
+                            setShareQuality((current) => ({
+                              ...current,
+                              resolution,
+                            }))
+                          }
+                        >
+                          <span className="device-check">
+                            {shareQuality.resolution === resolution && (
+                              <IconCheck size={15} />
+                            )}
+                          </span>
+                          <span>{resolution}p</span>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="device-menu-group">
+                      <span className="device-menu-label">TAXA DE QUADROS</span>
+                      {([15, 30, 60] as const).map((frameRate) => (
+                        <button
+                          key={frameRate}
+                          role="menuitemradio"
+                          aria-checked={shareQuality.frameRate === frameRate}
+                          className={
+                            shareQuality.frameRate === frameRate
+                              ? "selected"
+                              : ""
+                          }
+                          onClick={() =>
+                            setShareQuality((current) => ({
+                              ...current,
+                              frameRate,
+                            }))
+                          }
+                        >
+                          <span className="device-check">
+                            {shareQuality.frameRate === frameRate && (
+                              <IconCheck size={15} />
+                            )}
+                          </span>
+                          <span>{frameRate} fps</span>
+                        </button>
+                      ))}
                     </div>
                   </>
                 }
@@ -5534,14 +5547,14 @@ function describeRoleFailure(reason: unknown) {
     typeof reason === "string"
       ? reason
       : reason && typeof reason === "object"
-        ? [
+        ? ([
             (reason as { message?: unknown }).message,
             (reason as { details?: unknown }).details,
             (reason as { hint?: unknown }).hint,
           ].find(
             (field): field is string =>
               typeof field === "string" && field.trim() !== "",
-          ) ?? ""
+          ) ?? "")
         : "";
   if (raw.includes("cannot grant unowned permissions"))
     return "Você não pode conceder uma permissão que não possui.";
@@ -5549,8 +5562,7 @@ function describeRoleFailure(reason: unknown) {
     return "Você não tem permissão para editar este cargo.";
   if (raw.includes("role icon is too long"))
     return "O ícone do cargo é longo demais.";
-  if (raw.includes("invalid role name"))
-    return "Escolha um nome para o cargo.";
+  if (raw.includes("invalid role name")) return "Escolha um nome para o cargo.";
   return raw || "Não foi possível salvar o cargo.";
 }
 
@@ -6617,37 +6629,37 @@ function ServerGeneralSettings({
       {canManageServer && (
         <div className="settings-action-bar">
           <div className="settings-action-bar-inner">
-          <span
-            className={`action-bar-hint ${profileNotice ? "success" : ""}`}
-            role="status"
-          >
-            {profileNotice ||
-              (profileChanged
-                ? "Você tem alterações não salvas no perfil."
-                : "")}
-          </span>
-          <button
-            className="outline-button"
-            disabled={savingProfile || !profileChanged}
-            onClick={() =>
-              setDraft(
-                emptyServerProfileDraft({
-                  name: server.name,
-                  description: server.description,
-                  iconPreview: server.iconUrl ?? "",
-                }),
-              )
-            }
-          >
-            Descartar
-          </button>
-          <button
-            className="primary-button"
-            disabled={savingProfile || !profileChanged || !draft.name.trim()}
-            onClick={() => void saveProfile()}
-          >
-            {savingProfile ? "Salvando…" : "Salvar perfil"}
-          </button>
+            <span
+              className={`action-bar-hint ${profileNotice ? "success" : ""}`}
+              role="status"
+            >
+              {profileNotice ||
+                (profileChanged
+                  ? "Você tem alterações não salvas no perfil."
+                  : "")}
+            </span>
+            <button
+              className="outline-button"
+              disabled={savingProfile || !profileChanged}
+              onClick={() =>
+                setDraft(
+                  emptyServerProfileDraft({
+                    name: server.name,
+                    description: server.description,
+                    iconPreview: server.iconUrl ?? "",
+                  }),
+                )
+              }
+            >
+              Descartar
+            </button>
+            <button
+              className="primary-button"
+              disabled={savingProfile || !profileChanged || !draft.name.trim()}
+              onClick={() => void saveProfile()}
+            >
+              {savingProfile ? "Salvando…" : "Salvar perfil"}
+            </button>
           </div>
         </div>
       )}
@@ -6712,7 +6724,10 @@ function ChannelManagementSettings({ serverId }: { serverId: string }) {
           >
             Criar categoria
           </button>
-          <button className="primary-button" onClick={() => setSetupKind("text")}>
+          <button
+            className="primary-button"
+            onClick={() => setSetupKind("text")}
+          >
             Criar canal
           </button>
         </div>
@@ -7039,8 +7054,7 @@ function MembersSettingsView({ serverId }: { serverId: string }) {
       roles,
       members,
     ),
-    can = (permission: bigint) =>
-      hasPermission(currentPermissions, permission),
+    can = (permission: bigint) => hasPermission(currentPermissions, permission),
     canManageRoles = can(Permissions.MANAGE_ROLES),
     canManageNicknames = can(Permissions.MANAGE_NICKNAMES),
     canChangeNickname = can(Permissions.CHANGE_NICKNAME),
@@ -7050,8 +7064,7 @@ function MembersSettingsView({ serverId }: { serverId: string }) {
     canTimeoutMembers = can(Permissions.TIMEOUT_MEMBERS),
     canKickMembers = can(Permissions.KICK_MEMBERS),
     canBanMembers = can(Permissions.BAN_MEMBERS),
-    canModerateVoice =
-      canMuteMembers || canDeafenMembers || canMoveMembers;
+    canModerateVoice = canMuteMembers || canDeafenMembers || canMoveMembers;
   const voiceChannels = channels.filter(
     (channel) => channel.serverId === serverId && channel.kind === "voice",
   );
@@ -7208,142 +7221,146 @@ function MembersSettingsView({ serverId }: { serverId: string }) {
               )}
             </div>
             <div className="member-admin-actions">
-            {canManageRoles && (
-              <select
-                className="admin-role-select"
-                value=""
-                aria-label={`Adicionar cargo a ${profile.displayName}`}
-                onChange={(event) => {
-                  if (event.target.value)
-                    void setMemberRole(member.userId, event.target.value, true);
-                }}
-              >
-                <option value="">+ Cargo</option>
-                {serverRoles
-                  .filter(
-                    (role) =>
-                      !role.isDefault && !member.roleIds.includes(role.id),
-                  )
-                  .map((role) => (
-                    <option value={role.id} key={role.id}>
-                      {role.name}
-                    </option>
-                  ))}
-              </select>
-            )}
-            {(canManageNicknames || (self && canChangeNickname)) && (
-              <button
-                className="outline-button"
-                onClick={() =>
-                  void updateNickname(member.userId, member.nickname)
-                }
-              >
-                Nickname
-              </button>
-            )}
-            {canMuteMembers && (
-              <button
-                className="outline-button"
-                disabled={self || !voiceChannelId}
-                onClick={() =>
-                  void moderateVoice(
-                    member.userId,
-                    member.serverMuted ? "unmute" : "mute",
-                  )
-                }
-              >
-                {member.serverMuted ? "Desmutar" : "Mutar voz"}
-              </button>
-            )}
-            {canDeafenMembers && (
-              <button
-                className="outline-button"
-                disabled={self || !voiceChannelId}
-                onClick={() =>
-                  void moderateVoice(
-                    member.userId,
-                    member.serverDeafened ? "undeafen" : "deafen",
-                  )
-                }
-              >
-                {member.serverDeafened ? "Ouvir" : "Ensurdecer"}
-              </button>
-            )}
-            {canMoveMembers && (
-              <>
+              {canManageRoles && (
                 <select
                   className="admin-role-select"
                   value=""
-                  disabled={self || !voiceChannelId}
-                  aria-label={`Mover ${profile.displayName} para outro canal de voz`}
+                  aria-label={`Adicionar cargo a ${profile.displayName}`}
                   onChange={(event) => {
                     if (event.target.value)
-                      void moderateVoice(
+                      void setMemberRole(
                         member.userId,
-                        "move",
                         event.target.value,
+                        true,
                       );
                   }}
                 >
-                  <option value="">Mover para…</option>
-                  {voiceChannels
-                    .filter((channel) => channel.id !== voiceChannelId)
-                    .map((channel) => (
-                      <option key={channel.id} value={channel.id}>
-                        {channel.name}
+                  <option value="">+ Cargo</option>
+                  {serverRoles
+                    .filter(
+                      (role) =>
+                        !role.isDefault && !member.roleIds.includes(role.id),
+                    )
+                    .map((role) => (
+                      <option value={role.id} key={role.id}>
+                        {role.name}
                       </option>
                     ))}
                 </select>
+              )}
+              {(canManageNicknames || (self && canChangeNickname)) && (
+                <button
+                  className="outline-button"
+                  onClick={() =>
+                    void updateNickname(member.userId, member.nickname)
+                  }
+                >
+                  Nickname
+                </button>
+              )}
+              {canMuteMembers && (
                 <button
                   className="outline-button"
                   disabled={self || !voiceChannelId}
                   onClick={() =>
-                    void moderateVoice(member.userId, "disconnect")
+                    void moderateVoice(
+                      member.userId,
+                      member.serverMuted ? "unmute" : "mute",
+                    )
                   }
                 >
-                  Desconectar voz
+                  {member.serverMuted ? "Desmutar" : "Mutar voz"}
                 </button>
-              </>
-            )}
-            {canTimeoutMembers && (
-              <button
-                className="outline-button"
-                disabled={self}
-                onClick={() => {
-                  const reason =
-                    window.prompt("Motivo do timeout") ?? undefined;
-                  void moderate(member.userId, "timeout", reason);
-                }}
-              >
-                Timeout
-              </button>
-            )}
-            {canKickMembers && (
-              <button
-                className="outline-button"
-                disabled={self}
-                onClick={() => {
-                  const reason =
-                    window.prompt("Motivo da remoção") ?? undefined;
-                  void moderate(member.userId, "kick", reason);
-                }}
-              >
-                Kick
-              </button>
-            )}
-            {canBanMembers && (
-              <button
-                className="outline-button danger-text"
-                disabled={self}
-                onClick={() => {
-                  const reason =
-                    window.prompt("Motivo do banimento") ?? undefined;
-                  void moderate(member.userId, "ban", reason);
-                }}
-              >
-                Ban
-              </button>
-            )}
+              )}
+              {canDeafenMembers && (
+                <button
+                  className="outline-button"
+                  disabled={self || !voiceChannelId}
+                  onClick={() =>
+                    void moderateVoice(
+                      member.userId,
+                      member.serverDeafened ? "undeafen" : "deafen",
+                    )
+                  }
+                >
+                  {member.serverDeafened ? "Ouvir" : "Ensurdecer"}
+                </button>
+              )}
+              {canMoveMembers && (
+                <>
+                  <select
+                    className="admin-role-select"
+                    value=""
+                    disabled={self || !voiceChannelId}
+                    aria-label={`Mover ${profile.displayName} para outro canal de voz`}
+                    onChange={(event) => {
+                      if (event.target.value)
+                        void moderateVoice(
+                          member.userId,
+                          "move",
+                          event.target.value,
+                        );
+                    }}
+                  >
+                    <option value="">Mover para…</option>
+                    {voiceChannels
+                      .filter((channel) => channel.id !== voiceChannelId)
+                      .map((channel) => (
+                        <option key={channel.id} value={channel.id}>
+                          {channel.name}
+                        </option>
+                      ))}
+                  </select>
+                  <button
+                    className="outline-button"
+                    disabled={self || !voiceChannelId}
+                    onClick={() =>
+                      void moderateVoice(member.userId, "disconnect")
+                    }
+                  >
+                    Desconectar voz
+                  </button>
+                </>
+              )}
+              {canTimeoutMembers && (
+                <button
+                  className="outline-button"
+                  disabled={self}
+                  onClick={() => {
+                    const reason =
+                      window.prompt("Motivo do timeout") ?? undefined;
+                    void moderate(member.userId, "timeout", reason);
+                  }}
+                >
+                  Timeout
+                </button>
+              )}
+              {canKickMembers && (
+                <button
+                  className="outline-button"
+                  disabled={self}
+                  onClick={() => {
+                    const reason =
+                      window.prompt("Motivo da remoção") ?? undefined;
+                    void moderate(member.userId, "kick", reason);
+                  }}
+                >
+                  Kick
+                </button>
+              )}
+              {canBanMembers && (
+                <button
+                  className="outline-button danger-text"
+                  disabled={self}
+                  onClick={() => {
+                    const reason =
+                      window.prompt("Motivo do banimento") ?? undefined;
+                    void moderate(member.userId, "ban", reason);
+                  }}
+                >
+                  Ban
+                </button>
+              )}
             </div>
           </div>
         );
@@ -7921,11 +7938,9 @@ function ProfilePanel({
     setMediaBusy(true);
     try {
       const extension = blob.type === "image/png" ? "png" : "jpg";
-      const upload = new File(
-        [blob],
-        `${cropTarget.kind}.${extension}`,
-        { type: blob.type },
-      );
+      const upload = new File([blob], `${cropTarget.kind}.${extension}`, {
+        type: blob.type,
+      });
       await uploadOnlineProfileMedia(currentUserId, cropTarget.kind, upload);
       await hydrateOnlineWorkspace(currentUserId);
       setCropTarget(null);
@@ -8567,7 +8582,8 @@ function UserProfilePreview({
         block:
           relationship === "blocked"
             ? undefined
-            : () => void run(() => blockOnlineUser(currentUserId, userId), true),
+            : () =>
+                void run(() => blockOnlineUser(currentUserId, userId), true),
         unblock:
           relationship === "blocked"
             ? () => void run(() => unblockOnlineUser(currentUserId, userId))
@@ -8832,8 +8848,10 @@ function App({
   );
   useEffect(
     () =>
-      subscribeActiveOnlineVoiceMembers(account.profileId, setVoiceMembers, () =>
-        undefined,
+      subscribeActiveOnlineVoiceMembers(
+        account.profileId,
+        setVoiceMembers,
+        () => undefined,
       ),
     [account.profileId],
   );
@@ -8923,8 +8941,7 @@ function App({
     serverChannels.find((channel) => channel.id === navServerChannelId) ??
     serverChannels[0];
   const activeDmChannel = channels.find(
-    (channel) =>
-      channel.id === navDmChannelId && channel.serverId === "direct",
+    (channel) => channel.id === navDmChannelId && channel.serverId === "direct",
   );
   const activeChannel =
     view === "server" ? activeServerChannel : activeDmChannel;
@@ -8935,17 +8952,17 @@ function App({
   const directCallBlocked = (channel?: Channel) =>
     Boolean(
       channel?.kind === "dm" &&
-        channelMembers
-          .filter((member) => member.channelId === channel.id)
-          .some(
-            (member) =>
-              member.userId !== currentUserId &&
-              blocks.some(
-                (block) =>
-                  [block.blockerId, block.blockedId].includes(currentUserId) &&
-                  [block.blockerId, block.blockedId].includes(member.userId),
-              ),
-          ),
+      channelMembers
+        .filter((member) => member.channelId === channel.id)
+        .some(
+          (member) =>
+            member.userId !== currentUserId &&
+            blocks.some(
+              (block) =>
+                [block.blockerId, block.blockedId].includes(currentUserId) &&
+                [block.blockerId, block.blockedId].includes(member.userId),
+            ),
+        ),
     );
 
   const signaling = useCallSignaling(currentUserId, {
@@ -9004,7 +9021,9 @@ function App({
           state.section !== parsed.section ||
           state.dmChannelId
         )
-          state.openHome(parsed.section === "requests" ? "requests" : "friends");
+          state.openHome(
+            parsed.section === "requests" ? "requests" : "friends",
+          );
         return;
       }
       if (
@@ -9056,10 +9075,7 @@ function App({
       openHome();
       return;
     }
-    if (
-      activeServerChannel &&
-      activeServerChannel.id !== navServerChannelId
-    )
+    if (activeServerChannel && activeServerChannel.id !== navServerChannelId)
       openServerChannel(navServerId, activeServerChannel.id);
   }, [
     activeServerChannel,
@@ -9368,10 +9384,7 @@ function App({
           />
         )}
         {membersVisible && view === "server" && activeChannel && (
-          <MemberSidebar
-            serverId={navServerId}
-            onChannel={selectChannel}
-          />
+          <MemberSidebar serverId={navServerId} onChannel={selectChannel} />
         )}
       </div>
       {signaling.incoming && incomingCaller && (
@@ -9454,6 +9467,101 @@ function App({
   );
 }
 
+/**
+ * A chave aparece uma vez só, e o botão de seguir em frente fica travado até a
+ * pessoa dizer que guardou. É atrito de propósito: sem a chave a conta não tem
+ * caminho de volta, e o único momento em que dá para avisar é este.
+ */
+function RecoveryKeyCard({
+  recoveryKey,
+  reason,
+  onContinue,
+}: {
+  recoveryKey: string;
+  reason: "register" | "recover";
+  onContinue: () => void;
+}) {
+  const [acknowledged, setAcknowledged] = useState(false),
+    [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(recoveryKey);
+      setCopied(true);
+    } catch {
+      // Área de transferência negada pelo navegador: a chave está na tela e
+      // pode ser copiada à mão, então não vale interromper o cadastro por isso.
+      setCopied(false);
+    }
+  };
+
+  return (
+    <main className="auth-screen">
+      <section className="recovery-card">
+        <h2>
+          {reason === "register"
+            ? "Guarde sua chave de recuperação"
+            : "Senha trocada — guarde a chave nova"}
+        </h2>
+        <p>
+          {reason === "register"
+            ? "É com ela que você recupera o acesso se esquecer a senha. Não há e-mail de recuperação: sem esta chave, a conta é perdida."
+            : "A chave anterior deixou de valer e todas as sessões foram encerradas. Entre de novo com a senha que você acabou de definir."}
+        </p>
+        <code>{recoveryKey}</code>
+        <div className="recovery-actions">
+          <button onClick={() => void copy()}>
+            {copied ? "Copiada" : "Copiar"}
+          </button>
+          <button
+            onClick={() => {
+              const file = new Blob(
+                [
+                  [
+                    "Chave de recuperacao do Janja",
+                    "",
+                    recoveryKey,
+                    "",
+                    "Quem tem esta chave troca a senha da conta.",
+                    "Guarde offline, fora do computador onde voce usa o app.",
+                  ].join("\n"),
+                ],
+                { type: "text/plain" },
+              );
+              const url = URL.createObjectURL(file);
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = "janja-chave-de-recuperacao.txt";
+              link.click();
+              URL.revokeObjectURL(url);
+            }}
+          >
+            Baixar
+          </button>
+        </div>
+        <label className="recovery-ack">
+          <input
+            type="checkbox"
+            checked={acknowledged}
+            onChange={(event) => setAcknowledged(event.target.checked)}
+          />
+          <span>
+            Guardei a chave em lugar seguro e entendi que ela não pode ser
+            recuperada.
+          </span>
+        </label>
+        <button
+          className="primary-button"
+          disabled={!acknowledged}
+          onClick={onContinue}
+        >
+          {reason === "register" ? "Entrar" : "Voltar ao login"}
+        </button>
+      </section>
+    </main>
+  );
+}
+
 function OnlineAuthGate() {
   const [account, setAccount] = useState<OnlineAccount | null>(null),
     [loading, setLoading] = useState(true),
@@ -9462,6 +9570,13 @@ function OnlineAuthGate() {
     [displayName, setDisplayName] = useState(""),
     [username, setUsername] = useState(""),
     [password, setPassword] = useState(""),
+    [recoveryKeyInput, setRecoveryKeyInput] = useState(""),
+    // Chave a ser mostrada uma única vez, com a conta que espera o "guardei".
+    [issuedKey, setIssuedKey] = useState<{
+      key: string;
+      reason: "register" | "recover";
+      account: OnlineAccount | null;
+    } | null>(null),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false);
@@ -9507,19 +9622,26 @@ function OnlineAuthGate() {
     setNotice("");
     try {
       if (mode === "recover") {
-        await requestOnlinePasswordReset(email);
-        setNotice("Enviamos um link seguro para redefinir sua senha.");
+        const nextKey = await recoverOnlineAccountWithKey({
+          email,
+          recoveryKey: recoveryKeyInput,
+          newPassword: password,
+        });
+        setRecoveryKeyInput("");
+        setPassword("");
+        setIssuedKey({ key: nextKey, reason: "recover", account: null });
+      } else if (mode === "register") {
+        const { account: next, recoveryKey } = await registerOnlineAccount({
+          email,
+          username,
+          displayName: displayName || username,
+          password,
+        });
+        // A conta fica em espera: entrar antes de a pessoa guardar a chave é
+        // a forma mais fácil de ela nunca guardar.
+        setIssuedKey({ key: recoveryKey, reason: "register", account: next });
       } else {
-        const next =
-          mode === "register"
-            ? await registerOnlineAccount({
-                email,
-                username,
-                displayName: displayName || username,
-                password,
-              })
-            : await loginOnlineAccount(email, password);
-        await activate(next);
+        await activate(await loginOnlineAccount(email, password));
       }
     } catch (caught) {
       setError(
@@ -9547,6 +9669,22 @@ function OnlineAuthGate() {
       </div>
     );
   if (account) return <App account={account} onLogout={() => void logout()} />;
+  if (issuedKey)
+    return (
+      <RecoveryKeyCard
+        recoveryKey={issuedKey.key}
+        reason={issuedKey.reason}
+        onContinue={() => {
+          const pending = issuedKey.account;
+          setIssuedKey(null);
+          if (pending) void activate(pending);
+          else {
+            setMode("login");
+            setNotice("Entre com a senha nova.");
+          }
+        }}
+      />
+    );
   return (
     <main className="auth-screen">
       <section className="auth-card">
@@ -9560,8 +9698,9 @@ function OnlineAuthGate() {
               : "Entrar"}
         </h1>
         <p>
-          Conta protegida pelo Supabase Auth; o conteúdo das mensagens permanece
-          cifrado no servidor.
+          {mode === "recover"
+            ? "Informe o e-mail da conta e a chave de recuperação que você guardou no cadastro. Não há link por e-mail: a chave é a única prova aceita."
+            : "Conta protegida pelo Supabase Auth; o conteúdo das mensagens permanece cifrado no servidor."}
         </p>
         {mode === "register" && (
           <>
@@ -9592,17 +9731,28 @@ function OnlineAuthGate() {
             autoCapitalize="none"
           />
         </label>
-        {mode !== "recover" && (
+        {mode === "recover" && (
           <label>
-            Senha
+            Chave de recuperação
             <input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              onKeyDown={(event) => event.key === "Enter" && void submit()}
+              value={recoveryKeyInput}
+              onChange={(event) => setRecoveryKeyInput(event.target.value)}
+              placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX"
+              autoCapitalize="characters"
+              autoComplete="off"
+              spellCheck={false}
             />
           </label>
         )}
+        <label>
+          {mode === "recover" ? "Senha nova" : "Senha"}
+          <input
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            onKeyDown={(event) => event.key === "Enter" && void submit()}
+          />
+        </label>
         {error && (
           <div className="auth-error" role="alert">
             {error}
@@ -9623,7 +9773,7 @@ function OnlineAuthGate() {
             : mode === "register"
               ? "Criar conta"
               : mode === "recover"
-                ? "Enviar link"
+                ? "Trocar a senha"
                 : "Entrar"}
         </button>
         <div className="auth-links">
@@ -9641,7 +9791,7 @@ function OnlineAuthGate() {
               setError("");
             }}
           >
-            {mode === "recover" ? "Voltar ao login" : "Esqueci a senha"}
+            {mode === "recover" ? "Voltar ao login" : "Perdi a senha"}
           </button>
         </div>
       </section>

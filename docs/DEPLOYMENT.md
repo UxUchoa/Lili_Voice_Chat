@@ -40,18 +40,18 @@ de `git push -u origin main`.
 Confira antes do primeiro push que nada de `.env` com valor real entrou:
 `git ls-files | Select-String "\.env"` deve devolver só os dois `.env.example`.
 
-Em **Settings → Secrets and variables → Actions**, aba *Variables*:
+Em **Settings → Secrets and variables → Actions**, aba _Variables_:
 
-| Variável | Exemplo |
-| --- | --- |
-| `VITE_SUPABASE_URL` | `https://abcd.supabase.co` |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_…` |
-| `VITE_LIVEKIT_URL` | `wss://<projeto>.livekit.cloud` |
-| `VITE_FORCE_TURN` | `false` |
-| `VITE_VAPID_PUBLIC_KEY` | chave pública VAPID |
-| `VITE_TENOR_API_KEY` | opcional, só para o seletor de GIFs |
+| Variável                        | Exemplo                             |
+| ------------------------------- | ----------------------------------- |
+| `VITE_SUPABASE_URL`             | `https://abcd.supabase.co`          |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_…`                  |
+| `VITE_LIVEKIT_URL`              | `wss://<projeto>.livekit.cloud`     |
+| `VITE_FORCE_TURN`               | `false`                             |
+| `VITE_VAPID_PUBLIC_KEY`         | chave pública VAPID                 |
+| `VITE_TENOR_API_KEY`            | opcional, só para o seletor de GIFs |
 
-Na aba *Secrets*: `CSC_LINK` e `CSC_KEY_PASSWORD` (seção 5).
+Na aba _Secrets_: `CSC_LINK` e `CSC_KEY_PASSWORD` (seção 5).
 
 `vendor/openmls` não é versionado — são 19 MB de terceiro mais um `target/` que
 passa de 1 GB. Quem precisar recompilar o wrapper WASM roda
@@ -81,6 +81,7 @@ VAPID_PUBLIC_KEY=…
 VAPID_PRIVATE_KEY=…
 PUSH_DISPATCH_SECRET=…
 ATTACHMENTS_EXPIRE_SECRET=…
+ACCOUNTS_PRUNE_SECRET=…
 ALLOWED_ORIGIN=https://SEU_DOMINIO,https://*.vercel.app,null
 ```
 
@@ -102,7 +103,10 @@ Depois, no **SQL Editor** do painel (o CLI não faz):
 2. `supabase/snippets/schedule_attachments_expire.sql` — apaga os anexos
    vencidos a cada cinco minutos. Sem isto o arquivo de 24 h só some quando
    alguém abre o aplicativo, e a promessa deixa de valer para conversa parada.
-3. Limites reais da quota mostrada no painel do usuário (em bytes):
+3. `supabase/snippets/schedule_accounts_prune.sql` — uma vez por dia,
+   transforma em lápide a conta parada há 90 dias. Antes de deixar rodar,
+   confira quem seria atingido: `select * from public.list_inactive_accounts(90);`
+4. Limites reais da quota mostrada no painel do usuário (em bytes):
 
    ```sql
    update public.instance_quota_config
@@ -117,6 +121,11 @@ E no painel:
 - **Authentication → URL Configuration**: Site URL com o domínio de produção;
   Redirect URLs com o domínio, as pré-visualizações e `janja://auth/callback`
   para o desktop.
+- **Authentication → Providers → Email**: desligue _Confirm email_. A conta não
+  depende mais de e-mail para nada — a recuperação é por chave, e o SMTP
+  embutido do Supabase entrega poucas mensagens por hora e não serve para
+  produção. Com a confirmação ligada, quem se cadastra fica esperando um e-mail
+  que provavelmente não chega.
 - **Settings → Storage**: limite de upload em **101 MiB**. O bucket
   `attachments` aceita 104861696 bytes (100 MiB + a folga de 4 KB da tag do
   AES-GCM); um teto global menor recusa o upload antes de a política ser
@@ -136,13 +145,13 @@ Rode `npm run test:db` localmente antes de qualquer `db push`.
 
 ### LiveKit Cloud (caminho escolhido)
 
-Em <https://cloud.livekit.io> crie um projeto e anote, em *Settings → Keys*:
+Em <https://cloud.livekit.io> crie um projeto e anote, em _Settings → Keys_:
 
-| Valor | Onde vai |
-| --- | --- |
+| Valor                               | Onde vai                                                                                      |
+| ----------------------------------- | --------------------------------------------------------------------------------------------- |
 | URL `wss://<projeto>.livekit.cloud` | `VITE_LIVEKIT_URL` (Vercel + GitHub Variables) **e** `LIVEKIT_URL` (segredo da Edge Function) |
-| API Key | `LIVEKIT_API_KEY` (só no segredo da função) |
-| API Secret | `LIVEKIT_API_SECRET` (só no segredo da função) |
+| API Key                             | `LIVEKIT_API_KEY` (só no segredo da função)                                                   |
+| API Secret                          | `LIVEKIT_API_SECRET` (só no segredo da função)                                                |
 
 A URL é pública — ela vai para o bundle de qualquer jeito. **Key e secret não**:
 quem os tem emite token para qualquer sala. Eles vivem apenas nos segredos das
@@ -189,8 +198,8 @@ O resultado precisa informar `participants: 2`, `e2ee: true` e
 define tudo — framework, `npm run build:web`, saída em `dist/`, reescrita de
 SPA e cabeçalhos. Não sobrescreva pelo painel.
 
-Em **Settings → Environment Variables**, para *Production*, *Preview* e
-*Development*:
+Em **Settings → Environment Variables**, para _Production_, _Preview_ e
+_Development_:
 
 ```text
 VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
@@ -228,6 +237,31 @@ borda e o login por link não volta para o site.
 HTTPS não é opcional: Web Push e as APIs de mídia só existem em origem segura
 fora de `localhost`.
 
+## 3b. Recuperação de conta e expurgo
+
+Não existe link por e-mail. No cadastro o usuário recebe uma **chave única** de
+32 caracteres, mostrada uma vez, e o botão de entrar só destrava depois que ele
+confirma ter guardado. Quem tem a chave troca a senha; quem a perde perde a
+conta — e isso é dito na tela, não escondido.
+
+O servidor guarda apenas o SHA-256 da chave normalizada: são 160 bits de
+entropia, então não há dicionário a atacar, e o cadastro nunca transmite a
+chave em si. Cada recuperação bem-sucedida derruba todas as sessões vivas e
+emite uma chave nova; a anterior morre na mesma operação. Cinco tentativas
+erradas travam a conta por quinze minutos, e chave errada, conta inexistente e
+conta já expurgada respondem exatamente a mesma coisa, para que ninguém
+descubra quem tem conta perguntando.
+
+Conta sem login por 90 dias vira **lápide**: login, senha, sessões,
+dispositivos, chaves e a chave de recuperação são destruídos e a identidade é
+anonimizada, mas mensagens, canais e servidores permanecem. Um servidor cujo
+dono sumiu passa para o administrador mais antigo; sem ninguém, é apagado.
+Apagar a linha do perfil era impossível de qualquer forma — `messages.author_id`
+e `servers.owner_id` são NO ACTION de propósito, para que a conversa de trinta
+pessoas não evapore porque quem criou o servidor sumiu por três meses.
+
+Ajuste o prazo com `ACCOUNTS_PRUNE_DAYS` nos segredos das funções.
+
 ## 4. Push remoto
 
 Cadastre uma assinatura num navegador real, mande uma mensagem de outra conta e
@@ -252,7 +286,7 @@ Secrets**:
 - `CSC_LINK`: PFX em base64/data URL ou URL segura aceita pelo electron-builder;
 - `CSC_KEY_PASSWORD`: senha do certificado.
 
-As *Variables* `VITE_*` da seção 0 alimentam o mesmo validador da Vercel: o
+As _Variables_ `VITE_*` da seção 0 alimentam o mesmo validador da Vercel: o
 workflow para antes de empacotar se a configuração pública estiver ausente,
 apontando para `127.0.0.1` ou carregando um segredo.
 
@@ -286,6 +320,9 @@ Uma build autoassinada não estabelece confiança para usuário final.
 - [ ] TURN/TLS funciona em rede com UDP bloqueado
 - [ ] push chega com o aplicativo fechado
 - [ ] anexo enviado há mais de 24 h desapareceu sozinho (cron ativo)
+- [ ] a chave de recuperação troca a senha e a chave antiga deixa de valer
+- [ ] `list_inactive_accounts(90)` devolve o que você espera antes de o
+      expurgo rodar pela primeira vez
 - [ ] o aplicativo instalado consegue entrar numa chamada (`null` em
       `ALLOWED_ORIGIN`)
 - [ ] instalador e executáveis retornam assinatura `Valid`

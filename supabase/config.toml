@@ -74,3 +74,14 @@ verify_jwt = false
 # autenticado de verdade — anônimo continua recebendo 401.
 [functions.attachments-expire]
 verify_jwt = false
+
+# Recuperação por chave única. Sem JWT de propósito: quem chega aqui perdeu a
+# senha e não tem sessão nenhuma. A autorização é a posse da chave, conferida
+# dentro da função, com bloqueio após cinco erros.
+[functions.account-recover]
+verify_jwt = false
+
+# Expurgo das contas paradas há 90 dias. Sem JWT porque só o agendador chama,
+# com `x-cron-secret`; sem o segredo a função responde 401 e nada acontece.
+[functions.accounts-prune]
+verify_jwt = false
