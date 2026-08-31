@@ -26,7 +26,7 @@ const updateTestRootName = path.basename(possibleUpdateTestRoot);
 const isolatedUpdateTest =
   app.isPackaged &&
   path.dirname(possibleUpdateTestRoot) === path.resolve(os.tmpdir()) &&
-  updateTestRootName.startsWith("lili-update-");
+  updateTestRootName.startsWith("janja-update-");
 const testArgument = (name) => {
   const prefix = `--${name}=`;
   return process.argv
@@ -36,14 +36,14 @@ const testArgument = (name) => {
 const updateTestMode =
   isolatedUpdateTest ||
   process.env.LILI_UPDATE_TEST_MODE === "1" ||
-  process.argv.includes("--lili-update-test");
+  process.argv.includes("--janja-update-test");
 const configuredTestResult =
   process.env.LILI_UPDATE_TEST_RESULT ??
-  testArgument("lili-update-result") ??
+  testArgument("janja-update-result") ??
   (isolatedUpdateTest
     ? path.join(
         possibleUpdateTestRoot,
-        `lili-update-result-${updateTestRootName.slice("lili-update-".length)}.jsonl`,
+        `janja-update-result-${updateTestRootName.slice("janja-update-".length)}.jsonl`,
       )
     : null);
 const updateTestResult = (() => {
@@ -51,7 +51,7 @@ const updateTestResult = (() => {
   const candidate = path.resolve(configuredTestResult);
   const tempRoot = path.resolve(os.tmpdir()) + path.sep;
   return candidate.startsWith(tempRoot) &&
-    path.basename(candidate).startsWith("lili-update-result-")
+    path.basename(candidate).startsWith("janja-update-result-")
     ? candidate
     : null;
 })();
@@ -116,7 +116,7 @@ function setupAutoUpdater() {
   if (updateTestMode) {
     const testFeed =
       process.env.LILI_UPDATE_FEED_URL ??
-      testArgument("lili-update-feed") ??
+      testArgument("janja-update-feed") ??
       "";
     if (!/^http:\/\/127\.0\.0\.1:\d+\/$/.test(testFeed)) {
       publishUpdateState({

@@ -113,7 +113,7 @@ Feito. O que o CLI não faz por você:
   2. SQL Editor → supabase/snippets/schedule_attachments_expire.sql
   3. SQL Editor → update public.instance_quota_config (limites reais da quota)
   4. Authentication → URL Configuration: Site URL e Redirect URLs do domínio
-     de produção mais lili://auth/callback para o desktop
+     de produção mais janja://auth/callback para o desktop
   5. Settings → Storage: Upload limit em 101 MiB, senão o teto de 100 MB do
      bucket é recusado antes de chegar na política
 

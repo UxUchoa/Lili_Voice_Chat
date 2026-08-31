@@ -271,7 +271,7 @@ test("duas sessões isoladas trocam mensagens OpenMLS no mesmo canal", async ({
     await memberPage.evaluate(() => {
       const notifications: Array<{ title: string; body: string }> = [];
       (window as any).__liliNotifications = notifications;
-      Object.defineProperty(window, "liliDesktop", {
+      Object.defineProperty(window, "janjaDesktop", {
         configurable: true,
         value: {
           platform: "win32",

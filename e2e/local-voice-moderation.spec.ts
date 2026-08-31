@@ -24,9 +24,9 @@ const apiUrl = status.API_URL as string;
 const publishableKey = (status.PUBLISHABLE_KEY ?? status.ANON_KEY) as string;
 const serviceRoleKey = (status.SECRET_KEY ?? status.SERVICE_ROLE_KEY) as string;
 const livekitUrl = "ws://127.0.0.1:7880";
-const livekitApiKey = "lili_local_key";
+const livekitApiKey = "janja_local_key";
 const livekitApiSecret =
-  "lili_local_secret_change_before_any_remote_deployment";
+  "janja_local_secret_change_before_any_remote_deployment";
 
 const unwrap = async <T>(
   promise: PromiseLike<{ data: T; error: { message: string } | null }>,

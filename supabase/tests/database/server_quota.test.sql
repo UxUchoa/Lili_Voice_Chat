@@ -49,9 +49,16 @@ select set_config('request.jwt.claim.sub', '1d000000-0000-0000-0000-000000000001
 
 -- `instance_quota_config` e negada a `authenticated` de proposito, entao a
 -- leitura de conferencia acontece com o papel privilegiado.
+--
+-- A fatia e o teto dividido pelo numero de servidores do banco inteiro, entao
+-- o esperado precisa ser calculado a partir da contagem real: assumir que so
+-- existem os servidores deste teste faz a suite quebrar depois de qualquer uso
+-- manual do aplicativo.
 reset role;
 create temporary table teto on commit drop as
-select database_limit_bytes as bytes from public.instance_quota_config where singleton;
+select database_limit_bytes as bytes,
+       (select count(*) from public.servers) as servidores_antes
+from public.instance_quota_config where singleton;
 -- Tabela temporaria criada como postgres nao e visivel para `authenticated`.
 grant select on teto to authenticated;
 
@@ -60,8 +67,8 @@ select set_config('request.jwt.claim.sub', '1d000000-0000-0000-0000-000000000001
 select is(
   (select share_bytes from public.server_quota_status(
     (select id from public.servers where name = 'Servidor da cota'))),
-  (select bytes from teto),
-  'com um servidor so, a fatia e o teto inteiro'
+  (select bytes / greatest(servidores_antes, 1) from teto),
+  'a fatia e o teto dividido pelos servidores existentes'
 );
 
 select public.create_server('Segundo servidor', null);
@@ -69,7 +76,7 @@ select public.create_server('Segundo servidor', null);
 select is(
   (select share_bytes from public.server_quota_status(
     (select id from public.servers where name = 'Servidor da cota'))),
-  (select bytes / 2 from teto),
+  (select bytes / greatest(servidores_antes + 1, 1) from teto),
   'criar um servidor novo divide a fatia de todos: e o rateio da banda'
 );
 
@@ -124,11 +131,13 @@ values (
   '1d000000-0000-0000-0000-000000000001'
 );
 
--- Teto pequeno, para forcar a limpeza a acontecer de verdade. Cada mensagem
--- ocupa ~8 KB, sao cinco, e ha dois servidores: fatia de 30000 e alvo de 70%
--- em 21000. Tres das quatro nao fixadas precisam sair, e a mais recente
--- sobrevive - que e o que este teste existe para provar.
-update public.instance_quota_config set database_limit_bytes = 60000 where singleton;
+-- Teto calculado a partir da contagem real de servidores, para que a fatia
+-- deste servidor seja sempre 30000: cada mensagem ocupa ~8 KB e sao cinco,
+-- entao o alvo de 70% fica em 21000 e a mais recente sobrevive - que e o que
+-- este teste existe para provar.
+update public.instance_quota_config
+set database_limit_bytes = 30000 * (select count(*) from public.servers)
+where singleton;
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '1d000000-0000-0000-0000-000000000001', true);

@@ -35,7 +35,7 @@ export function ScreenSharePicker({
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const desktop = window.liliDesktop;
+    const desktop = window.janjaDesktop;
     if (!desktop) return;
     let active = true;
     const load = () =>

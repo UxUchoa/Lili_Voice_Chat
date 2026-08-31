@@ -8,7 +8,7 @@ rtc:
 redis:
   address: redis:6379
 keys:
-  lili_local_key: lili_local_secret_change_before_any_remote_deployment
+  janja_local_key: janja_local_secret_change_before_any_remote_deployment
 turn:
   enabled: true
   udp_port: 3478

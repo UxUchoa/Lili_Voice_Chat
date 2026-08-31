@@ -15,10 +15,10 @@ import {
 import { AccessToken } from "livekit-server-sdk";
 
 const url = process.env.LIVEKIT_URL ?? "ws://127.0.0.1:7880";
-const apiKey = process.env.LIVEKIT_API_KEY ?? "lili_local_key";
+const apiKey = process.env.LIVEKIT_API_KEY ?? "janja_local_key";
 const apiSecret =
   process.env.LIVEKIT_API_SECRET ??
-  "lili_local_secret_change_before_any_remote_deployment";
+  "janja_local_secret_change_before_any_remote_deployment";
 const forceTurn = process.env.LILI_FORCE_TURN !== "false";
 const roomName = `lili-e2ee-${randomUUID()}`;
 const sharedKey = randomBytes(32);

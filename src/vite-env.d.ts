@@ -2,7 +2,7 @@
 
 interface Window {
   __liliReactRoot?: import("react-dom/client").Root;
-  liliDesktop?: {
+  janjaDesktop?: {
     platform: string;
     minimize: () => void;
     maximize: () => void;

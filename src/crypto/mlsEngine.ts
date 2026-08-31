@@ -191,8 +191,8 @@ async function decryptAtRest(
 
 async function createMasterKey(userId: string) {
   const raw = crypto.getRandomValues(new Uint8Array(32));
-  if (window.liliDesktop) {
-    const wrapped = await window.liliDesktop.wrapSecret(toBase64(raw));
+  if (window.janjaDesktop) {
+    const wrapped = await window.janjaDesktop.wrapSecret(toBase64(raw));
     return { key: await importAesKey(raw), wrapped: `desktop:${wrapped}` };
   }
   const reference = crypto.randomUUID();
@@ -209,11 +209,11 @@ async function createMasterKey(userId: string) {
 
 async function openMasterKey(userId: string, wrapped: string) {
   if (wrapped.startsWith("desktop:")) {
-    if (!window.liliDesktop)
+    if (!window.janjaDesktop)
       throw new Error(
         "O cofre E2EE foi criado no app desktop e não pode ser aberto neste navegador.",
       );
-    const raw = await window.liliDesktop.unwrapSecret(wrapped.slice(8));
+    const raw = await window.janjaDesktop.unwrapSecret(wrapped.slice(8));
     return importAesKey(fromBase64(raw));
   }
   const reference = wrapped.slice("session:".length);
@@ -249,12 +249,14 @@ function canRecoverDeviceState(wrappedMasterKey: string, caught: unknown) {
   // Um cofre criado no desktop só é recuperável dentro do próprio desktop; na
   // web o erro explícito preserva o estado do outro dispositivo.
   if (wrappedMasterKey.startsWith("desktop:"))
-    return Boolean(window.liliDesktop);
+    return Boolean(window.janjaDesktop);
   return caught instanceof DOMException || caught instanceof Error;
 }
 
 export class MlsEngine {
   private readonly groups = new Map<string, Group>();
+  /** Desde quando este canal está esperando um Welcome que não chega. */
+  private readonly waitingSince = new Map<string, number>();
   private readonly groupLoads = new Map<string, Promise<Group>>();
   private operationTail: Promise<void> = Promise.resolve();
   private heartbeatTimer: ReturnType<typeof setInterval> | undefined;
@@ -567,9 +569,20 @@ export class MlsEngine {
           ),
         });
       } else {
+        // Primeiro tenta sem assumir o grupo, para dar chance a quem estiver
+        // prestes a entregar o Welcome. Passados alguns segundos sem que ele
+        // chegue, o canal de servidor assume — um canal público que não abre é
+        // um canal quebrado, e ninguém tem como saber que precisa entrar nele
+        // para destravar outra pessoa. Conversa privada nunca assume: o
+        // servidor recusa o `takeover` para `dm` e `gdm`.
+        const allowTakeover = this.waitedLongEnoughFor(channelId);
         const { data: founder, error: founderError } = await this.client.rpc(
           "initialize_mls_group",
-          { p_channel_id: channelId, p_device_id: this.deviceId },
+          {
+            p_channel_id: channelId,
+            p_device_id: this.deviceId,
+            p_allow_takeover: allowTakeover,
+          },
         );
         if (founderError) throw founderError;
         if (founder) {
@@ -595,6 +608,7 @@ export class MlsEngine {
           }
         }
       }
+      this.waitingSince.delete(channelId);
       await this.persistProvider();
       await this.rememberFounder(channelId);
     }
@@ -633,6 +647,24 @@ export class MlsEngine {
    * evento a cada ciclo. Ele continua sendo aceito quando presente, para não
    * depender de quando o remetente atualizou o cliente.
    */
+  /**
+   * Já esperamos tempo suficiente para assumir o grupo deste canal?
+   *
+   * Doze segundos: o bastante para um cliente que está ativo no canal publicar
+   * o Welcome, e pouco o bastante para não parecer travado. A contagem é por
+   * canal e vive só nesta aba — reabrir a página recomeça a espera, que é o
+   * comportamento certo, já que um cliente novo pode ter entrado enquanto
+   * isso.
+   */
+  private waitedLongEnoughFor(channelId: string) {
+    const since = this.waitingSince.get(channelId);
+    if (since === undefined) {
+      this.waitingSince.set(channelId, Date.now());
+      return false;
+    }
+    return Date.now() - since >= 12_000;
+  }
+
   private async sequenceJoinedAt(
     channelId: string,
     welcomeEpoch: number,

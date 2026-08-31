@@ -1,6 +1,5 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import "../services/storageMigration";
 
 /**
  * Navegação da aplicação.
@@ -105,7 +104,7 @@ export const useNavigationStore = create<NavigationState>()(
       reset: () => set({ ...initial }),
     }),
     {
-      name: "lili-navigation-v1",
+      name: "janja-navigation-v1",
       partialize: (state) => ({
         view: state.view,
         serverId: state.serverId,

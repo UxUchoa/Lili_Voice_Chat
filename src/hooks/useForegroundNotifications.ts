@@ -68,13 +68,13 @@ export function useForegroundNotifications(
       const title = `${author?.displayName ?? "Nova mensagem"} · ${location}`;
       const body = notificationBody(message.text, message.attachments.length);
 
-      if (window.liliDesktop) {
-        window.liliDesktop.notify(title, body);
+      if (window.janjaDesktop) {
+        window.janjaDesktop.notify(title, body);
       } else if (
         "Notification" in window &&
         Notification.permission === "granted"
       ) {
-        new Notification(title, { body, tag: `lili-message-${row.id}` });
+        new Notification(title, { body, tag: `janja-message-${row.id}` });
       }
     };
 

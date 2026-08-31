@@ -7,11 +7,11 @@ param(
 $ErrorActionPreference = 'Stop'
 $workspace = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $runId = [Guid]::NewGuid().ToString('N')
-$testRoot = [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetTempPath()) "lili-update-$runId"))
+$testRoot = [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetTempPath()) "janja-update-$runId"))
 $oldOutput = Join-Path $testRoot 'old'
 $feedOutput = Join-Path $testRoot 'feed'
 $installDir = Join-Path $testRoot 'installed'
-$resultPath = Join-Path $testRoot "lili-update-result-$runId.jsonl"
+$resultPath = Join-Path $testRoot "janja-update-result-$runId.jsonl"
 $serverLog = Join-Path $testRoot 'server.log'
 $feedUrl = "http://127.0.0.1:$Port/"
 $server = $null
@@ -20,7 +20,7 @@ function Assert-TestPath([string]$Path) {
   $resolved = [IO.Path]::GetFullPath($Path)
   $temp = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
   if (-not $resolved.StartsWith($temp, [StringComparison]::OrdinalIgnoreCase) -or
-      -not $resolved.Contains('lili-update-')) {
+      -not $resolved.Contains('janja-update-')) {
     throw "Caminho de teste inseguro: $resolved"
   }
 }
@@ -102,9 +102,9 @@ try {
   $env:ELECTRON_ENABLE_LOGGING = '1'
   $app = Start-Process -FilePath $appPath -ArgumentList @(
     '--enable-logging',
-    '--lili-update-test',
-    "--lili-update-feed=$feedUrl",
-    "--lili-update-result=$resultPath"
+    '--janja-update-test',
+    "--janja-update-feed=$feedUrl",
+    "--janja-update-result=$resultPath"
   ) -PassThru
 
   $updated = $false

@@ -26,8 +26,8 @@ export type LiliSound =
   | "message"
   | "call-declined";
 
-const SOUND_PREFERENCE_KEY = "lili.sounds.enabled";
-const VOLUME_KEY = "lili.sounds.volume";
+const SOUND_PREFERENCE_KEY = "janja.sounds.enabled";
+const VOLUME_KEY = "janja.sounds.volume";
 
 let context: AudioContext | undefined;
 

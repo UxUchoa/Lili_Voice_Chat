@@ -27,7 +27,6 @@ import type {
   UserContact,
 } from "../services/online/contacts";
 import { reportRuntimeError } from "../services/runtimeErrors";
-import "../services/storageMigration";
 
 interface WorkspaceProjection {
   currentUserId: string;
@@ -180,7 +179,7 @@ export const useAppStore = create<AppState>()(
         })),
     }),
     {
-      name: "lili-ui-preferences-v2",
+      name: "janja-ui-preferences-v2",
       partialize: (state) => ({ accessibility: state.accessibility }),
     },
   ),

@@ -269,7 +269,7 @@ const notificationMuteUntil = (hours: number) =>
   new Date(Date.now() + hours * 60 * 60 * 1_000).toISOString();
 const requestNotificationAccess = () => {
   if (
-    !window.liliDesktop &&
+    !window.janjaDesktop &&
     "Notification" in window &&
     Notification.permission === "default"
   )
@@ -398,26 +398,26 @@ function Titlebar({
         <button className="icon-button" aria-label="Ajuda" onClick={onHelp}>
           <IconHelp size={20} />
         </button>
-        {window.liliDesktop && (
+        {window.janjaDesktop && (
           <>
             <button
               className="window-button"
               aria-label="Minimizar"
-              onClick={() => window.liliDesktop?.minimize()}
+              onClick={() => window.janjaDesktop?.minimize()}
             >
               —
             </button>
             <button
               className="window-button"
               aria-label="Maximizar"
-              onClick={() => window.liliDesktop?.maximize()}
+              onClick={() => window.janjaDesktop?.maximize()}
             >
               □
             </button>
             <button
               className="window-button close"
               aria-label="Fechar"
-              onClick={() => window.liliDesktop?.close()}
+              onClick={() => window.janjaDesktop?.close()}
             >
               ×
             </button>
@@ -1326,7 +1326,7 @@ function ChannelSidebar({
       try {
         return new Set(
           JSON.parse(
-            localStorage.getItem("lili-collapsed-categories") ?? "[]",
+            localStorage.getItem("janja-collapsed-categories") ?? "[]",
           ) as string[],
         );
       } catch {
@@ -1355,7 +1355,7 @@ function ChannelSidebar({
   const { ask, confirmDialog } = useConfirm();
   const [privacyOpen, setPrivacyOpen] = useState(false);
   const [hideMutedChannels, setHideMutedChannels] = useState(
-    () => localStorage.getItem("lili.hideMutedChannels") === "true",
+    () => localStorage.getItem("janja.hideMutedChannels") === "true",
   );
   const [channelSetup, setChannelSetup] = useState<{
     kind: NewChannelKind;
@@ -1546,7 +1546,7 @@ function ChannelSidebar({
         onSelect: () => {
           const next = !hideMutedChannels;
           setHideMutedChannels(next);
-          localStorage.setItem("lili.hideMutedChannels", String(next));
+          localStorage.setItem("janja.hideMutedChannels", String(next));
         },
       },
       {
@@ -1709,7 +1709,7 @@ function ChannelSidebar({
       if (next.has(categoryId)) next.delete(categoryId);
       else next.add(categoryId);
       localStorage.setItem(
-        "lili-collapsed-categories",
+        "janja-collapsed-categories",
         JSON.stringify([...next]),
       );
       return next;
@@ -2729,7 +2729,7 @@ function ChatView({
     });
     if (
       mode === "ALL" &&
-      !window.liliDesktop &&
+      !window.janjaDesktop &&
       "Notification" in window &&
       Notification.permission === "default"
     )
@@ -3475,7 +3475,7 @@ function CallView({
       // Quem tinha 1440p ou 4K salvo cai em 1080p sem precisar fazer nada:
       // aqueles modos deixaram de existir, e travar numa preferência inválida
       // deixaria a câmera sem qualidade definida.
-      const saved = Number(localStorage.getItem("lili.camera.quality"));
+      const saved = Number(localStorage.getItem("janja.camera.quality"));
       return saved === 720 ? 720 : 1080;
     }),
     [openMenu, setOpenMenu] = useState<"audio" | "video" | "share" | null>(
@@ -3684,7 +3684,7 @@ function CallView({
   };
   const applyCameraQuality = async (resolution: CameraResolution) => {
     setCameraQualityState(resolution);
-    localStorage.setItem("lili.camera.quality", String(resolution));
+    localStorage.setItem("janja.camera.quality", String(resolution));
     setCameraQuality(resolution);
     if (!video) return;
     // A resolução é fixada no momento da captura: para valer agora, a track
@@ -3713,7 +3713,7 @@ function CallView({
     // No desktop temos as miniaturas das janelas e mostramos o nosso seletor.
     // No navegador o Chrome já faz essa escolha; abrir um modal antes dele
     // seria uma etapa a mais para o mesmo resultado.
-    if (window.liliDesktop) setSharePickerOpen(true);
+    if (window.janjaDesktop) setSharePickerOpen(true);
     else void startSharing({ ...shareQuality });
   };
   const startSharing = async (selection: ShareSelection) => {
@@ -7990,9 +7990,9 @@ function ProfilePanel({
     })();
   }, [account.profileId]);
   useEffect(() => {
-    if (!window.liliDesktop) return;
-    void window.liliDesktop.updateStatus().then(setUpdateState);
-    return window.liliDesktop.onUpdateState(setUpdateState);
+    if (!window.janjaDesktop) return;
+    void window.janjaDesktop.updateStatus().then(setUpdateState);
+    return window.janjaDesktop.onUpdateState(setUpdateState);
   }, []);
   const changePassword = async () => {
     try {
@@ -8477,7 +8477,7 @@ function ProfilePanel({
             </label>
           </div>
         </details>
-        {window.liliDesktop && (
+        {window.janjaDesktop && (
           <details className="security-details">
             <summary>Atualizações do aplicativo</summary>
             <div>
@@ -8490,13 +8490,13 @@ function ProfilePanel({
               </span>
               {updateState?.error && <small>{updateState.error}</small>}
               {updateState?.status === "ready" ? (
-                <button onClick={() => window.liliDesktop?.installUpdate()}>
+                <button onClick={() => window.janjaDesktop?.installUpdate()}>
                   Reiniciar e instalar
                 </button>
               ) : (
                 <button
                   onClick={() =>
-                    void window.liliDesktop
+                    void window.janjaDesktop
                       ?.checkForUpdates()
                       .then(setUpdateState)
                   }
@@ -9067,12 +9067,12 @@ function App({
         );
     };
     window.addEventListener("unhandledrejection", rejected);
-    window.addEventListener("lili-runtime-error", reported);
+    window.addEventListener("janja-runtime-error", reported);
     window.addEventListener("offline", offline);
     window.addEventListener("online", online);
     return () => {
       window.removeEventListener("unhandledrejection", rejected);
-      window.removeEventListener("lili-runtime-error", reported);
+      window.removeEventListener("janja-runtime-error", reported);
       window.removeEventListener("offline", offline);
       window.removeEventListener("online", online);
     };
