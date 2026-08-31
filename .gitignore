@@ -29,6 +29,9 @@ supabase/.branches/
 # a partir do commit fixado + patches/openmls-wasm.patch.
 vendor/
 
+# SQL gerado com segredos reais para colar no SQL Editor
+*.local.sql
+
 # Infra local gerada por script (traz o IP da LAN da máquina)
 infra/livekit/livekit.local.yaml
 
