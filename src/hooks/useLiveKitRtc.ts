@@ -15,6 +15,7 @@ import {
   type MlsEngine,
 } from "../crypto/mlsEngine";
 import { setOnlineVoiceMediaState } from "../services/online/calls";
+import { CAMERA_MODES, cameraMode } from "./cameraModes";
 import { supabase } from "../services/online/client";
 import { onlineConfig } from "../services/online/config";
 import { playSound } from "../services/sounds";
@@ -79,26 +80,6 @@ function rtcErrorMessage(caught: unknown) {
  * plataformas de vídeo usam para conteúdo com movimento: abaixo disso o
  * encoder prefere derrubar a resolução a manter a nitidez.
  */
-/**
- * Só dois modos, e de propósito.
- *
- * A câmera oferecia até 4K a 12 Mb/s. Numa implantação em plano gratuito, onde
- * todos os servidores dividem a mesma banda, um participante em 4K consome o
- * que dez em 720p consomem — e ninguém percebe a diferença num tile de meia
- * tela. Os dois modos que sobraram custam quase o mesmo em pixels por segundo:
- * é a escolha entre movimento fluido e imagem detalhada, não entre barato e
- * caro.
- */
-export const CAMERA_MODES = {
-  720: { resolution: 720, frameRate: 60, bitrate: 2_500_000 },
-  1080: { resolution: 1080, frameRate: 30, bitrate: 3_000_000 },
-} as const;
-
-export type CameraResolution = keyof typeof CAMERA_MODES;
-
-export function cameraMode(resolution: number) {
-  return resolution >= 1080 ? CAMERA_MODES[1080] : CAMERA_MODES[720];
-}
 
 function screenShareBitrate({
   resolution,

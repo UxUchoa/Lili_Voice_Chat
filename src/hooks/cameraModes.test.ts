@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CAMERA_MODES, cameraMode } from "./useLiveKitRtc";
+import { CAMERA_MODES, cameraMode } from "./cameraModes";
 
 /**
  * A câmera oferecia até 4K a 12 Mb/s. Num plano gratuito, onde todos os
@@ -18,9 +18,9 @@ describe("modos de câmera", () => {
     const fluido = pixelsPerSecond(CAMERA_MODES[720]);
     const detalhado = pixelsPerSecond(CAMERA_MODES[1080]);
     // Dentro de 30% um do outro: nenhum dos dois é "o caro".
-    expect(Math.max(fluido, detalhado) / Math.min(fluido, detalhado)).toBeLessThan(
-      1.3,
-    );
+    expect(
+      Math.max(fluido, detalhado) / Math.min(fluido, detalhado),
+    ).toBeLessThan(1.3);
   });
 
   it("mantém os dois abaixo do teto que derrubava a banda compartilhada", () => {

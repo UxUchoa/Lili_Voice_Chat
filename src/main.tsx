@@ -29,7 +29,8 @@ import type {
 } from "./domain/types";
 import { useMessages } from "./hooks/useMessages";
 import { useRtc } from "./hooks/useRtc";
-import type { CameraResolution, RemotePeer } from "./hooks/useLiveKitRtc";
+import type { RemotePeer } from "./hooks/useLiveKitRtc";
+import type { CameraResolution } from "./hooks/cameraModes";
 import { useOnlinePresence } from "./hooks/useOnlinePresence";
 import { useTyping } from "./hooks/useTyping";
 import { useForegroundNotifications } from "./hooks/useForegroundNotifications";
@@ -5001,8 +5002,8 @@ function HomeView({
           <section className="add-friend-section">
             <h2>Adicionar amigo</h2>
             <p>
-              Você pode adicionar amigos pelo username Lili (sem espaços,
-              letras minúsculas).
+              Você pode adicionar amigos pelo username Lili (sem espaços, letras
+              minúsculas).
             </p>
             <div className="friend-search">
               <input
