@@ -79,7 +79,9 @@ function productionCsp(supabaseUrl: string, livekitUrl: string): string {
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
-    "frame-ancestors 'none'",
+    // `frame-ancestors` não vale em meta — o navegador ignora e ainda registra
+    // um erro no console a cada carregamento, escondendo os que importam. Quem
+    // recusa o enquadramento é o cabeçalho, em vercel.json.
   ].join("; ");
 }
 
