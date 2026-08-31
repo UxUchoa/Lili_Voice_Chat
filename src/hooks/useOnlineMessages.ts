@@ -17,6 +17,13 @@ const containsMention = (text: string, label: string) =>
     text,
   );
 
+/**
+ * Quantas quedas seguidas antes de incomodar o usuário. Três erra pouco: uma
+ * queda isolada é rotina, três seguidas já indicam rede ou servidor com
+ * problema de verdade.
+ */
+const PERSISTENT_FAILURES = 3;
+
 export function useOnlineMessages(channelId: string, enabled = true) {
   const queryClient = useQueryClient();
   const currentUserId = useAppStore((state) => state.currentUserId);
@@ -25,6 +32,7 @@ export function useOnlineMessages(channelId: string, enabled = true) {
   useEffect(() => {
     if (!enabled) return;
     let active = true;
+    let failures = 0;
     const reconcile = () => void queryClient.invalidateQueries({ queryKey });
     const online = () => reconcile();
     const realtime = supabase
@@ -79,10 +87,22 @@ export function useOnlineMessages(channelId: string, enabled = true) {
       )
       .subscribe((status) => {
         if (!active) return;
-        if (status === "SUBSCRIBED") reconcile();
-        else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT")
+        if (status === "SUBSCRIBED") {
+          failures = 0;
+          reconcile();
+          return;
+        }
+        if (status !== "CHANNEL_ERROR" && status !== "TIMED_OUT") return;
+        // O canal cai por qualquer soluço de rede e o supabase-js reassina
+        // sozinho. Avisar na primeira queda enchia a tela de vermelho por algo
+        // que se resolvia em segundos — e o aviso, aparecendo o tempo todo,
+        // deixava de significar alguma coisa. A busca continua funcionando por
+        // reconciliação enquanto isso.
+        reconcile();
+        if (++failures === PERSISTENT_FAILURES)
           reportRuntimeError(
-            "A sincronização em tempo real das mensagens foi interrompida",
+            "A sincronização em tempo real das mensagens está instável. " +
+              "As mensagens continuam chegando, com algum atraso.",
             status,
           );
       });

@@ -29,7 +29,7 @@ import type {
 } from "./domain/types";
 import { useMessages } from "./hooks/useMessages";
 import { useRtc } from "./hooks/useRtc";
-import type { RemotePeer } from "./hooks/useLiveKitRtc";
+import type { CameraResolution, RemotePeer } from "./hooks/useLiveKitRtc";
 import { useOnlinePresence } from "./hooks/useOnlinePresence";
 import { useTyping } from "./hooks/useTyping";
 import { useForegroundNotifications } from "./hooks/useForegroundNotifications";
@@ -168,6 +168,8 @@ import {
   type ServerProfileDraft,
 } from "./ui/ServerProfileFields";
 import {
+  inviteCodeFromHash,
+  inviteUrl,
   locationHash,
   parseLocationHash,
   useNavigationStore,
@@ -674,7 +676,7 @@ function ServerSetupModal({
                 onKeyDown={(event) =>
                   event.key === "Enter" && void joinServer()
                 }
-                placeholder="janja.local/abc123"
+                placeholder="Cole o link do convite"
               />
             </label>
             {error && (
@@ -3316,12 +3318,16 @@ function StreamVideo({
 const TILE_GAP = 8;
 const TILE_ASPECT = 16 / 9;
 
-type CameraResolution = 720 | 1080 | 1440 | 2160;
+/**
+ * Dois modos, e não uma escada até 4K.
+ *
+ * Os dois custam quase o mesmo em pixels por segundo, então a escolha é entre
+ * movimento fluido e imagem detalhada — não entre gastar pouco e gastar muito.
+ * Ver CAMERA_MODES em useLiveKitRtc para o porquê de 1440p e 4K terem saído.
+ */
 const CAMERA_RESOLUTIONS: Array<{ value: CameraResolution; label: string }> = [
-  { value: 720, label: "720p" },
-  { value: 1080, label: "1080p (recomendado)" },
-  { value: 1440, label: "1440p" },
-  { value: 2160, label: "4K" },
+  { value: 720, label: "720p · 60 fps (movimento)" },
+  { value: 1080, label: "1080p · 30 fps (detalhe)" },
 ];
 
 /**
@@ -3414,12 +3420,11 @@ function CallView({
     }),
     [sharePickerOpen, setSharePickerOpen] = useState(false),
     [cameraQuality, setCameraQualityState] = useState<CameraResolution>(() => {
+      // Quem tinha 1440p ou 4K salvo cai em 1080p sem precisar fazer nada:
+      // aqueles modos deixaram de existir, e travar numa preferência inválida
+      // deixaria a câmera sem qualidade definida.
       const saved = Number(localStorage.getItem("janja.camera.quality"));
-      return ([720, 1080, 1440, 2160] as const).includes(
-        saved as CameraResolution,
-      )
-        ? (saved as CameraResolution)
-        : 1080;
+      return saved === 720 ? 720 : 1080;
     }),
     [openMenu, setOpenMenu] = useState<"audio" | "video" | "share" | null>(
       null,
@@ -7419,7 +7424,19 @@ function InvitesSettingsView({ serverId }: { serverId: string }) {
         "",
     ),
     [minutes, setMinutes] = useState(60),
-    [maxUses, setMaxUses] = useState(10);
+    [maxUses, setMaxUses] = useState(10),
+    [copiedCode, setCopiedCode] = useState("");
+
+  const copyInvite = async (code: string) => {
+    try {
+      await navigator.clipboard.writeText(inviteUrl(code));
+      setCopiedCode(code);
+      window.setTimeout(() => setCopiedCode(""), 2_000);
+    } catch {
+      // Área de transferência negada: o link está visível na tela e pode ser
+      // selecionado à mão, então não vale interromper nada por isso.
+    }
+  };
   return (
     <div className="settings-content single-content">
       <div className="editor-top">
@@ -7480,13 +7497,20 @@ function InvitesSettingsView({ serverId }: { serverId: string }) {
           className={`invite-row ${invite.revokedAt ? "revoked" : ""}`}
           key={invite.id}
         >
-          <code>janja.local/{invite.code}</code>
+          <code>{inviteUrl(invite.code)}</code>
           <span>
             {invite.uses}/{invite.maxUses ?? "∞"} usos ·{" "}
             {invite.expiresAt
               ? `expira ${new Date(invite.expiresAt).toLocaleString("pt-BR")}`
               : "sem expiração"}
           </span>
+          <button
+            className="outline-button"
+            disabled={Boolean(invite.revokedAt)}
+            onClick={() => void copyInvite(invite.code)}
+          >
+            {copiedCode === invite.code ? "Copiado" : "Copiar link"}
+          </button>
           <button
             className="outline-button"
             disabled={Boolean(invite.revokedAt)}
@@ -9006,6 +9030,41 @@ function App({
   );
 
   // ---------------------------------------------------------------
+  // Convite por link. Quem recebe `#/invite/<codigo>` entra no servidor
+  // sozinho: antes o convite era um código de um domínio que não existe
+  // (`janja.local/...`), e a pessoa precisava descobrir que havia um campo
+  // escondido atrás de "adicionar servidor" para colá-lo.
+  // ---------------------------------------------------------------
+  useEffect(() => {
+    const code = inviteCodeFromHash(window.location.hash);
+    if (!code) return;
+    let active = true;
+    // Limpa o endereço antes de trocar o código: recarregar no meio do
+    // processo tentaria usar de novo um convite que já foi consumido, e o
+    // usuário veria "convite inválido" sem entender por quê.
+    history.replaceState(null, "", window.location.pathname);
+    void (async () => {
+      try {
+        const serverId = await redeemOnlineInvite(code);
+        await hydrateOnlineWorkspace(account.profileId);
+        if (!active) return;
+        useNavigationStore.getState().openServer(serverId);
+      } catch (caught) {
+        if (!active) return;
+        reportRuntimeError(
+          caught instanceof Error
+            ? caught.message
+            : "Não foi possível entrar com este convite.",
+          "invite",
+        );
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [account.profileId]);
+
+  // ---------------------------------------------------------------
   // Endereço ↔ navegação. O hash é a fonte de verdade ao carregar a
   // página, o que faz refresh e deep link caírem no mesmo contexto.
   // ---------------------------------------------------------------
@@ -9058,6 +9117,9 @@ function App({
       // Sem esta guarda, o link direto era sobrescrito pelo último contexto
       // salvo — e o `hashchange` seguinte trazia o usuário de volta para ele.
       if (parseLocationHash(window.location.hash)) return;
+      // Um convite pendente ainda não foi trocado; sobrescrever o endereço
+      // aqui apagaria o código antes de o efeito acima chegar nele.
+      if (inviteCodeFromHash(window.location.hash)) return;
     }
     if (window.location.hash !== next) window.location.hash = next;
   }, [

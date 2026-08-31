@@ -95,10 +95,7 @@ export async function hydrateOnlineWorkspace(userId: string) {
       .order("created_at", { ascending: false }),
     supabase.from("user_contacts").select("*").eq("user_id", userId),
     supabase.from("dm_states").select("*").eq("user_id", userId),
-    supabase
-      .from("server_privacy_settings")
-      .select("*")
-      .eq("user_id", userId),
+    supabase.from("server_privacy_settings").select("*").eq("user_id", userId),
   ]);
   const failed = requests.find((request) => request.error);
   if (failed?.error) throw failed.error;
@@ -123,24 +120,25 @@ export async function hydrateOnlineWorkspace(userId: string) {
     serverPrivacyRows,
   ] = requests.map((request) => request.data ?? []);
 
-  const [avatarUrls, bannerUrls, groupIconUrls, serverIconUrls] = await Promise.all([
-    profileMediaUrls(
-      "avatars",
-      profileRows.map((row: any) => row.avatar_path ?? ""),
-    ),
-    profileMediaUrls(
-      "banners",
-      profileRows.map((row: any) => row.banner_path ?? ""),
-    ),
-    profileMediaUrls(
-      "gdm-icons",
-      channelRows.map((row: any) => row.icon_path ?? ""),
-    ),
-    profileMediaUrls(
-      "server-icons",
-      serverRows.map((row: any) => row.icon_path ?? ""),
-    ),
-  ]);
+  const [avatarUrls, bannerUrls, groupIconUrls, serverIconUrls] =
+    await Promise.all([
+      profileMediaUrls(
+        "avatars",
+        profileRows.map((row: any) => row.avatar_path ?? ""),
+      ),
+      profileMediaUrls(
+        "banners",
+        profileRows.map((row: any) => row.banner_path ?? ""),
+      ),
+      profileMediaUrls(
+        "gdm-icons",
+        channelRows.map((row: any) => row.icon_path ?? ""),
+      ),
+      profileMediaUrls(
+        "server-icons",
+        serverRows.map((row: any) => row.icon_path ?? ""),
+      ),
+    ]);
 
   const profiles: Profile[] = profileRows.map((row: any) => ({
     id: row.id,
@@ -451,7 +449,15 @@ export function subscribeOnlineWorkspace(
         );
     }, 120);
   };
-  const channels = [
+  // Um canal só, com uma vinculação por tabela.
+  //
+  // Eram dezoito canais — um por tabela — e o navegador ainda abre outros nove
+  // para mensagens, presença, digitação, voz e notificações. Perto de trinta
+  // conexões de realtime por aba, o que no plano gratuito do Supabase satura
+  // rápido e aparece para o usuário como `CHANNEL_ERROR` intermitente. O
+  // protocolo aceita várias vinculações no mesmo canal, e é o que
+  // `useOnlineMessages` já fazia.
+  const TABLES = [
     "profiles",
     "servers",
     "server_members",
@@ -470,26 +476,66 @@ export function subscribeOnlineWorkspace(
     "user_contacts",
     "dm_states",
     "server_privacy_settings",
-  ].map((table) => {
-    const channel = supabase
-      .channel(`workspace:${userId}:${table}`)
-      .on("postgres_changes", { event: "*", schema: "public", table }, refresh);
-    channel.subscribe((status) => {
-      // A tabela pode estar restrita por RLS para este membro. As demais
-      // assinaturas e a reconciliação periódica continuam independentes.
-      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") refresh();
-    });
-    return channel;
-  });
-  // Postgres Changes pode levar alguns segundos para aquecer após o Docker
-  // iniciar. Esta reconciliação mantém navegadores diferentes consistentes
-  // mesmo se o primeiro evento do slot lógico for perdido.
-  const reconcileTimer = window.setInterval(refresh, 2_500);
-  return () => {
-    window.clearTimeout(timer);
-    window.clearInterval(reconcileTimer);
-    void Promise.all(
-      channels.map((channel) => supabase.removeChannel(channel)),
+  ] as const;
+
+  let channel: ReturnType<typeof supabase.channel> | null = null;
+  let attempt = 0;
+  let disposed = false;
+  let retryTimer: number | undefined;
+
+  const connect = () => {
+    if (disposed) return;
+    channel = TABLES.reduce(
+      (built, table) =>
+        built.on(
+          "postgres_changes",
+          { event: "*", schema: "public", table },
+          refresh,
+        ),
+      supabase.channel(`workspace:${userId}`),
     );
+
+    channel.subscribe((status) => {
+      if (disposed) return;
+      if (status === "SUBSCRIBED") {
+        attempt = 0;
+        refresh();
+        return;
+      }
+      if (status !== "CHANNEL_ERROR" && status !== "TIMED_OUT") return;
+      // Uma queda de canal é quase sempre passageira. Reassinar com espera
+      // crescente evita transformar um soluço de rede em enxurrada de
+      // reconexões — que era o que ajudava a derrubar o canal de novo.
+      const current = channel;
+      channel = null;
+      if (current) void supabase.removeChannel(current);
+      refresh();
+      const delay = Math.min(1_000 * 2 ** attempt++, 30_000);
+      retryTimer = window.setTimeout(connect, delay);
+    });
+  };
+  connect();
+
+  // A reconciliação periódica cobre o evento perdido enquanto o canal estava
+  // caído. Eram 2,5 s — vinte e quatro hidratações completas do workspace por
+  // minuto, por aba, para sempre. Trinta segundos cobre o mesmo buraco por uma
+  // fração do tráfego, e a aba escondida não gasta nada.
+  const reconcileTimer = window.setInterval(() => {
+    if (document.visibilityState === "visible") refresh();
+  }, 30_000);
+  // Voltar para a aba é o momento em que o usuário mais precisa de dado
+  // fresco, e é quando o navegador costuma ter congelado os temporizadores.
+  const onVisible = () => {
+    if (document.visibilityState === "visible") refresh();
+  };
+  document.addEventListener("visibilitychange", onVisible);
+
+  return () => {
+    disposed = true;
+    window.clearTimeout(timer);
+    window.clearTimeout(retryTimer);
+    window.clearInterval(reconcileTimer);
+    document.removeEventListener("visibilitychange", onVisible);
+    if (channel) void supabase.removeChannel(channel);
   };
 }

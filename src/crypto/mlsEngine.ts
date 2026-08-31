@@ -309,7 +309,8 @@ export class MlsEngine {
         // a conta para de receber mensagens. Revogamos o dispositivo antigo e
         // recriamos um novo; o histórico anterior permanece indisponível por
         // design E2EE, mas as próximas mensagens voltam a fluir.
-        if (!canRecoverDeviceState(saved.wrappedMasterKey, caught)) throw caught;
+        if (!canRecoverDeviceState(saved.wrappedMasterKey, caught))
+          throw caught;
         console.warn(
           "[mls] Estado E2EE local ilegível; recriando dispositivo",
           caught instanceof Error ? caught.message : caught,
@@ -320,10 +321,7 @@ export class MlsEngine {
           .eq("id", saved.deviceId)
           .is("revoked_at", null);
         await database.devices.delete(userId);
-        await database.channels
-          .where("userId")
-          .equals(userId)
-          .delete();
+        await database.channels.where("userId").equals(userId).delete();
         // O cache de mensagens também é cifrado com a master key perdida.
         // Mantê-lo só produziria linhas indecifráveis para o novo dispositivo.
         await database.messages.clear();
@@ -418,12 +416,12 @@ export class MlsEngine {
       void this.client
         .rpc("touch_device", { p_device_id: this.deviceId })
         .then(({ error }) => {
-          if (error) console.warn("[mls] batimento do dispositivo falhou", error);
+          if (error)
+            console.warn("[mls] batimento do dispositivo falhou", error);
         });
     beat();
     this.heartbeatTimer = setInterval(beat, 45_000);
-    if (typeof window !== "undefined")
-      window.addEventListener("focus", beat);
+    if (typeof window !== "undefined") window.addEventListener("focus", beat);
   }
 
   private async persistProvider() {
@@ -552,7 +550,11 @@ export class MlsEngine {
           userId: this.userId,
           channelId,
           memberDeviceIds: envelope.memberDeviceIds,
-          lastEventSequence: envelope.joinedAfterSequence,
+          lastEventSequence: await this.sequenceJoinedAt(
+            channelId,
+            welcome.epoch,
+            envelope.joinedAfterSequence,
+          ),
         });
       } else {
         const { data: founder, error: founderError } = await this.client.rpc(
@@ -606,6 +608,43 @@ export class MlsEngine {
     });
   }
 
+  /**
+   * A partir de qual evento este dispositivo deve processar commits.
+   *
+   * O Welcome já entrega o estado do grupo na época em que foi emitido, então
+   * todo commit dessa época ou anterior **já está aplicado**. Reprocessá-lo
+   * falha com "An error occurred during AEAD decryption", porque a chave
+   * daquela época não existe mais — era o que quebrava todo servidor novo.
+   *
+   * O envelope antigo prometia um `joinedAfterSequence` que nenhum código
+   * chegava a escrever: o valor chegava `undefined`, o filtro `gt` deixava
+   * passar o histórico inteiro e o primeiro commit alheio derrubava a sincronia
+   * para sempre — sem nunca avançar o marcador, o aplicativo tentava o mesmo
+   * evento a cada ciclo. Ele continua sendo aceito quando presente, para não
+   * depender de quando o remetente atualizou o cliente.
+   */
+  private async sequenceJoinedAt(
+    channelId: string,
+    welcomeEpoch: number,
+    declared?: number,
+  ): Promise<number> {
+    if (typeof declared === "number" && Number.isFinite(declared))
+      return declared;
+    const { data, error } = await this.client
+      .from("mls_group_events")
+      .select("sequence")
+      .eq("channel_id", channelId)
+      .lte("epoch", welcomeEpoch)
+      .order("sequence", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    // Sem conseguir determinar o ponto de entrada, começar do zero traria de
+    // volta exatamente o erro que este método existe para evitar. Melhor
+    // ignorar o histórico: o que veio antes já está no estado do grupo.
+    if (error) return Number.MAX_SAFE_INTEGER;
+    return data ? Number(data.sequence) : 0;
+  }
+
   private async processGroupEvents(channelId: string, group: Group) {
     const state = await this.getChannelState(channelId);
     const { data, error } = await this.client
@@ -623,8 +662,22 @@ export class MlsEngine {
           commit: string;
           memberDeviceIds: string[];
         };
-        group.process_message(this.provider, fromBase64(payload.proposal));
-        group.process_message(this.provider, fromBase64(payload.commit));
+        try {
+          group.process_message(this.provider, fromBase64(payload.proposal));
+          group.process_message(this.provider, fromBase64(payload.commit));
+        } catch (caught) {
+          // Em MLS um commit recusado deixa o estado parado naquela época: os
+          // seguintes também falhariam, então parar aqui preserva o que já foi
+          // aplicado. O que não pode acontecer é propagar o erro — antes ele
+          // subia até a tela e derrubava a listagem inteira, inclusive as
+          // mensagens que este dispositivo consegue ler perfeitamente.
+          traceE2ee("group-event-rejected", {
+            channelId,
+            sequence: Number(event.sequence),
+            reason: caught instanceof Error ? caught.message : String(caught),
+          });
+          break;
+        }
         state.memberDeviceIds = payload.memberDeviceIds;
         changed = true;
       }
@@ -1149,9 +1202,7 @@ export class MlsEngine {
     traceE2ee("messages-listed", {
       channelId,
       total: output.length,
-      locked: output.filter((message) =>
-        message.text.startsWith("🔒"),
-      ).length,
+      locked: output.filter((message) => message.text.startsWith("🔒")).length,
       joined: Boolean(group),
     });
     return output;

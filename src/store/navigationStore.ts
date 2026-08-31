@@ -148,6 +148,22 @@ export function parseLocationHash(hash: string): NavigationLocation | null {
   return { view: "server", serverId: scope, channelId: target, section: "friends" };
 }
 
+/**
+ * `#/invite/<codigo>` → `<codigo>`.
+ *
+ * O convite é uma rota à parte do par Home/servidor porque ainda não se sabe
+ * para onde ele leva: o servidor só é conhecido depois que o código é trocado.
+ */
+export function inviteCodeFromHash(hash: string): string {
+  const parts = hash.replace(/^#/, "").split("/").filter(Boolean);
+  return parts[0] === "invite" && parts[1] ? parts[1] : "";
+}
+
+/** O endereço que se manda para alguém entrar no servidor. */
+export function inviteUrl(code: string): string {
+  return `${window.location.origin}/#/invite/${code}`;
+}
+
 /** Estado → endereço. */
 export function locationHash(state: {
   view: AppView;

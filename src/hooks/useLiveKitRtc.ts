@@ -78,12 +78,25 @@ function rtcErrorMessage(caught: unknown) {
  * plataformas de vídeo usam para conteúdo com movimento: abaixo disso o
  * encoder prefere derrubar a resolução a manter a nitidez.
  */
-function cameraBitrate(resolution: number) {
-  if (resolution >= 2160) return 12_000_000;
-  if (resolution >= 1440) return 7_000_000;
-  if (resolution >= 1080) return 4_500_000;
-  if (resolution >= 720) return 2_000_000;
-  return 1_200_000;
+/**
+ * Só dois modos, e de propósito.
+ *
+ * A câmera oferecia até 4K a 12 Mb/s. Numa implantação em plano gratuito, onde
+ * todos os servidores dividem a mesma banda, um participante em 4K consome o
+ * que dez em 720p consomem — e ninguém percebe a diferença num tile de meia
+ * tela. Os dois modos que sobraram custam quase o mesmo em pixels por segundo:
+ * é a escolha entre movimento fluido e imagem detalhada, não entre barato e
+ * caro.
+ */
+export const CAMERA_MODES = {
+  720: { resolution: 720, frameRate: 60, bitrate: 2_500_000 },
+  1080: { resolution: 1080, frameRate: 30, bitrate: 3_000_000 },
+} as const;
+
+export type CameraResolution = keyof typeof CAMERA_MODES;
+
+export function cameraMode(resolution: number) {
+  return resolution >= 1080 ? CAMERA_MODES[1080] : CAMERA_MODES[720];
 }
 
 function screenShareBitrate({
@@ -94,7 +107,11 @@ function screenShareBitrate({
   frameRate: number;
 }) {
   const base =
-    resolution >= 1440 ? 10_000_000 : resolution >= 1080 ? 6_000_000 : 3_000_000;
+    resolution >= 1440
+      ? 10_000_000
+      : resolution >= 1080
+        ? 6_000_000
+        : 3_000_000;
   return frameRate >= 60
     ? Math.round(base * 1.7)
     : frameRate <= 15
@@ -193,18 +210,19 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
                   // para todas as camadas, e derrubava a resolução na primeira
                   // cena com movimento — a imagem "borrada" que o usuário via.
                   videoEncoding: {
-                    maxBitrate: cameraBitrate(cameraQualityRef.current),
-                    maxFramerate: 30,
+                    maxBitrate: cameraMode(cameraQualityRef.current).bitrate,
+                    maxFramerate: cameraMode(cameraQualityRef.current)
+                      .frameRate,
                     priority: "high",
                   },
-                  degradationPreference: "maintain-resolution",
-                  // Acima de 1080p o custo de codificar três camadas derruba a
-                  // camada principal; nesse caso enviamos um fluxo único.
-                  simulcast: cameraQualityRef.current <= 1080,
-                  videoSimulcastLayers:
-                    cameraQualityRef.current <= 1080
-                      ? [VideoPresets.h540]
-                      : undefined,
+                  // Em 720p60 o que não pode cair é a fluidez; em 1080p30, a
+                  // nitidez. É a única diferença de comportamento entre eles.
+                  degradationPreference:
+                    cameraQualityRef.current >= 1080
+                      ? "maintain-resolution"
+                      : "maintain-framerate",
+                  simulcast: true,
+                  videoSimulcastLayers: [VideoPresets.h540],
                   contentHint: "motion",
                 }
             : {}),
@@ -288,8 +306,19 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
         // continua evitando enviar camadas que ninguém consome.
         adaptiveStream: false,
         dynacast: true,
+        // Sem isto o tratamento fica por conta do padrão do navegador, que
+        // varia entre eles e some por completo em alguns caminhos de captura.
+        // Ventilador, teclado e o eco de quem está sem fone são o barulho
+        // normal de uma chamada, e o navegador já sabe removê-los quando lhe
+        // pedem explicitamente.
+        audioCaptureDefaults: {
+          noiseSuppression: true,
+          echoCancellation: true,
+          autoGainControl: true,
+        },
         videoCaptureDefaults: {
           resolution: VideoPresets.h1080.resolution,
+          frameRate: CAMERA_MODES[1080].frameRate,
         },
         publishDefaults: {
           simulcast: true,
@@ -297,7 +326,10 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
           // parecer borrado num tile grande, e a camada cheia entrega o 1080p.
           // Os valores reais são definidos por track em publishDesiredTracks.
           videoSimulcastLayers: [VideoPresets.h540],
-          videoEncoding: { maxBitrate: 4_500_000, maxFramerate: 30 },
+          videoEncoding: {
+            maxBitrate: CAMERA_MODES[1080].bitrate,
+            maxFramerate: CAMERA_MODES[1080].frameRate,
+          },
           degradationPreference: "maintain-resolution",
           dtx: true,
           red: true,
