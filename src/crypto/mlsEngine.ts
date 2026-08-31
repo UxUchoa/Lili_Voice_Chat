@@ -196,8 +196,12 @@ async function createMasterKey(userId: string) {
     return { key: await importAesKey(raw), wrapped: `desktop:${wrapped}` };
   }
   const reference = crypto.randomUUID();
+  // O nome desta chave também não acompanha o rename: mudá-la faz todo
+  // dispositivo existente perder a master key e ser recriado, e um dispositivo
+  // recriado precisa de um Welcome novo para voltar a ler o canal. Ganho zero,
+  // custo alto.
   sessionStorage.setItem(
-    `lili.mls.master.${userId}.${reference}`,
+    `janja.mls.master.${userId}.${reference}`,
     toBase64(raw),
   );
   return { key: await importAesKey(raw), wrapped: `session:${reference}` };
@@ -213,7 +217,7 @@ async function openMasterKey(userId: string, wrapped: string) {
     return importAesKey(fromBase64(raw));
   }
   const reference = wrapped.slice("session:".length);
-  const raw = sessionStorage.getItem(`lili.mls.master.${userId}.${reference}`);
+  const raw = sessionStorage.getItem(`janja.mls.master.${userId}.${reference}`);
   if (!raw)
     throw new Error(
       "A chave E2EE desta sessão web expirou. Use o app desktop para persistência segura entre reinicializações.",
