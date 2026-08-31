@@ -50,6 +50,11 @@ button {
      de conteúdo encolhia 12px e o ícone (dimensionado em 100%) transbordava
      para a direita — era isso que deixava a barra de servidores desalinhada. */
   padding: 0;
+  /* Mesma história do padding: o padrão do navegador é `buttonface`, um cinza
+     claro. Num tema escuro isso aparece como uma caixa branca em qualquer
+     botão que não declare fundo próprio — foi o que desfigurou a barra de voz
+     conectada. Nenhum botão desta interface depende do fundo do sistema. */
+  background: transparent;
   color: inherit;
   cursor: pointer;
   transition:
@@ -515,7 +520,7 @@ a:focus-visible,
   font-size: 10px;
   text-align: center;
 }
-.channel-row /* Lista de quem está no canal de voz, logo abaixo dele. Precisa declarar
+/* Lista de quem está no canal de voz, logo abaixo dele. Precisa declarar
    `flex-direction: row` explicitamente: o padrão local é coluna, e sem isso
    cada participante iria para uma linha própria dentro do próprio item. */
 /* Voz conectada, no pé da barra lateral, no formato do Discord: estado em
@@ -529,7 +534,10 @@ a:focus-visible,
   margin: 0 8px 6px;
   padding: 8px;
   border-radius: 8px;
-  background: var(--surface-3, #1a1517);
+  /* Cor literal em `background-color`, e não `background: var(...)`: o atalho
+     com variável já falhou aqui e deixou o painel sem fundo nenhum sobre o
+     canvas escuro. Um painel de estado precisa se destacar do fundo. */
+  background-color: #211d20;
 }
 .voice-connected > .voice-connected-status {
   display: flex;
@@ -545,6 +553,7 @@ a:focus-visible,
   align-items: center;
   gap: 8px;
   padding: 0;
+  background: transparent;
   color: #3ba55d;
   text-align: left;
 }
@@ -571,6 +580,7 @@ a:focus-visible,
   display: grid;
   place-items: center;
   border-radius: 6px;
+  background: transparent;
   color: var(--muted);
 }
 .voice-connected-status > .voice-connected-leave:hover {
