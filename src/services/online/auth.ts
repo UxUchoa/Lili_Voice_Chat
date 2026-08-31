@@ -1,5 +1,6 @@
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "./client";
+import { humanizeAuthError } from "./authErrors";
 
 export interface OnlineAccount {
   id: string;
@@ -73,7 +74,7 @@ export async function registerOnlineAccount(input: {
       },
     },
   });
-  if (error) throw error;
+  if (error) throw humanizeAuthError(error);
   if (!data.session) return { status: "pending", email };
   return { status: "active", account: await accountFromUser(data.user!) };
 }
@@ -95,10 +96,12 @@ export async function resendOnlineConfirmationEmail(email: string) {
     email: email.trim().toLowerCase(),
     options: { emailRedirectTo: `${window.location.origin}/` },
   });
-  // "For security purposes" e afins são a resposta do limite de envio. Deixar
-  // vazar essa distinção diria quais endereços existem.
-  if (error && !/security purposes|rate limit/i.test(error.message))
-    throw error;
+  // Limite de envio é informação útil e não revela nada sobre quem tem conta:
+  // dizer "reenviamos" quando nada foi enviado deixaria a pessoa esperando um
+  // e-mail que não existe. Só o "usuário não encontrado" é engolido, porque aí
+  // sim a resposta entregaria quais endereços estão cadastrados.
+  if (error && !/user not found|not found/i.test(error.message))
+    throw humanizeAuthError(error);
 }
 
 export async function loginOnlineAccount(email: string, password: string) {
@@ -106,7 +109,7 @@ export async function loginOnlineAccount(email: string, password: string) {
     email: email.trim().toLowerCase(),
     password,
   });
-  if (error) throw error;
+  if (error) throw humanizeAuthError(error);
   return accountFromUser(data.user);
 }
 
@@ -126,7 +129,7 @@ export async function requestOnlinePasswordReset(email: string) {
     email.trim().toLowerCase(),
     { redirectTo: `${window.location.origin}/` },
   );
-  if (error) throw error;
+  if (error) throw humanizeAuthError(error);
 }
 
 /**

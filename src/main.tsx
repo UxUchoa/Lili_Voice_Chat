@@ -901,49 +901,102 @@ function NewDirectMessageModal({
  * elemento de servidor aparece nesta coluna.
  */
 /**
- * Barra de "voz conectada", no pé de qualquer barra lateral.
+ * Barra de voz conectada, no pé da barra lateral.
  *
- * É o que torna possível sair do canal de voz sem sair da chamada: enquanto
- * ela aparece, a conexão está viva em algum canal, e um clique leva de volta
- * para lá. Sem isso, quem navegasse para um canal de texto perderia de vista o
- * fato de ainda estar em chamada.
+ * É o que permite ler outro canal sem sair da chamada: enquanto ela aparece, a
+ * conexão está viva em algum lugar, e nada além do botão vermelho a encerra.
+ * O formato segue o do Discord porque ele resolve bem o problema — estado em
+ * cima, ações embaixo — e porque é o que a pessoa já sabe ler.
+ *
+ * Sem `title`: o balão nativo do navegador aparecia por cima do próprio painel
+ * numa caixa branca, ilegível sobre o tema escuro. Os rótulos vão em
+ * `aria-label`, que o leitor de tela usa e o navegador não desenha.
  */
+export interface VoiceControls {
+  micMuted: boolean;
+  cameraOn: boolean;
+  sharing: boolean;
+  toggleMic: () => void;
+  toggleCamera: () => void;
+  toggleShare: () => void;
+}
+
 function VoiceConnectedPanel({
   channel,
+  micMuted,
+  cameraOn,
+  sharing,
   onReturn,
+  onToggleMic,
+  onToggleCamera,
+  onToggleShare,
   onLeave,
 }: {
   channel: Channel;
+  micMuted: boolean;
+  cameraOn: boolean;
+  sharing: boolean;
   onReturn: () => void;
+  onToggleMic: () => void;
+  onToggleCamera: () => void;
+  onToggleShare: () => void;
   onLeave: () => void;
 }) {
   return (
     <div className="voice-connected">
-      <button
-        className="voice-connected-link"
-        onClick={onReturn}
-        title="Voltar ao canal"
-      >
-        <IconVolume size={16} />
-        <span>
-          <b>Voz conectada</b>
-          <small>{channel.name}</small>
-        </span>
-      </button>
-      <button
-        className="voice-connected-leave"
-        aria-label="Sair da chamada"
-        title="Sair da chamada"
-        onClick={onLeave}
-      >
-        <IconPhoneOff size={16} />
-      </button>
+      <div className="voice-connected-status">
+        <button
+          className="voice-connected-link"
+          aria-label={`Voltar para ${channel.name}`}
+          onClick={onReturn}
+        >
+          <IconVolume size={15} />
+          <span>
+            <b>Voz conectada</b>
+            <small>{channel.name}</small>
+          </span>
+        </button>
+        <button
+          className="voice-connected-leave"
+          aria-label="Desconectar da chamada"
+          onClick={onLeave}
+        >
+          <IconPhoneOff size={15} />
+        </button>
+      </div>
+      <div className="voice-connected-actions">
+        <button
+          aria-label={micMuted ? "Ativar microfone" : "Silenciar microfone"}
+          aria-pressed={micMuted}
+          className={micMuted ? "off" : ""}
+          onClick={onToggleMic}
+        >
+          {micMuted ? <IconMicOff size={15} /> : <IconMic size={15} />}
+        </button>
+        <button
+          aria-label={cameraOn ? "Desligar câmera" : "Ligar câmera"}
+          aria-pressed={cameraOn}
+          className={cameraOn ? "" : "off"}
+          onClick={onToggleCamera}
+        >
+          {cameraOn ? <IconVideo size={15} /> : <IconVideoOff size={15} />}
+        </button>
+        <button
+          aria-label={sharing ? "Parar de compartilhar" : "Compartilhar tela"}
+          aria-pressed={sharing}
+          className={sharing ? "active" : ""}
+          onClick={onToggleShare}
+        >
+          <IconScreenShare size={15} />
+        </button>
+      </div>
     </div>
   );
 }
 
 function DirectMessageSidebar({
   connectedVoice,
+  voiceControls,
   onLeaveVoice,
   section,
   activeChannelId,
@@ -957,6 +1010,7 @@ function DirectMessageSidebar({
 }: {
   /** Canal de voz em que esta pessoa está agora, se houver. */
   connectedVoice?: Channel;
+  voiceControls?: VoiceControls | null;
   onLeaveVoice: () => void;
   section: "friends" | "requests" | "dm";
   activeChannelId: string;
@@ -1286,10 +1340,16 @@ function DirectMessageSidebar({
           )}
         </div>
       </div>
-      {connectedVoice && (
+      {connectedVoice && voiceControls && (
         <VoiceConnectedPanel
           channel={connectedVoice}
+          micMuted={voiceControls.micMuted}
+          cameraOn={voiceControls.cameraOn}
+          sharing={voiceControls.sharing}
           onReturn={() => onChannel(connectedVoice.id)}
+          onToggleMic={voiceControls.toggleMic}
+          onToggleCamera={voiceControls.toggleCamera}
+          onToggleShare={voiceControls.toggleShare}
           onLeave={onLeaveVoice}
         />
       )}
@@ -1362,6 +1422,7 @@ function ChannelSidebar({
   activeChannelId,
   voiceMembers,
   connectedVoice,
+  voiceControls,
   onLeaveVoice,
   onChannel,
   onSettings,
@@ -1378,6 +1439,7 @@ function ChannelSidebar({
   voiceMembers: OnlineVoiceMembers;
   /** Canal de voz em que esta pessoa está agora, se houver. */
   connectedVoice?: Channel;
+  voiceControls?: VoiceControls | null;
   onLeaveVoice: () => void;
   onChannel: (id: string) => void;
   onSettings: () => void;
@@ -1963,10 +2025,16 @@ function ChannelSidebar({
           </button>
         )}
       </div>
-      {connectedVoice && (
+      {connectedVoice && voiceControls && (
         <VoiceConnectedPanel
           channel={connectedVoice}
+          micMuted={voiceControls.micMuted}
+          cameraOn={voiceControls.cameraOn}
+          sharing={voiceControls.sharing}
           onReturn={() => onChannel(connectedVoice.id)}
+          onToggleMic={voiceControls.toggleMic}
+          onToggleCamera={voiceControls.toggleCamera}
+          onToggleShare={voiceControls.toggleShare}
           onLeave={onLeaveVoice}
         />
       )}
@@ -3516,10 +3584,19 @@ function CallView({
   onLeave,
   startWithVideo = false,
   hidden = false,
+  onControls,
 }: {
   channel: Channel;
   onLeave: () => void;
   startWithVideo?: boolean;
+  /**
+   * Publica estado e controles da chamada para a barra lateral.
+   *
+   * Microfone, câmera e tela vivem aqui dentro porque dependem dos streams
+   * locais. A barra flutuante precisa deles para funcionar mesmo com este
+   * componente escondido — que é o ponto todo dela.
+   */
+  onControls?: (controls: VoiceControls | null) => void;
   /**
    * Fora de vista, mas vivo. `display: none` mantém o componente montado, os
    * vídeos assinados e o áudio tocando — desmontar seria desconectar, que é
@@ -3900,6 +3977,21 @@ function CallView({
     if (document.fullscreenElement === element) await document.exitFullscreen();
     else await element.requestFullscreen();
   };
+  // Republica sempre que o estado muda: a barra precisa refletir o microfone
+  // silenciado agora, não o de quando a chamada começou.
+  useEffect(() => {
+    onControls?.({
+      micMuted,
+      cameraOn: video,
+      sharing,
+      toggleMic: () => void toggleMic(),
+      toggleCamera: () => void toggleVideo(),
+      toggleShare: () => toggleSharing(),
+    });
+    return () => onControls?.(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [micMuted, video, sharing]);
+
   const toggleFullscreen = async () => {
     if (document.fullscreenElement) await document.exitFullscreen();
     else await callViewRef.current?.requestFullscreen();
@@ -9096,6 +9188,9 @@ function App({
       channelId: string;
       withVideo: boolean;
     } | null>(null),
+    // Controles da chamada, publicados pelo CallView. Ficam aqui porque a
+    // barra lateral precisa deles mesmo com a chamada escondida.
+    [voiceControls, setVoiceControls] = useState<VoiceControls | null>(null),
     [previewUserId, setPreviewUserId] = useState<string | null>(null),
     [directUnreads, setDirectUnreads] = useState<DirectChannelUnread[]>([]),
     [voiceMembers, setVoiceMembers] = useState<OnlineVoiceMembers>({}),
@@ -9627,6 +9722,7 @@ function App({
         {view === "home" ? (
           <DirectMessageSidebar
             connectedVoice={callChannel}
+            voiceControls={voiceControls}
             onLeaveVoice={() => void leaveCall()}
             section={section}
             activeChannelId={activeDmChannel?.id ?? ""}
@@ -9644,6 +9740,7 @@ function App({
             activeChannelId={activeChannel?.id ?? ""}
             voiceMembers={voiceMembers}
             connectedVoice={callChannel}
+            voiceControls={voiceControls}
             onLeaveVoice={() => void leaveCall()}
             onChannel={selectChannel}
             onSettings={() => setSettingsOpen(true)}
@@ -9668,6 +9765,7 @@ function App({
             channel={callChannel}
             startWithVideo={activeCall.withVideo}
             hidden={activeChannel?.id !== activeCall.channelId}
+            onControls={setVoiceControls}
             onLeave={() => void leaveCall()}
           />
         )}

@@ -518,20 +518,26 @@ a:focus-visible,
 .channel-row /* Lista de quem está no canal de voz, logo abaixo dele. Precisa declarar
    `flex-direction: row` explicitamente: o padrão local é coluna, e sem isso
    cada participante iria para uma linha própria dentro do próprio item. */
-/* Voz conectada, no pé da barra lateral. É o que permite navegar para outro
-   canal sem perder de vista que a chamada continua de pé. */
+/* Voz conectada, no pé da barra lateral, no formato do Discord: estado em
+   cima, ações embaixo. Cada container declara `flex-direction: row`
+   explicitamente — o padrão local é coluna, e sem isso cada botão iria para
+   uma linha própria. */
 .voice-connected {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 8px 6px;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--surface-3, #1a1517);
+}
+.voice-connected > .voice-connected-status {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 4px;
-  margin: 0 8px 4px;
-  padding: 6px 8px;
-  border: 1px solid rgba(60, 200, 120, 0.28);
-  border-radius: 8px;
-  background: rgba(30, 160, 90, 0.12);
+  gap: 6px;
 }
-.voice-connected > .voice-connected-link {
+.voice-connected-status > .voice-connected-link {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -539,15 +545,17 @@ a:focus-visible,
   align-items: center;
   gap: 8px;
   padding: 0;
-  color: #58d68d;
+  color: #3ba55d;
   text-align: left;
 }
 .voice-connected-link > span {
   min-width: 0;
   display: grid;
+  gap: 1px;
 }
 .voice-connected-link b {
   font-size: 12px;
+  font-weight: 700;
 }
 .voice-connected-link small {
   overflow: hidden;
@@ -556,17 +564,42 @@ a:focus-visible,
   white-space: nowrap;
   font-size: 11px;
 }
-.voice-connected > .voice-connected-leave {
+.voice-connected-status > .voice-connected-leave {
   flex: none;
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   display: grid;
   place-items: center;
   border-radius: 6px;
+  color: var(--muted);
+}
+.voice-connected-status > .voice-connected-leave:hover {
+  color: #ff8d94;
+  background: rgba(240, 12, 20, 0.16);
+}
+.voice-connected > .voice-connected-actions {
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+}
+.voice-connected-actions > button {
+  flex: 1;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}
+.voice-connected-actions > button:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+.voice-connected-actions > button.off {
   color: #ff8d94;
 }
-.voice-connected > .voice-connected-leave:hover {
-  background: rgba(240, 12, 20, 0.16);
+.voice-connected-actions > button.active {
+  color: #3ba55d;
+  background: rgba(59, 165, 93, 0.16);
 }
 
 .voice-members {
@@ -745,6 +778,13 @@ a:focus-visible,
   flex-direction: column;
   background: var(--canvas);
   animation: content-enter 180ms ease-out backwards;
+}
+/* O atributo `hidden` vem do agente do usuário com especificidade zero, então
+   qualquer `display` declarado aqui o anula — era por isso que a chamada
+   continuava ocupando metade da tela ao abrir um canal de texto, em vez de
+   apenas seguir viva em segundo plano. */
+.call-view[hidden] {
+  display: none;
 }
 .conversation-header,
 .call-header {
