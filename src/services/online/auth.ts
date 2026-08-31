@@ -78,6 +78,29 @@ export async function registerOnlineAccount(input: {
   return { status: "active", account: await accountFromUser(data.user!) };
 }
 
+/**
+ * Reenvia o e-mail de confirmação do cadastro.
+ *
+ * Existe porque a primeira mensagem se perde com frequência — filtro de spam,
+ * limite de envio do provedor, endereço digitado e corrigido depois. Sem um
+ * botão, a conta fica criada e inacessível, e a pessoa não tem o que fazer
+ * além de criar outra com outro e-mail.
+ *
+ * Responde igual para e-mail cadastrado e desconhecido, como o pedido de
+ * redefinição: o formulário não pode virar um consultor de quem tem conta.
+ */
+export async function resendOnlineConfirmationEmail(email: string) {
+  const { error } = await supabase.auth.resend({
+    type: "signup",
+    email: email.trim().toLowerCase(),
+    options: { emailRedirectTo: `${window.location.origin}/` },
+  });
+  // "For security purposes" e afins são a resposta do limite de envio. Deixar
+  // vazar essa distinção diria quais endereços existem.
+  if (error && !/security purposes|rate limit/i.test(error.message))
+    throw error;
+}
+
 export async function loginOnlineAccount(email: string, password: string) {
   const { data, error } = await supabase.auth.signInWithPassword({
     email: email.trim().toLowerCase(),

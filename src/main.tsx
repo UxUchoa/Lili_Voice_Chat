@@ -44,6 +44,7 @@ import {
   isPasswordRecoveryLink,
   registerOnlineAccount,
   requestOnlinePasswordReset,
+  resendOnlineConfirmationEmail,
   revokeOnlineAccountSession,
   revokeOtherOnlineAccountSessions,
   updateOnlinePassword,
@@ -196,6 +197,8 @@ import {
   IconHeadphonesOff,
   IconHelp,
   IconInbox,
+  IconEye,
+  IconEyeOff,
   IconMaximize,
   IconMessage,
   IconMic,
@@ -897,7 +900,51 @@ function NewDirectMessageModal({
  * comunicação privada — amigos, solicitações e conversas diretas. Nenhum
  * elemento de servidor aparece nesta coluna.
  */
+/**
+ * Barra de "voz conectada", no pé de qualquer barra lateral.
+ *
+ * É o que torna possível sair do canal de voz sem sair da chamada: enquanto
+ * ela aparece, a conexão está viva em algum canal, e um clique leva de volta
+ * para lá. Sem isso, quem navegasse para um canal de texto perderia de vista o
+ * fato de ainda estar em chamada.
+ */
+function VoiceConnectedPanel({
+  channel,
+  onReturn,
+  onLeave,
+}: {
+  channel: Channel;
+  onReturn: () => void;
+  onLeave: () => void;
+}) {
+  return (
+    <div className="voice-connected">
+      <button
+        className="voice-connected-link"
+        onClick={onReturn}
+        title="Voltar ao canal"
+      >
+        <IconVolume size={16} />
+        <span>
+          <b>Voz conectada</b>
+          <small>{channel.name}</small>
+        </span>
+      </button>
+      <button
+        className="voice-connected-leave"
+        aria-label="Sair da chamada"
+        title="Sair da chamada"
+        onClick={onLeave}
+      >
+        <IconPhoneOff size={16} />
+      </button>
+    </div>
+  );
+}
+
 function DirectMessageSidebar({
+  connectedVoice,
+  onLeaveVoice,
   section,
   activeChannelId,
   unreads,
@@ -908,6 +955,9 @@ function DirectMessageSidebar({
   onProfilePreview,
   onCall,
 }: {
+  /** Canal de voz em que esta pessoa está agora, se houver. */
+  connectedVoice?: Channel;
+  onLeaveVoice: () => void;
   section: "friends" | "requests" | "dm";
   activeChannelId: string;
   unreads: DirectChannelUnread[];
@@ -1236,6 +1286,13 @@ function DirectMessageSidebar({
           )}
         </div>
       </div>
+      {connectedVoice && (
+        <VoiceConnectedPanel
+          channel={connectedVoice}
+          onReturn={() => onChannel(connectedVoice.id)}
+          onLeave={onLeaveVoice}
+        />
+      )}
       <button className="user-panel" onClick={onProfile}>
         <Avatar person={currentUser} size="sm" />
         <div className="user-copy">
@@ -1304,6 +1361,8 @@ function ChannelSidebar({
   serverId,
   activeChannelId,
   voiceMembers,
+  connectedVoice,
+  onLeaveVoice,
   onChannel,
   onSettings,
   onProfile,
@@ -1317,6 +1376,9 @@ function ChannelSidebar({
    * instante.
    */
   voiceMembers: OnlineVoiceMembers;
+  /** Canal de voz em que esta pessoa está agora, se houver. */
+  connectedVoice?: Channel;
+  onLeaveVoice: () => void;
   onChannel: (id: string) => void;
   onSettings: () => void;
   onProfile: () => void;
@@ -1816,7 +1878,7 @@ function ChannelSidebar({
                       <IconHash size={18} />
                     )}
                     <span>{channel.name}</span>
-                    {channel.kind === "voice" && (
+                    {channel.kind === "voice" && voiceCount(channel.id) > 0 && (
                       <em
                         className="people-count"
                         aria-label={`${voiceCount(channel.id)} participantes`}
@@ -1878,12 +1940,14 @@ function ChannelSidebar({
               >
                 <IconVolume size={18} />
                 <span>{channel.name}</span>
-                <em
-                  className="people-count"
-                  aria-label={`${voiceCount(channel.id)} participantes`}
-                >
-                  {voiceCount(channel.id)}
-                </em>
+                {voiceCount(channel.id) > 0 && (
+                  <em
+                    className="people-count"
+                    aria-label={`${voiceCount(channel.id)} participantes`}
+                  >
+                    {voiceCount(channel.id)}
+                  </em>
+                )}
               </button>
               <VoiceChannelMembers
                 members={voiceMembers[channel.id] ?? []}
@@ -1899,6 +1963,13 @@ function ChannelSidebar({
           </button>
         )}
       </div>
+      {connectedVoice && (
+        <VoiceConnectedPanel
+          channel={connectedVoice}
+          onReturn={() => onChannel(connectedVoice.id)}
+          onLeave={onLeaveVoice}
+        />
+      )}
       <button className="user-panel" onClick={onProfile}>
         <Avatar person={currentUser} size="sm" />
         <div className="user-copy">
@@ -3378,8 +3449,7 @@ const TILE_ASPECT = 16 / 9;
  * Ver CAMERA_MODES em useLiveKitRtc para o porquê de 1440p e 4K terem saído.
  */
 const CAMERA_RESOLUTIONS: Array<{ value: CameraResolution; label: string }> = [
-  { value: 720, label: "720p · 60 fps (movimento)" },
-  { value: 1080, label: "1080p · 30 fps (detalhe)" },
+  { value: 720, label: "720p · 60 fps" },
 ];
 
 /**
@@ -3445,10 +3515,17 @@ function CallView({
   channel,
   onLeave,
   startWithVideo = false,
+  hidden = false,
 }: {
   channel: Channel;
   onLeave: () => void;
   startWithVideo?: boolean;
+  /**
+   * Fora de vista, mas vivo. `display: none` mantém o componente montado, os
+   * vídeos assinados e o áudio tocando — desmontar seria desconectar, que é
+   * exatamente o que este parâmetro existe para evitar.
+   */
+  hidden?: boolean;
 }) {
   const [micMuted, setMicMuted] = useState(true),
     [video, setVideo] = useState(false),
@@ -3468,15 +3545,15 @@ function CallView({
     [deafened, setDeafened] = useState(false),
     [shareQuality, setShareQuality] = useState<ShareQuality>({
       resolution: 1080,
-      frameRate: 30,
+      frameRate: 60,
     }),
     [sharePickerOpen, setSharePickerOpen] = useState(false),
     [cameraQuality, setCameraQualityState] = useState<CameraResolution>(() => {
-      // Quem tinha 1440p ou 4K salvo cai em 1080p sem precisar fazer nada:
-      // aqueles modos deixaram de existir, e travar numa preferência inválida
-      // deixaria a câmera sem qualidade definida.
-      const saved = Number(localStorage.getItem("janja.camera.quality"));
-      return saved === 720 ? 720 : 1080;
+      // A câmera tem um modo só. Qualquer preferência antiga — 1080p, 1440p,
+      // 4K — cai aqui sem precisar de nada: rosto em movimento a 720p60 custa
+      // uma fração e não se distingue num tile de meia tela.
+      localStorage.getItem("janja.camera.quality");
+      return 720;
     }),
     [openMenu, setOpenMenu] = useState<"audio" | "video" | "share" | null>(
       null,
@@ -3808,6 +3885,17 @@ function CallView({
       );
     }
   };
+  /**
+   * Tela cheia de um tile específico.
+   *
+   * Sair é pelo Esc, que o navegador já trata — não vale prender um botão de
+   * fechar por cima de uma apresentação.
+   */
+  const toggleTileFullscreen = async (element: Element | null) => {
+    if (!element) return;
+    if (document.fullscreenElement === element) await document.exitFullscreen();
+    else await element.requestFullscreen();
+  };
   const toggleFullscreen = async () => {
     if (document.fullscreenElement) await document.exitFullscreen();
     else await callViewRef.current?.requestFullscreen();
@@ -4128,6 +4216,22 @@ function CallView({
             />
           </div>
         )}
+        {tile.type === "screen" && (
+          // Tela cheia por tile, e não da chamada inteira: quem está vendo
+          // uma apresentação quer a apresentação ocupando o monitor, não a
+          // grade de participantes ampliada em volta dela.
+          <button
+            className="tile-fullscreen"
+            aria-label="Ver em tela cheia"
+            title="Ver em tela cheia"
+            onClick={(event) => {
+              event.stopPropagation();
+              void toggleTileFullscreen(event.currentTarget.parentElement);
+            }}
+          >
+            <IconMaximize size={16} />
+          </button>
+        )}
         <div className="tile-overlay">
           {tile.type === "screen" ? (
             <span className="tile-badge live">AO VIVO</span>
@@ -4174,7 +4278,12 @@ function CallView({
     );
   };
   return (
-    <main className="call-view" ref={callViewRef}>
+    <main
+      className="call-view"
+      ref={callViewRef}
+      hidden={hidden}
+      aria-hidden={hidden || undefined}
+    >
       <div className="call-header">
         <div className="conversation-title">
           <span className="channel-symbol voice">
@@ -4509,7 +4618,11 @@ function CallView({
                   <>
                     <div className="device-menu-group">
                       <span className="device-menu-label">RESOLUÇÃO</span>
-                      {([720, 1080, 1440] as const).map((resolution) => (
+                      {/* 1440p saiu: numa implantação em plano gratuito, onde
+                          todos os servidores dividem a mesma banda, a camada
+                          extra custa quase o dobro e some num tile de meia
+                          tela. O teto é 1080p. */}
+                      {([720, 1080] as const).map((resolution) => (
                         <button
                           key={resolution}
                           role="menuitemradio"
@@ -9119,6 +9232,10 @@ function App({
   const callChannel = channels.find(
     (channel) => channel.id === activeCall?.channelId,
   );
+  /** O canal aberto é a chamada em andamento? Então ela ocupa a tela. */
+  const viewingActiveCall = Boolean(
+    activeCall && callChannel && activeChannel?.id === activeCall.channelId,
+  );
 
   const directCallBlocked = (channel?: Channel) =>
     Boolean(
@@ -9171,7 +9288,10 @@ function App({
   useOnlinePresence(currentUserId);
   useForegroundNotifications(
     currentUserId,
-    activeCall ? "" : (activeChannel?.id ?? ""),
+    // Antes a listagem era suprimida durante a chamada, porque a chamada
+    // ocupava a tela inteira. Agora dá para ler outro canal em voz, e suprimir
+    // deixaria a conversa vazia.
+    activeChannel?.id ?? "",
   );
 
   // ---------------------------------------------------------------
@@ -9502,6 +9622,8 @@ function App({
         />
         {view === "home" ? (
           <DirectMessageSidebar
+            connectedVoice={callChannel}
+            onLeaveVoice={() => void leaveCall()}
             section={section}
             activeChannelId={activeDmChannel?.id ?? ""}
             unreads={directUnreads}
@@ -9517,6 +9639,8 @@ function App({
             serverId={navServerId}
             activeChannelId={activeChannel?.id ?? ""}
             voiceMembers={voiceMembers}
+            connectedVoice={callChannel}
+            onLeaveVoice={() => void leaveCall()}
             onChannel={selectChannel}
             onSettings={() => setSettingsOpen(true)}
             onProfile={() => setProfileOpen(true)}
@@ -9527,13 +9651,23 @@ function App({
             <p>Crie um servidor ou entre com um convite.</p>
           </aside>
         )}
-        {activeCall && callChannel ? (
+        {/*
+          A chamada vive **fora** da rota. Antes ela era um ramo do mesmo
+          ternário que escolhe entre conversa e canal de voz, então clicar num
+          canal de texto desmontava o componente — e desmontar desconecta.
+          Ficar em voz enquanto se lê outro canal é o comportamento esperado de
+          qualquer aplicativo do tipo, e depende só disto: manter montado.
+          Escondido, o vídeo continua assinado e voltar é instantâneo.
+        */}
+        {activeCall && callChannel && (
           <CallView
             channel={callChannel}
             startWithVideo={activeCall.withVideo}
+            hidden={activeChannel?.id !== activeCall.channelId}
             onLeave={() => void leaveCall()}
           />
-        ) : view === "home" ? (
+        )}
+        {viewingActiveCall ? null : view === "home" ? (
           section === "requests" ? (
             <MessageRequestsView
               onChannel={selectDirectChannel}
@@ -9577,15 +9711,23 @@ function App({
             </button>
           </main>
         ) : activeChannel.kind === "voice" ? (
-          <CallView
-            channel={activeChannel}
-            onLeave={() => {
-              const textChannel = serverChannels.find(
-                (channel) => channel.kind === "text",
-              );
-              if (textChannel) selectChannel(textChannel.id);
-            }}
-          />
+          // Canal de voz aberto sem estar conectado nele: entrar é um clique,
+          // não um efeito colateral de navegar.
+          <main className="workspace-empty">
+            <IconVolume size={40} />
+            <h1>{activeChannel.name}</h1>
+            <p>
+              {voiceMembers[activeChannel.id]?.length
+                ? "A conversa já começou. Entre para ouvir e falar."
+                : "Ninguém aqui ainda. Entre e espere, ou chame alguém."}
+            </p>
+            <button
+              className="primary-button"
+              onClick={() => startCall(activeChannel.id, false)}
+            >
+              Entrar no canal
+            </button>
+          </main>
         ) : (
           <ChatView
             channel={activeChannel}
@@ -9686,6 +9828,54 @@ function App({
  * aplicativo com a senha antiga ainda valendo. Funciona, mas não é o que ela
  * pediu ao clicar em "esqueci a senha": ela sai de lá achando que trocou.
  */
+/**
+ * Campo de senha com olhinho.
+ *
+ * Digitar senha às cegas num teclado de celular, ou com um gerenciador que
+ * cola valores longos, é a origem mais comum de "senha incorreta" em conta que
+ * existe e está certa. O padrão continua oculto; revelar é uma escolha, e o
+ * estado volta a oculto sempre que o campo é remontado.
+ */
+function PasswordField({
+  label,
+  value,
+  onChange,
+  autoFocus = false,
+  onEnter,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  autoFocus?: boolean;
+  onEnter?: () => void;
+}) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <label>
+      {label}
+      <span className="password-field">
+        <input
+          type={visible ? "text" : "password"}
+          autoFocus={autoFocus}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          onKeyDown={(event) => event.key === "Enter" && onEnter?.()}
+        />
+        <button
+          type="button"
+          className="password-reveal"
+          aria-label={visible ? "Ocultar senha" : "Mostrar senha"}
+          title={visible ? "Ocultar senha" : "Mostrar senha"}
+          aria-pressed={visible}
+          onClick={() => setVisible((current) => !current)}
+        >
+          {visible ? <IconEyeOff size={16} /> : <IconEye size={16} />}
+        </button>
+      </span>
+    </label>
+  );
+}
+
 function NewPasswordCard({ onDone }: { onDone: () => void }) {
   const [password, setPassword] = useState(""),
     [confirmation, setConfirmation] = useState(""),
@@ -9726,24 +9916,18 @@ function NewPasswordCard({ onDone }: { onDone: () => void }) {
           O link do e-mail já provou que a conta é sua. Escolha a senha nova
           agora — as outras sessões abertas serão encerradas.
         </p>
-        <label>
-          Senha nova
-          <input
-            type="password"
-            autoFocus
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
-        </label>
-        <label>
-          Repita a senha
-          <input
-            type="password"
-            value={confirmation}
-            onChange={(event) => setConfirmation(event.target.value)}
-            onKeyDown={(event) => event.key === "Enter" && void submit()}
-          />
-        </label>
+        <PasswordField
+          label="Senha nova"
+          autoFocus
+          value={password}
+          onChange={setPassword}
+        />
+        <PasswordField
+          label="Repita a senha"
+          value={confirmation}
+          onChange={setConfirmation}
+          onEnter={() => void submit()}
+        />
         {error && (
           <div className="auth-error" role="alert">
             {error}
@@ -9772,6 +9956,10 @@ function OnlineAuthGate() {
     // O link de recuperação autentica a pessoa sozinho, então a tela de senha
     // nova precisa se impor antes de o aplicativo abrir.
     [recovering, setRecovering] = useState(isPasswordRecoveryLink),
+    // Conta criada esperando confirmação. Guardado para que o reenvio saiba
+    // para onde mandar sem obrigar a pessoa a digitar o e-mail de novo.
+    [awaitingConfirmation, setAwaitingConfirmation] = useState(""),
+    [resending, setResending] = useState(false),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false);
@@ -9837,6 +10025,7 @@ function OnlineAuthGate() {
           // justamente quando deu certo.
           setMode("login");
           setPassword("");
+          setAwaitingConfirmation(result.email);
           setNotice(
             `Conta criada. Abra o link que enviamos para ${result.email} e depois entre por aqui.`,
           );
@@ -9921,15 +10110,12 @@ function OnlineAuthGate() {
           />
         </label>
         {mode !== "recover" && (
-          <label>
-            Senha
-            <input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              onKeyDown={(event) => event.key === "Enter" && void submit()}
-            />
-          </label>
+          <PasswordField
+            label="Senha"
+            value={password}
+            onChange={setPassword}
+            onEnter={() => void submit()}
+          />
         )}
         {error && (
           <div className="auth-error" role="alert">
@@ -9939,6 +10125,33 @@ function OnlineAuthGate() {
         {notice && (
           <div className="auth-notice" role="status">
             {notice}
+            {awaitingConfirmation && (
+              <button
+                className="auth-inline-action"
+                disabled={resending}
+                onClick={() => {
+                  void (async () => {
+                    setResending(true);
+                    try {
+                      await resendOnlineConfirmationEmail(awaitingConfirmation);
+                      setNotice(
+                        `Reenviamos para ${awaitingConfirmation}. Se não chegar, confira a caixa de spam.`,
+                      );
+                    } catch (caught) {
+                      setError(
+                        caught instanceof Error
+                          ? caught.message
+                          : "Não foi possível reenviar agora.",
+                      );
+                    } finally {
+                      setResending(false);
+                    }
+                  })();
+                }}
+              >
+                {resending ? "Reenviando…" : "Não chegou? Reenviar"}
+              </button>
+            )}
           </div>
         )}
         <button

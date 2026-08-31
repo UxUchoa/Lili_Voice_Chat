@@ -518,6 +518,57 @@ a:focus-visible,
 .channel-row /* Lista de quem está no canal de voz, logo abaixo dele. Precisa declarar
    `flex-direction: row` explicitamente: o padrão local é coluna, e sem isso
    cada participante iria para uma linha própria dentro do próprio item. */
+/* Voz conectada, no pé da barra lateral. É o que permite navegar para outro
+   canal sem perder de vista que a chamada continua de pé. */
+.voice-connected {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  margin: 0 8px 4px;
+  padding: 6px 8px;
+  border: 1px solid rgba(60, 200, 120, 0.28);
+  border-radius: 8px;
+  background: rgba(30, 160, 90, 0.12);
+}
+.voice-connected > .voice-connected-link {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  color: #58d68d;
+  text-align: left;
+}
+.voice-connected-link > span {
+  min-width: 0;
+  display: grid;
+}
+.voice-connected-link b {
+  font-size: 12px;
+}
+.voice-connected-link small {
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+.voice-connected > .voice-connected-leave {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  color: #ff8d94;
+}
+.voice-connected > .voice-connected-leave:hover {
+  background: rgba(240, 12, 20, 0.16);
+}
+
 .voice-members {
   margin: 0 0 2px;
   padding: 0 0 0 26px;
@@ -556,9 +607,14 @@ a:focus-visible,
   letter-spacing: 0.04em;
 }
 
-.people-count {
+.channel-row em.people-count {
+  /* Qualificado pelo pai de propósito: `.channel-row em` é (0,1,1) e vence uma
+     classe sozinha (0,1,0), então `.people-count` nunca chegava a valer e o
+     contador saía branco no vermelho da marca — igual a um badge de menção não
+     lida. Quantidade de gente num canal é informação neutra. */
   color: var(--muted);
   background: transparent;
+  font-weight: 600;
 }
 .channel-row.voice-active {
   background: rgba(240, 12, 20, 0.12);
@@ -2642,6 +2698,45 @@ a:focus-visible,
   background: rgba(240, 12, 20, 0.08);
   font-size: 11px;
 }
+/* Campo de senha com o botão de revelar dentro da caixa. O input precisa de
+   `padding-right` para o texto não passar por baixo do olho. */
+.password-field {
+  position: relative;
+  display: block;
+}
+.password-field > input {
+  width: 100%;
+  padding-right: 40px;
+}
+.password-field > .password-reveal {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--muted);
+}
+.password-field > .password-reveal:hover,
+.password-field > .password-reveal[aria-pressed="true"] {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}
+/* Ação dentro do aviso, como o reenvio da confirmação. */
+.auth-notice > .auth-inline-action {
+  display: block;
+  margin-top: 6px;
+  padding: 0;
+  color: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .auth-links {
   display: flex;
   justify-content: space-between;
@@ -3770,6 +3865,41 @@ a:focus-visible,
   place-items: center;
   background: linear-gradient(145deg, #241d20, #141013);
 }
+/* Tela cheia do tile de compartilhamento. Fica escondido até o ponteiro
+   chegar ao tile: um botão permanente por cima de uma apresentação é ruído. */
+.participant-tile > .tile-fullscreen {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: white;
+  background: rgba(0, 0, 0, 0.55);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.participant-tile:hover > .tile-fullscreen,
+.participant-tile > .tile-fullscreen:focus-visible {
+  opacity: 1;
+}
+.participant-tile > .tile-fullscreen:hover {
+  background: rgba(0, 0, 0, 0.75);
+}
+/* Em tela cheia o vídeo precisa caber inteiro: `cover` cortaria justamente as
+   bordas de um slide ou de uma janela de código. */
+.participant-tile:fullscreen {
+  background: black;
+}
+.participant-tile:fullscreen .tile-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
 .tile-overlay {
   position: absolute;
   left: 8px;

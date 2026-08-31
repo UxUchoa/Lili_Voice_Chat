@@ -88,12 +88,10 @@ function screenShareBitrate({
   resolution: number;
   frameRate: number;
 }) {
-  const base =
-    resolution >= 1440
-      ? 10_000_000
-      : resolution >= 1080
-        ? 6_000_000
-        : 3_000_000;
+  // O teto do compartilhamento é 1080p: 1440p custava dez megabits para uma
+  // diferença que some num tile de meia tela, e a banda é dividida entre todos
+  // os servidores da instância.
+  const base = resolution >= 1080 ? 6_000_000 : 3_000_000;
   return frameRate >= 60
     ? Math.round(base * 1.7)
     : frameRate <= 15
@@ -204,14 +202,13 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
                       .frameRate,
                     priority: "high",
                   },
-                  // Em 720p60 o que não pode cair é a fluidez; em 1080p30, a
-                  // nitidez. É a única diferença de comportamento entre eles.
-                  degradationPreference:
-                    cameraQualityRef.current >= 1080
-                      ? "maintain-resolution"
-                      : "maintain-framerate",
+                  // A 60 quadros o que não pode cair é a fluidez: preferimos
+                  // perder resolução a engasgar a imagem de um rosto.
+                  degradationPreference: "maintain-framerate",
                   simulcast: true,
-                  videoSimulcastLayers: [VideoPresets.h540],
+                  // Piso em 360p: com o teto em 720p, uma camada de 540p ficaria
+                  // colada na cheia e pagaria por quase nada.
+                  videoSimulcastLayers: [VideoPresets.h360],
                   contentHint: "motion",
                 }
             : {}),
@@ -321,18 +318,18 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
           autoGainControl: true,
         },
         videoCaptureDefaults: {
-          resolution: VideoPresets.h1080.resolution,
-          frameRate: CAMERA_MODES[1080].frameRate,
+          resolution: VideoPresets.h720.resolution,
+          frameRate: CAMERA_MODES[720].frameRate,
         },
         publishDefaults: {
           simulcast: true,
           // Escada 540p/1080p: o piso precisa ser alto o bastante para nunca
           // parecer borrado num tile grande, e a camada cheia entrega o 1080p.
           // Os valores reais são definidos por track em publishDesiredTracks.
-          videoSimulcastLayers: [VideoPresets.h540],
+          videoSimulcastLayers: [VideoPresets.h360],
           videoEncoding: {
-            maxBitrate: CAMERA_MODES[1080].bitrate,
-            maxFramerate: CAMERA_MODES[1080].frameRate,
+            maxBitrate: CAMERA_MODES[720].bitrate,
+            maxFramerate: CAMERA_MODES[720].frameRate,
           },
           degradationPreference: "maintain-resolution",
           dtx: true,
