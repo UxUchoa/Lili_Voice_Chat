@@ -1,10 +1,5 @@
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "./client";
-import {
-  generateRecoveryKey,
-  hashRecoveryKey,
-  isRecoveryKeyShaped,
-} from "./recoveryKey";
 
 export interface OnlineAccount {
   id: string;
@@ -49,14 +44,27 @@ export async function getCurrentOnlineAccount() {
   return onlineAccountFromSession(data.session);
 }
 
+/**
+ * Resultado do cadastro.
+ *
+ * `pending` é o caso em que a confirmação de e-mail está ligada: a conta
+ * existe, mas só entra depois que o link for aberto. Isso não é erro, e
+ * tratá-lo como erro — que era o que acontecia — avisa o usuário de que deu
+ * errado exatamente quando deu certo.
+ */
+export type RegistrationResult =
+  | { status: "active"; account: OnlineAccount }
+  | { status: "pending"; email: string };
+
 export async function registerOnlineAccount(input: {
   email: string;
   username: string;
   displayName: string;
   password: string;
-}) {
+}): Promise<RegistrationResult> {
+  const email = input.email.trim().toLowerCase();
   const { data, error } = await supabase.auth.signUp({
-    email: input.email.trim().toLowerCase(),
+    email,
     password: input.password,
     options: {
       data: {
@@ -66,101 +74,8 @@ export async function registerOnlineAccount(input: {
     },
   });
   if (error) throw error;
-  if (!data.session)
-    throw new Error("Conta criada. Confirme o e-mail antes de entrar.");
-
-  // A chave nasce aqui e é mostrada uma única vez. Se o registro dela falhar,
-  // a conta fica sem caminho de volta — melhor deixar o cadastro falhar alto
-  // do que entregar uma conta que ninguém consegue recuperar.
-  const recoveryKey = generateRecoveryKey();
-  const { error: keyError } = await supabase.rpc("set_recovery_key", {
-    p_key_hash: await hashRecoveryKey(recoveryKey),
-  });
-  if (keyError) {
-    await supabase.auth.signOut();
-    throw new Error(
-      "A conta foi criada, mas a chave de recuperação não pôde ser registrada. " +
-        "Entre em contato antes de usar a conta.",
-    );
-  }
-
-  return { account: await accountFromUser(data.user!), recoveryKey };
-}
-
-/**
- * Estado da chave do usuário logado. O hash nunca volta do servidor; isto
- * responde apenas se existe e quando foi criada ou usada.
- */
-export async function getRecoveryKeyStatus() {
-  const { data, error } = await supabase.rpc("recovery_key_status");
-  if (error) throw error;
-  const row = Array.isArray(data) ? data[0] : data;
-  return {
-    hasKey: Boolean(row?.has_key),
-    createdAt: (row?.created_at as string | null) ?? null,
-    lastUsedAt: (row?.last_used_at as string | null) ?? null,
-  };
-}
-
-/**
- * Sorteia uma chave nova e invalida a anterior na mesma operação. Usado por
- * quem acha que a chave vazou e por quem nunca chegou a guardá-la.
- */
-export async function rotateOnlineRecoveryKey() {
-  const recoveryKey = generateRecoveryKey();
-  const { error } = await supabase.rpc("set_recovery_key", {
-    p_key_hash: await hashRecoveryKey(recoveryKey),
-  });
-  if (error) throw error;
-  return recoveryKey;
-}
-
-/**
- * Troca a senha provando posse da chave, sem sessão e sem e-mail.
- *
- * A função de borda responde a mesma coisa para chave errada e para conta
- * inexistente: distinguir as duas entregaria a lista de quem tem conta a quem
- * perguntar. Ao final a chave é substituída — uma chave usada é uma chave que
- * já esteve no meio do caminho.
- */
-export async function recoverOnlineAccountWithKey(input: {
-  email: string;
-  recoveryKey: string;
-  newPassword: string;
-}) {
-  if (!isRecoveryKeyShaped(input.recoveryKey))
-    throw new Error("A chave de recuperação tem 32 caracteres.");
-
-  // A chave nova é sorteada aqui, e só o hash dela viaja: o servidor conclui a
-  // recuperação sem nunca ver nenhuma das duas chaves.
-  const nextKey = generateRecoveryKey();
-  const { data, error } = await supabase.functions.invoke<{ ok?: boolean }>(
-    "account-recover",
-    {
-      body: {
-        email: input.email.trim().toLowerCase(),
-        keyHash: await hashRecoveryKey(input.recoveryKey),
-        nextKeyHash: await hashRecoveryKey(nextKey),
-        newPassword: input.newPassword,
-      },
-    },
-  );
-
-  if (error) {
-    const status = (error as { context?: { status?: number } }).context?.status;
-    if (status === 429)
-      throw new Error(
-        "Muitas tentativas com chave errada. Espere quinze minutos.",
-      );
-    if (status === 400)
-      throw new Error("A senha nova precisa ter pelo menos 8 caracteres.");
-    // 401 e qualquer outra falha de identificação chegam com a mesma
-    // mensagem, porque o servidor não distingue os casos de propósito.
-    throw new Error("E-mail ou chave de recuperação não conferem.");
-  }
-  if (!data?.ok)
-    throw new Error("E-mail ou chave de recuperação não conferem.");
-  return nextKey;
+  if (!data.session) return { status: "pending", email };
+  return { status: "active", account: await accountFromUser(data.user!) };
 }
 
 export async function loginOnlineAccount(email: string, password: string) {
@@ -170,6 +85,54 @@ export async function loginOnlineAccount(email: string, password: string) {
   });
   if (error) throw error;
   return accountFromUser(data.user);
+}
+
+/**
+ * Manda o link de redefinição de senha.
+ *
+ * O `redirectTo` aponta para a raiz do site. O Supabase acrescenta o token no
+ * fragmento da URL, o cliente o consome ao carregar a página e a sessão nasce
+ * já autenticada — por isso a tela de senha nova precisa aparecer sozinha,
+ * antes de o aplicativo abrir. Quem percebe isso é `isPasswordRecoveryLink`.
+ *
+ * A resposta é a mesma para e-mail cadastrado e desconhecido: distinguir os
+ * dois transformaria o formulário num consultor de quem tem conta aqui.
+ */
+export async function requestOnlinePasswordReset(email: string) {
+  const { error } = await supabase.auth.resetPasswordForEmail(
+    email.trim().toLowerCase(),
+    { redirectTo: `${window.location.origin}/` },
+  );
+  if (error) throw error;
+}
+
+/**
+ * O usuário chegou por um link de recuperação?
+ *
+ * O Supabase marca o retorno com `type=recovery` no fragmento. Sem olhar para
+ * isso, quem clica em "esqueci a senha" simplesmente entra no aplicativo com a
+ * senha antiga ainda valendo: funciona, mas não é o que a pessoa pediu, e ela
+ * sai de lá sem ter trocado nada.
+ *
+ * A leitura precisa acontecer antes de o supabase-js limpar o fragmento, então
+ * o resultado é guardado na primeira chamada.
+ */
+let recoveryLinkDetected: boolean | null = null;
+
+export function isPasswordRecoveryLink(): boolean {
+  if (recoveryLinkDetected === null) {
+    const fragment = window.location.hash.replace(/^#/, "");
+    recoveryLinkDetected =
+      new URLSearchParams(fragment).get("type") === "recovery";
+  }
+  return recoveryLinkDetected;
+}
+
+/** Esquece o marcador depois que a senha foi trocada. */
+export function clearPasswordRecoveryLink() {
+  recoveryLinkDetected = false;
+  if (window.location.hash.includes("type=recovery"))
+    history.replaceState(null, "", window.location.pathname);
 }
 
 export async function updateOnlinePassword(password: string) {

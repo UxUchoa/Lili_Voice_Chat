@@ -38,11 +38,10 @@ Cliente Web + Electron para mensagens, áudio, vídeo e compartilhamento de tela
   agudo e seco, cada um disparado apenas por uma transição real de presença.
 - Solicitações de mensagem: uma conversa iniciada por quem ainda não é amigo
   chega numa fila própria da Home, com aceitar e recusar.
-- Recuperação por chave única, sem e-mail: no cadastro o usuário recebe uma
-  chave de 32 caracteres, mostrada uma vez, e só entra depois de confirmar que
-  a guardou. O servidor conhece apenas o SHA-256 dela. Recuperar troca a senha,
-  derruba todas as sessões e emite uma chave nova; cinco erros travam a conta
-  por quinze minutos, e chave errada e conta inexistente respondem igual.
+- Recuperação de senha por link de e-mail, com tela própria: o link autentica
+  e o aplicativo se interpõe antes de abrir para exigir a senha nova, em vez de
+  deixar a pessoa entrar achando que trocou. Trocar encerra as outras sessões.
+  E-mail cadastrado e desconhecido recebem a mesma resposta.
 - Conta sem login por 90 dias vira lápide: acesso e identidade destruídos,
   conversa preservada. Servidor órfão passa para o administrador mais antigo.
 - Supabase Auth, PostgreSQL, RLS, RPCs transacionais, Realtime, Storage privado e Edge Functions.
@@ -120,11 +119,11 @@ npm audit --audit-level=high
 
 Resultados locais mais recentes:
 
-- 68/68 testes TypeScript/Vitest, incluindo a identidade sonora (toque em laço,
+- 56/56 testes TypeScript/Vitest, incluindo a identidade sonora (toque em laço,
   entrada e saída distintas, volume padrão audível), as rotas da navegação e o
   CORS das funções de borda (origem exata, curinga de pré-visualização,
   `null` do desktop e a recusa de sufixo forjado)
-- 286/286 testes pgTAP de RLS, RPC, Storage, MLS, recuperação de grupo vazio, convites, menções, cargos/ícones, GDM, sessões, quota, histórico/heartbeat de chamadas, limite/movimentação de voz, dispositivos e push
+- 269/269 testes pgTAP de RLS, RPC, Storage, MLS, recuperação de grupo vazio, convites, menções, cargos/ícones, GDM, sessões, quota, histórico/heartbeat de chamadas, limite/movimentação de voz, dispositivos e push
 - 3/3 testes nativos OpenMLS
 - 7/7 cenários Playwright em navegador, incluindo a separação entre Home e servidor (o contexto do servidor desaparece por completo ao voltar para a Home), incluindo quick switcher por teclado com servidor/DM real, GDM com quatro contas/ícone privado, notificação desktop, Markdown, sessões reais, quota, categorias, limite real de canal de voz e navegação mobile em 390 × 844
 - duas sessões isoladas trocando mensagens, respostas, reações, pins, exclusão, anexos e menções de usuário/cargo/`@everyone`/`@here` via OpenMLS no mesmo canal; edições consecutivas preservam anexos e atualizam metadados de menção

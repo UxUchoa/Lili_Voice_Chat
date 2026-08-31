@@ -82,7 +82,7 @@ VAPID_PRIVATE_KEY=…
 PUSH_DISPATCH_SECRET=…
 ATTACHMENTS_EXPIRE_SECRET=…
 ACCOUNTS_PRUNE_SECRET=…
-ALLOWED_ORIGIN=https://SEU_DOMINIO,https://*.vercel.app,null
+ALLOWED_ORIGIN=https://lilivoicechat-five.vercel.app,https://*.vercel.app,null
 ```
 
 Gere cada segredo com
@@ -119,14 +119,18 @@ Depois, no **SQL Editor** do painel (o CLI não faz):
 
 E no painel:
 
-- **Authentication → URL Configuration**: Site URL com o domínio de produção;
-  Redirect URLs com o domínio, as pré-visualizações e `janja://auth/callback`
-  para o desktop.
-- **Authentication → Providers → Email**: desligue _Confirm email_. A conta não
-  depende mais de e-mail para nada — a recuperação é por chave, e o SMTP
-  embutido do Supabase entrega poucas mensagens por hora e não serve para
-  produção. Com a confirmação ligada, quem se cadastra fica esperando um e-mail
-  que provavelmente não chega.
+- **Authentication → URL Configuration**: sem isto, o link de confirmação
+  devolve o usuário para `http://localhost:3000`, que é o padrão de fábrica do
+  Supabase — o token é válido, mas o destino não existe.
+  - **Site URL**: `https://lilivoicechat-five.vercel.app`
+  - **Redirect URLs**: o mesmo domínio, mais `https://*.vercel.app/**` para as
+    pré-visualizações e `janja://auth/callback` para o desktop.
+- **Authentication → SMTP Settings**: configure um provedor próprio (Resend,
+  SendGrid, Postmark, SES). O servidor embutido do Supabase entrega poucas
+  mensagens por hora, é explicitamente marcado como impróprio para produção e
+  pode ser desligado sem aviso. Como confirmação de cadastro **e** recuperação
+  de senha passam por e-mail, um SMTP que não aguenta é um aplicativo em que
+  ninguém consegue entrar.
 - **Settings → Storage**: limite de upload em **101 MiB**. O bucket
   `attachments` aceita 104861696 bytes (100 MiB + a folga de 4 KB da tag do
   AES-GCM); um teto global menor recusa o upload antes de a política ser
@@ -238,27 +242,29 @@ borda e o login por link não volta para o site.
 HTTPS não é opcional: Web Push e as APIs de mídia só existem em origem segura
 fora de `localhost`.
 
-## 3b. Recuperação de conta e expurgo
+## 3b. Recuperação de senha e expurgo de conta
 
-Não existe link por e-mail. No cadastro o usuário recebe uma **chave única** de
-32 caracteres, mostrada uma vez, e o botão de entrar só destrava depois que ele
-confirma ter guardado. Quem tem a chave troca a senha; quem a perde perde a
-conta — e isso é dito na tela, não escondido.
+A recuperação é por link de e-mail, o mesmo caminho da confirmação de cadastro.
+Duas consequências que valem estar escritas:
 
-O servidor guarda apenas o SHA-256 da chave normalizada: são 160 bits de
-entropia, então não há dicionário a atacar, e o cadastro nunca transmite a
-chave em si. Cada recuperação bem-sucedida derruba todas as sessões vivas e
-emite uma chave nova; a anterior morre na mesma operação. Cinco tentativas
-erradas travam a conta por quinze minutos, e chave errada, conta inexistente e
-conta já expurgada respondem exatamente a mesma coisa, para que ninguém
-descubra quem tem conta perguntando.
+- **A segurança da conta é a da caixa de entrada.** Quem entra no e-mail troca
+  a senha. Não há segunda barreira.
+- **Sem SMTP próprio não há recuperação.** É o mesmo canal da confirmação, e o
+  servidor embutido do Supabase não aguenta produção.
+
+O link devolve o usuário para a raiz do site com `type=recovery` no fragmento.
+O `supabase-js` consome o token e a sessão nasce autenticada — por isso o
+aplicativo se interpõe antes de abrir e exige a senha nova. Sem essa tela, quem
+clica em "esqueci a senha" entraria no aplicativo com a senha antiga ainda
+valendo e sairia achando que trocou. Trocar a senha também encerra as outras
+sessões.
 
 Conta sem login por 90 dias vira **lápide**: login, senha, sessões,
-dispositivos, chaves e a chave de recuperação são destruídos e a identidade é
-anonimizada, mas mensagens, canais e servidores permanecem. Um servidor cujo
-dono sumiu passa para o administrador mais antigo; sem ninguém, é apagado.
-Apagar a linha do perfil era impossível de qualquer forma — `messages.author_id`
-e `servers.owner_id` são NO ACTION de propósito, para que a conversa de trinta
+dispositivos e chaves são destruídos e a identidade é anonimizada, mas
+mensagens, canais e servidores permanecem. Um servidor cujo dono sumiu passa
+para o administrador mais antigo; sem ninguém, é apagado. Apagar a linha do
+perfil era impossível de qualquer forma — `messages.author_id` e
+`servers.owner_id` são NO ACTION de propósito, para que a conversa de trinta
 pessoas não evapore porque quem criou o servidor sumiu por três meses.
 
 Ajuste o prazo com `ACCOUNTS_PRUNE_DAYS` nos segredos das funções.
@@ -321,7 +327,9 @@ Uma build autoassinada não estabelece confiança para usuário final.
 - [ ] TURN/TLS funciona em rede com UDP bloqueado
 - [ ] push chega com o aplicativo fechado
 - [ ] anexo enviado há mais de 24 h desapareceu sozinho (cron ativo)
-- [ ] a chave de recuperação troca a senha e a chave antiga deixa de valer
+- [ ] o link de "esqueci a senha" chega e leva à tela de senha nova
+- [ ] o link de confirmação volta para o domínio de produção, não para
+      localhost:3000
 - [ ] `list_inactive_accounts(90)` devolve o que você espera antes de o
       expurgo rodar pela primeira vez
 - [ ] o aplicativo instalado consegue entrar numa chamada (`null` em

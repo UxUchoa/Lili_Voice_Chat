@@ -2587,42 +2587,6 @@ a:focus-visible,
   text-decoration: underline;
   text-underline-offset: 3px;
 }
-/* `.recovery-card label` é grid de uma coluna, o que empilharia a caixa de
-   seleção acima do texto. A confirmação precisa da regra própria, qualificada
-   pelo pai para vencer a especificidade (0,2,0 contra 0,1,1). */
-.recovery-card label.recovery-ack {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  color: var(--muted);
-  font-weight: 400;
-  line-height: 1.45;
-  cursor: pointer;
-}
-.recovery-card label.recovery-ack input {
-  flex: none;
-  width: 15px;
-  height: 15px;
-  margin-top: 1px;
-  accent-color: var(--yellow);
-}
-.recovery-card .recovery-actions {
-  display: flex;
-  flex-direction: row;
-  gap: 10px;
-}
-.recovery-card .recovery-actions button {
-  flex: 1;
-  padding: 9px 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--text);
-  background: var(--surface-2);
-  font-size: 12px;
-}
-.recovery-card .recovery-actions button:hover {
-  border-color: rgba(251, 198, 5, 0.4);
-}
 .recovery-card code {
   padding: 14px;
   border: 1px dashed rgba(251, 198, 5, 0.35);

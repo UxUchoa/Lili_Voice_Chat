@@ -52,7 +52,13 @@ minimum_password_length = 8
 [auth.email]
 enable_signup = true
 double_confirm_changes = true
-enable_confirmations = false
+# Ligada para espelhar o projeto hospedado. Ficou desligada por um tempo, e a
+# divergência escondeu o caminho em que o cadastro fica pendente de confirmação
+# — que é o único caminho que existe em produção. Os testes não são afetados:
+# eles criam conta pela API de admin com `email_confirm: true`.
+# Para criar conta pela interface no ambiente local, o e-mail cai no Mailpit,
+# em http://127.0.0.1:54324.
+enable_confirmations = true
 
 [edge_runtime]
 enabled = true
@@ -73,12 +79,6 @@ verify_jwt = false
 # a autorização por conta própria: ou o segredo do agendador, ou um usuário
 # autenticado de verdade — anônimo continua recebendo 401.
 [functions.attachments-expire]
-verify_jwt = false
-
-# Recuperação por chave única. Sem JWT de propósito: quem chega aqui perdeu a
-# senha e não tem sessão nenhuma. A autorização é a posse da chave, conferida
-# dentro da função, com bloqueio após cinco erros.
-[functions.account-recover]
 verify_jwt = false
 
 # Expurgo das contas paradas há 90 dias. Sem JWT porque só o agendador chama,

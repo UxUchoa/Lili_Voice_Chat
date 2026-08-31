@@ -39,8 +39,10 @@ import {
   listOnlineAccountSessions,
   loginOnlineAccount,
   logoutOnlineAccount,
-  recoverOnlineAccountWithKey,
+  clearPasswordRecoveryLink,
+  isPasswordRecoveryLink,
   registerOnlineAccount,
+  requestOnlinePasswordReset,
   revokeOnlineAccountSession,
   revokeOtherOnlineAccountSessions,
   updateOnlinePassword,
@@ -9468,94 +9470,81 @@ function App({
 }
 
 /**
- * A chave aparece uma vez só, e o botão de seguir em frente fica travado até a
- * pessoa dizer que guardou. É atrito de propósito: sem a chave a conta não tem
- * caminho de volta, e o único momento em que dá para avisar é este.
+ * Tela de senha nova, mostrada a quem chegou pelo link de recuperação.
+ *
+ * Sem ela, o link do e-mail apenas autentica a pessoa e a joga dentro do
+ * aplicativo com a senha antiga ainda valendo. Funciona, mas não é o que ela
+ * pediu ao clicar em "esqueci a senha": ela sai de lá achando que trocou.
  */
-function RecoveryKeyCard({
-  recoveryKey,
-  reason,
-  onContinue,
-}: {
-  recoveryKey: string;
-  reason: "register" | "recover";
-  onContinue: () => void;
-}) {
-  const [acknowledged, setAcknowledged] = useState(false),
-    [copied, setCopied] = useState(false);
+function NewPasswordCard({ onDone }: { onDone: () => void }) {
+  const [password, setPassword] = useState(""),
+    [confirmation, setConfirmation] = useState(""),
+    [error, setError] = useState(""),
+    [busy, setBusy] = useState(false);
 
-  const copy = async () => {
+  const submit = async () => {
+    if (password.length < 8)
+      return setError("A senha precisa ter pelo menos 8 caracteres.");
+    if (password !== confirmation)
+      return setError("As duas senhas não são iguais.");
+    setBusy(true);
+    setError("");
     try {
-      await navigator.clipboard.writeText(recoveryKey);
-      setCopied(true);
-    } catch {
-      // Área de transferência negada pelo navegador: a chave está na tela e
-      // pode ser copiada à mão, então não vale interromper o cadastro por isso.
-      setCopied(false);
+      // `updateOnlinePassword` também encerra as outras sessões: quem trocou a
+      // senha por ter perdido o acesso não quer deixar viva a sessão de quem
+      // possa ter entrado.
+      await updateOnlinePassword(password);
+      clearPasswordRecoveryLink();
+      onDone();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Não foi possível trocar a senha.",
+      );
+      setBusy(false);
     }
   };
 
   return (
     <main className="auth-screen">
-      <section className="recovery-card">
-        <h2>
-          {reason === "register"
-            ? "Guarde sua chave de recuperação"
-            : "Senha trocada — guarde a chave nova"}
-        </h2>
+      <section className="auth-card">
+        <Logo />
+        <span className="eyebrow">JANJA · ONLINE E2EE</span>
+        <h1>Defina uma senha nova</h1>
         <p>
-          {reason === "register"
-            ? "É com ela que você recupera o acesso se esquecer a senha. Não há e-mail de recuperação: sem esta chave, a conta é perdida."
-            : "A chave anterior deixou de valer e todas as sessões foram encerradas. Entre de novo com a senha que você acabou de definir."}
+          O link do e-mail já provou que a conta é sua. Escolha a senha nova
+          agora — as outras sessões abertas serão encerradas.
         </p>
-        <code>{recoveryKey}</code>
-        <div className="recovery-actions">
-          <button onClick={() => void copy()}>
-            {copied ? "Copiada" : "Copiar"}
-          </button>
-          <button
-            onClick={() => {
-              const file = new Blob(
-                [
-                  [
-                    "Chave de recuperacao do Janja",
-                    "",
-                    recoveryKey,
-                    "",
-                    "Quem tem esta chave troca a senha da conta.",
-                    "Guarde offline, fora do computador onde voce usa o app.",
-                  ].join("\n"),
-                ],
-                { type: "text/plain" },
-              );
-              const url = URL.createObjectURL(file);
-              const link = document.createElement("a");
-              link.href = url;
-              link.download = "janja-chave-de-recuperacao.txt";
-              link.click();
-              URL.revokeObjectURL(url);
-            }}
-          >
-            Baixar
-          </button>
-        </div>
-        <label className="recovery-ack">
+        <label>
+          Senha nova
           <input
-            type="checkbox"
-            checked={acknowledged}
-            onChange={(event) => setAcknowledged(event.target.checked)}
+            type="password"
+            autoFocus
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
           />
-          <span>
-            Guardei a chave em lugar seguro e entendi que ela não pode ser
-            recuperada.
-          </span>
         </label>
+        <label>
+          Repita a senha
+          <input
+            type="password"
+            value={confirmation}
+            onChange={(event) => setConfirmation(event.target.value)}
+            onKeyDown={(event) => event.key === "Enter" && void submit()}
+          />
+        </label>
+        {error && (
+          <div className="auth-error" role="alert">
+            {error}
+          </div>
+        )}
         <button
           className="primary-button"
-          disabled={!acknowledged}
-          onClick={onContinue}
+          disabled={busy}
+          onClick={() => void submit()}
         >
-          {reason === "register" ? "Entrar" : "Voltar ao login"}
+          {busy ? "Salvando…" : "Trocar a senha"}
         </button>
       </section>
     </main>
@@ -9570,13 +9559,9 @@ function OnlineAuthGate() {
     [displayName, setDisplayName] = useState(""),
     [username, setUsername] = useState(""),
     [password, setPassword] = useState(""),
-    [recoveryKeyInput, setRecoveryKeyInput] = useState(""),
-    // Chave a ser mostrada uma única vez, com a conta que espera o "guardei".
-    [issuedKey, setIssuedKey] = useState<{
-      key: string;
-      reason: "register" | "recover";
-      account: OnlineAccount | null;
-    } | null>(null),
+    // O link de recuperação autentica a pessoa sozinho, então a tela de senha
+    // nova precisa se impor antes de o aplicativo abrir.
+    [recovering, setRecovering] = useState(isPasswordRecoveryLink),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false);
@@ -9622,24 +9607,30 @@ function OnlineAuthGate() {
     setNotice("");
     try {
       if (mode === "recover") {
-        const nextKey = await recoverOnlineAccountWithKey({
-          email,
-          recoveryKey: recoveryKeyInput,
-          newPassword: password,
-        });
-        setRecoveryKeyInput("");
-        setPassword("");
-        setIssuedKey({ key: nextKey, reason: "recover", account: null });
+        await requestOnlinePasswordReset(email);
+        // A mesma frase para e-mail cadastrado e desconhecido: dizer "não
+        // existe conta com esse e-mail" entregaria a lista de quem tem conta.
+        setMode("login");
+        setNotice(
+          "Se existir uma conta com esse e-mail, o link para trocar a senha já está a caminho.",
+        );
       } else if (mode === "register") {
-        const { account: next, recoveryKey } = await registerOnlineAccount({
+        const result = await registerOnlineAccount({
           email,
           username,
           displayName: displayName || username,
           password,
         });
-        // A conta fica em espera: entrar antes de a pessoa guardar a chave é
-        // a forma mais fácil de ela nunca guardar.
-        setIssuedKey({ key: recoveryKey, reason: "register", account: next });
+        if (result.status === "pending") {
+          // Conta criada com sucesso, faltando só a confirmação. Isto é aviso,
+          // não erro: antes aparecia em vermelho, dizendo que deu errado
+          // justamente quando deu certo.
+          setMode("login");
+          setPassword("");
+          setNotice(
+            `Conta criada. Abra o link que enviamos para ${result.email} e depois entre por aqui.`,
+          );
+        } else await activate(result.account);
       } else {
         await activate(await loginOnlineAccount(email, password));
       }
@@ -9668,23 +9659,11 @@ function OnlineAuthGate() {
         <p>Conectando ao Janja…</p>
       </div>
     );
+  // A ordem importa: o link de recuperação já traz sessão válida, então sem
+  // este desvio o aplicativo abriria normalmente e a senha nunca seria trocada.
+  if (account && recovering)
+    return <NewPasswordCard onDone={() => setRecovering(false)} />;
   if (account) return <App account={account} onLogout={() => void logout()} />;
-  if (issuedKey)
-    return (
-      <RecoveryKeyCard
-        recoveryKey={issuedKey.key}
-        reason={issuedKey.reason}
-        onContinue={() => {
-          const pending = issuedKey.account;
-          setIssuedKey(null);
-          if (pending) void activate(pending);
-          else {
-            setMode("login");
-            setNotice("Entre com a senha nova.");
-          }
-        }}
-      />
-    );
   return (
     <main className="auth-screen">
       <section className="auth-card">
@@ -9699,7 +9678,7 @@ function OnlineAuthGate() {
         </h1>
         <p>
           {mode === "recover"
-            ? "Informe o e-mail da conta e a chave de recuperação que você guardou no cadastro. Não há link por e-mail: a chave é a única prova aceita."
+            ? "Informe o e-mail da conta. Mandamos um link para você definir uma senha nova."
             : "Conta protegida pelo Supabase Auth; o conteúdo das mensagens permanece cifrado no servidor."}
         </p>
         {mode === "register" && (
@@ -9731,28 +9710,17 @@ function OnlineAuthGate() {
             autoCapitalize="none"
           />
         </label>
-        {mode === "recover" && (
+        {mode !== "recover" && (
           <label>
-            Chave de recuperação
+            Senha
             <input
-              value={recoveryKeyInput}
-              onChange={(event) => setRecoveryKeyInput(event.target.value)}
-              placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX"
-              autoCapitalize="characters"
-              autoComplete="off"
-              spellCheck={false}
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              onKeyDown={(event) => event.key === "Enter" && void submit()}
             />
           </label>
         )}
-        <label>
-          {mode === "recover" ? "Senha nova" : "Senha"}
-          <input
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            onKeyDown={(event) => event.key === "Enter" && void submit()}
-          />
-        </label>
         {error && (
           <div className="auth-error" role="alert">
             {error}
@@ -9773,7 +9741,7 @@ function OnlineAuthGate() {
             : mode === "register"
               ? "Criar conta"
               : mode === "recover"
-                ? "Trocar a senha"
+                ? "Enviar o link"
                 : "Entrar"}
         </button>
         <div className="auth-links">
@@ -9791,7 +9759,7 @@ function OnlineAuthGate() {
               setError("");
             }}
           >
-            {mode === "recover" ? "Voltar ao login" : "Perdi a senha"}
+            {mode === "recover" ? "Voltar ao login" : "Esqueci a senha"}
           </button>
         </div>
       </section>
