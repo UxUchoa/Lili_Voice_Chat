@@ -14,6 +14,10 @@ import { json, withCors } from "../_shared/cors.ts";
  *
  * Sem porta para o navegador: só o agendador, com `x-cron-secret`. Um expurgo
  * disparável por qualquer um seria uma arma.
+ *
+ * `{"dryRun": true}` devolve quem seria atingido sem tocar em nada. Existe
+ * porque a alternativa é descobrir o alcance de um job destrutivo executando
+ * ele — e ninguém deveria ligar este agendador sem antes olhar a lista.
  */
 const DEFAULT_DAYS = 90;
 const BATCH = 50;
@@ -33,6 +37,15 @@ Deno.serve(
     if (!supabaseUrl || !serviceKey)
       return json({ error: "server_not_configured" }, 503);
 
+    let dryRun = false;
+    if (request.headers.get("content-length") !== "0") {
+      try {
+        dryRun = Boolean((await request.json())?.dryRun);
+      } catch {
+        // Corpo ausente ou malformado é o caso normal do cron, que manda `{}`.
+      }
+    }
+
     const days = Number(Deno.env.get("ACCOUNTS_PRUNE_DAYS") ?? DEFAULT_DAYS);
     const admin = createClient(supabaseUrl, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -48,6 +61,15 @@ Deno.serve(
       user_id: string;
       inactive_since: string;
     }[];
+    if (dryRun)
+      return json({
+        dryRun: true,
+        days: Number.isFinite(days) && days > 0 ? days : DEFAULT_DAYS,
+        matching: (inactive ?? []).length,
+        batch: targets.length,
+        oldest: targets[0]?.inactive_since ?? null,
+      });
+
     if (targets.length === 0) return json({ tombstoned: 0 });
 
     let tombstoned = 0;

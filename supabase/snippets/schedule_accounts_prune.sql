@@ -45,5 +45,7 @@ select cron.schedule(
   $$
 );
 
--- Antes de deixar rodar sozinho, confira quem seria atingido hoje:
+-- Antes de deixar rodar sozinho, confira quem seria atingido hoje. Pelo SQL:
 --   select * from public.list_inactive_accounts(90);
+-- Ou pela própria função, que responde sem tocar em nada:
+--   curl -X POST https://YOUR_PROJECT.supabase.co/functions/v1/accounts-prune --     -H 'x-cron-secret: ...' -H 'Content-Type: application/json' --     -d '{"dryRun":true}'

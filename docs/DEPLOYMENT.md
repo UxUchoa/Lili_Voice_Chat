@@ -104,8 +104,9 @@ Depois, no **SQL Editor** do painel (o CLI não faz):
    vencidos a cada cinco minutos. Sem isto o arquivo de 24 h só some quando
    alguém abre o aplicativo, e a promessa deixa de valer para conversa parada.
 3. `supabase/snippets/schedule_accounts_prune.sql` — uma vez por dia,
-   transforma em lápide a conta parada há 90 dias. Antes de deixar rodar,
-   confira quem seria atingido: `select * from public.list_inactive_accounts(90);`
+   transforma em lápide a conta parada há 90 dias. **Antes de ligar**, veja o
+   alcance sem executar nada: a função aceita `{"dryRun": true}` e devolve
+   quantas contas casam e desde quando a mais antiga está parada.
 4. Limites reais da quota mostrada no painel do usuário (em bytes):
 
    ```sql
