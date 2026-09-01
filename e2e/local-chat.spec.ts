@@ -369,6 +369,25 @@ test("duas sessões isoladas trocam mensagens no mesmo canal", async ({
     const storedBytes = Buffer.from(await storedObject.data.arrayBuffer());
     expect(storedBytes.toString("utf8")).toBe(attachmentContents);
 
+    // Mídia sem legenda. O guard de envio media o ciphertext, que nunca era
+    // vazio; com o corpo em claro, exigir texto passou a recusar foto e vídeo
+    // sem legenda com `invalid payload`. O compositor sempre permitiu enviar
+    // só o arquivo, então quem barrava era o banco.
+    const soloAttachmentName = `sem-legenda-${runId}.txt`;
+    await ownerPage.locator('.composer input[type="file"]').setInputFiles({
+      name: soloAttachmentName,
+      mimeType: "text/plain",
+      buffer: Buffer.from(`solo-${runId}`),
+    });
+    await ownerComposer.press("Enter");
+    await expect(
+      memberPage
+        .locator(".message")
+        .filter({ hasText: soloAttachmentName })
+        .getByText(soloAttachmentName),
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(ownerPage.locator(".composer .send-error")).toHaveCount(0);
+
     const editedAttachmentMessage = `${attachmentMessage}-editada`;
     const ownerAttachmentRow = ownerPage
       .locator(".message")
@@ -496,7 +515,9 @@ test("duas sessões isoladas trocam mensagens no mesmo canal", async ({
         .eq("channel_id", textChannel.id),
       "verificar corpo das mensagens",
     );
-    expect(rows).toHaveLength(6);
+    // Sete: as seis com texto mais a de mídia sem legenda, cujo corpo é vazio.
+    expect(rows).toHaveLength(7);
+    expect(rows.filter((row) => row.body === "")).toHaveLength(1);
     // O corpo é guardado em claro por decisão de produto: quem o lê precisa
     // de sessão e de participação no canal, e é a RLS que decide isso. O teste
     // fixa esse contrato para que uma mudança futura de armazenamento não

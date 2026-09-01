@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(26);
+select plan(29);
 
 insert into auth.users(id, email, aud, role, raw_user_meta_data)
 values
@@ -117,6 +117,34 @@ select lives_ok(
   'the send RPC accepts a second message from the same author'
 );
 select is((select count(*) from public.messages), 2::bigint, 'an authorized member reads the messages of the channel');
+
+-- Mensagem só de mídia. O guard antigo media o ciphertext, que nunca era
+-- vazio nem sem legenda; com o corpo em claro, exigir texto passou a recusar
+-- foto e vídeo sem legenda com `invalid payload`.
+select lives_ok(
+  $$select public.send_message(
+      '40000000-0000-0000-0000-000000000001', '',
+      '50000000-0000-0000-0000-000000000002', null,
+      '{}'::uuid[], '{}'::uuid[], '{}'::uuid[], false, false,
+      '[{"storage_object":"40000000-0000-0000-0000-000000000001/video.mp4","byte_size":2048,"name":"video.mp4","mime":"video/mp4"}]'::jsonb
+    )$$,
+  'an attachment without a caption is a valid message'
+);
+select is(
+  (select count(*)::int from public.message_attachments
+   where channel_id = '40000000-0000-0000-0000-000000000001'),
+  1,
+  'the attachment lands in the same transaction as the message'
+);
+-- Sem texto e sem anexo continua não sendo mensagem.
+select throws_ok(
+  $$select public.send_message(
+      '40000000-0000-0000-0000-000000000001', '',
+      '50000000-0000-0000-0000-000000000002'
+    )$$,
+  'P0001', 'invalid payload',
+  'a message with neither body nor attachment is still rejected'
+);
 
 reset role;
 -- O corpo passou a ser guardado em claro por decisão de produto. A garantia
