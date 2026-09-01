@@ -78,7 +78,7 @@ async function enterLounge(page: Page) {
   });
 }
 
-test("duas contas permanecem visíveis na mesma chamada local E2EE", async ({
+test("duas contas permanecem visíveis na mesma chamada local", async ({
   browser,
 }) => {
   test.setTimeout(120_000);
@@ -178,7 +178,7 @@ test("duas contas permanecem visíveis na mesma chamada local E2EE", async ({
     const memberPage = await memberContext.newPage();
 
     // O proprietário entra primeiro. O segundo dispositivo só aparece depois;
-    // isso cobre a reconciliação tardia do Welcome/epoch OpenMLS.
+    // isso cobre a entrada tardia de um participante na sala.
     await login(ownerPage, ownerEmail, password);
     await openServer(ownerPage, serverId);
     await enterLounge(ownerPage);
@@ -468,7 +468,7 @@ test("duas contas permanecem visíveis na mesma chamada local E2EE", async ({
       .toBe(2);
 
     // Move é conduzido por um pedido Realtime persistido. O alvo troca de
-    // canal no React, obtém outro token e deriva a chave E2EE do novo grupo.
+    // canal no React e obtém outro token para a sala nova.
     await unwrap(
       ownerApi.functions.invoke("livekit-moderate", {
         body: {

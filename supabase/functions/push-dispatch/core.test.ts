@@ -36,7 +36,7 @@ const setup = (overrides: Partial<PushDispatchDependencies> = {}) => {
 };
 
 describe("push dispatcher core", () => {
-  it("delivers only a generic E2EE-safe payload and completes the envelope", async () => {
+  it("delivers only a generic payload without message content and completes the envelope", async () => {
     const dependencies = setup();
     const result = await dispatchPendingNotifications(dependencies);
 

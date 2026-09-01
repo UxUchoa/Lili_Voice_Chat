@@ -171,8 +171,10 @@ sozinho quando o UDP direto falha, e forçar relay em todo mundo só adiciona um
 salto. O plano gratuito tem teto de minutos e de participantes simultâneos —
 confira antes de abrir para um grupo grande.
 
-O E2EE de mídia continua sendo nosso: a chave sai do epoch MLS e o SFU roteia
-pacotes que não consegue abrir.
+A mídia **não** é cifrada ponta a ponta: o SFU recebe os pacotes decifrados e
+consegue abri-los. Quem hospeda o LiveKit tem acesso ao áudio e ao vídeo da
+chamada — leve isso em conta ao escolher entre o serviço gerenciado e o
+auto-hospedado.
 
 ### Alternativa: auto-hospedado
 
@@ -381,7 +383,7 @@ Uma build autoassinada não estabelece confiança para usuário final.
 ## 6. Checklist de aceite externo
 
 - [ ] `git ls-files` não lista nenhum `.env` com valor real
-- [ ] duas contas e dois dispositivos reais trocam mensagens e anexos E2EE
+- [ ] duas contas e dois dispositivos reais trocam mensagens e anexos
 - [ ] remover acesso gera novo epoch e o dispositivo removido não lê o futuro
 - [ ] chamada de áudio, vídeo e tela entre redes diferentes
 - [ ] TURN/TLS funciona em rede com UDP bloqueado

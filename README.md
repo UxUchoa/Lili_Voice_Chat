@@ -1,6 +1,6 @@
 # Lili — Voice Chat
 
-Cliente Web + Electron para mensagens, áudio, vídeo e compartilhamento de tela. O ambiente local usa Supabase, LiveKit/TURN e OpenMLS por dispositivo; não há fallback com dados demonstrativos.
+Cliente Web + Electron para mensagens, áudio, vídeo e compartilhamento de tela. O ambiente local usa Supabase e LiveKit/TURN; não há fallback com dados demonstrativos.
 
 ## Estado atual
 
@@ -45,10 +45,14 @@ Cliente Web + Electron para mensagens, áudio, vídeo e compartilhamento de tela
 - Conta sem login por 90 dias vira lápide: acesso e identidade destruídos,
   conversa preservada. Servidor órfão passa para o administrador mais antigo.
 - Supabase Auth, PostgreSQL, RLS, RPCs transacionais, Realtime, Storage privado e Edge Functions.
-- Mensagens e anexos E2EE: o Supabase armazena ciphertext e metadados mínimos, nunca colunas de plaintext.
-- OpenMLS WASM com identidade e KeyPackages por dispositivo, persistência local cifrada, `ADD_COMMIT`, `REMOVE_COMMIT`, epoch monotônico e exporter de chave de mídia.
-- Remover acesso ao canal ou revogar dispositivo torna o alvo elegível a `MLS Remove`; somente o fundador ativo do grupo pode publicar o commit.
-- LiveKit SFU com E2EE de áudio/vídeo/tela derivada do epoch MLS e TURN UDP/TLS configurável.
+- **Sem criptografia ponta a ponta.** Mensagens e anexos são gravados legíveis:
+  quem controla o banco lê o conteúdo. O que decide o acesso é a autenticação
+  do Supabase mais as políticas de RLS, que exigem participação no canal para
+  ler e permissão de escrita para enviar. O transporte é cifrado (HTTPS para a
+  API e DTLS-SRTP para a mídia), o que protege contra quem está no caminho da
+  rede — não contra o servidor.
+- LiveKit SFU para áudio, vídeo e tela, com TURN UDP/TLS configurável. A mídia
+  é decifrável pelo SFU.
 - Push Web Push/VAPID com preferências `ALL`, `MENTIONS` e `NONE`, fila atômica, backoff e payload genérico sem conteúdo.
 - Notificação foreground nativa/Web após decisão de entrega no banco e descriptografia local; escopos GLOBAL/SERVER/CHANNEL e silêncio temporário.
 - GDM com escolha de membros, nome, ícone privado e gestão de acesso; sessões Auth revogáveis e dashboard de quota real DB/Storage.
@@ -62,8 +66,6 @@ O instalador local é funcional, mas permanece `NotSigned` até que um certifica
 - Node.js 22+
 - Docker Desktop com virtualização habilitada
 - PowerShell 7 ou Windows PowerShell
-- Rust + target `wasm32-unknown-unknown` somente para alterar o wrapper
-  OpenMLS. O `.wasm` compilado está versionado, e `npm run vendor:openmls`
   recria `vendor/openmls` a partir do commit fixado mais
   `patches/openmls-wasm.patch` — o clone em si não é versionado
 
@@ -89,7 +91,7 @@ npm run test:local
 ```
 
 Esse comando prepara a infraestrutura, cria e remove contas temporárias, testa o
-workspace compartilhado, conversa OpenMLS e chamada real em dois contextos de
+workspace compartilhado, conversa e chamada real em dois contextos de
 navegador, câmera/tela/dispositivos, navegação mobile, moderação de voz,
 heartbeat e limpeza de presença abandonada, LiveKit/TURN, banco/RLS, frontend,
 typecheck e build. Para o aceite com hardware, siga também o
@@ -115,7 +117,7 @@ npm run build
 npm audit --audit-level=high
 ```
 
-`test:livekit` cria dois participantes sintéticos, publica áudio com E2EE e, por padrão, exige candidato TURN `relay`. Ele não solicita câmera ou microfone.
+`test:livekit` cria dois participantes sintéticos, publica áudio e, por padrão, exige candidato TURN `relay`. Ele não solicita câmera ou microfone.
 
 Resultados locais mais recentes:
 
@@ -124,11 +126,10 @@ Resultados locais mais recentes:
   CORS das funções de borda (origem exata, curinga de pré-visualização,
   `null` do desktop e a recusa de sufixo forjado)
 - 269/269 testes pgTAP de RLS, RPC, Storage, MLS, recuperação de grupo vazio, convites, menções, cargos/ícones, GDM, sessões, quota, histórico/heartbeat de chamadas, limite/movimentação de voz, dispositivos e push
-- 3/3 testes nativos OpenMLS
 - 7/7 cenários Playwright em navegador, incluindo a separação entre Home e servidor (o contexto do servidor desaparece por completo ao voltar para a Home), incluindo quick switcher por teclado com servidor/DM real, GDM com quatro contas/ícone privado, notificação desktop, Markdown, sessões reais, quota, categorias, limite real de canal de voz e navegação mobile em 390 × 844
-- duas sessões isoladas trocando mensagens, respostas, reações, pins, exclusão, anexos e menções de usuário/cargo/`@everyone`/`@here` via OpenMLS no mesmo canal; edições consecutivas preservam anexos e atualizam metadados de menção
+- duas sessões isoladas trocando mensagens, respostas, reações, pins, exclusão, anexos e menções de usuário/cargo/`@everyone`/`@here` no mesmo canal; edições consecutivas preservam anexos e atualizam metadados de menção
 - duas contas entrando pela UI na mesma chamada, com contador real, heartbeat, troca de microfone/câmera/saída, publicação e remoção de tela, sobrevivência a restart do LiveKit e histórico persistido ao sair
-- moderação de voz real (mute/deafen/move/disconnect), move com nova sessão/chave E2EE no destino, dois participantes LiveKit, áudio E2EE e TURN relay confirmados
+- moderação de voz real (mute/deafen/move/disconnect), move com nova sessão no destino, dois participantes LiveKit e TURN relay confirmados
 - schema público sem erros de lint e auditoria npm sem vulnerabilidades
 - ciclo NSIS instalado 0.1.0 → auto-update 0.1.1 → desinstalar aprovado por feed HTTP restrito a `127.0.0.1`
 

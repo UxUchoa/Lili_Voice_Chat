@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { collectBatches, selectOlderPage } from "./messagePagination";
 
-describe("paginação do histórico cifrado", () => {
+describe("paginação do histórico", () => {
   it("sincroniza todos os lotes em vez de parar em 200 mensagens", async () => {
     const source = Array.from({ length: 257 }, (_, index) => index);
     const fetchBatch = vi.fn(async (from: number, to: number) =>

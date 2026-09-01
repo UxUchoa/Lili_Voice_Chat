@@ -72,7 +72,7 @@ export function GifPicker({
         </p>
         <p className="gif-picker-note">
           Enquanto isso, dá para enviar um GIF pelo botão de anexo — ele segue
-          o mesmo caminho cifrado.
+          o mesmo caminho de anexo.
         </p>
       </div>
     );

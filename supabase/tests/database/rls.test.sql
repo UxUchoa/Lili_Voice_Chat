@@ -105,21 +105,25 @@ select ok(
 
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000002', true);
 select throws_ok(
-  $$insert into public.messages(channel_id, author_id, sender_device_id, ciphertext, nonce, payload_version, mls_epoch) values ('40000000-0000-0000-0000-000000000001', auth.uid(), '50000000-0000-0000-0000-000000000002', 'cipher', 'nonce', 1, 1)$$,
+  $$insert into public.messages(channel_id, author_id, sender_device_id, body, payload_version) values ('40000000-0000-0000-0000-000000000001', auth.uid(), '50000000-0000-0000-0000-000000000002', 'cipher', 4)$$,
   '42501', null, 'direct message insert is denied'
 );
 select lives_ok(
-  $$select public.send_encrypted_message('40000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000002', 'ciphertext-only', 'unique-nonce', 1::smallint, 1)$$,
-  'encrypted message RPC enforces membership and device ownership'
+  $$select public.send_message('40000000-0000-0000-0000-000000000001', 'ciphertext-only', '50000000-0000-0000-0000-000000000002')$$,
+  'the send RPC enforces channel membership and device ownership'
 );
 select lives_ok(
-  $$select public.send_encrypted_message('40000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000002', 'epoch-zero-ciphertext', 'epoch-zero-nonce', 3::smallint, 0)$$,
-  'encrypted message RPC accepts a newly-created MLS group at epoch zero'
+  $$select public.send_message('40000000-0000-0000-0000-000000000001', 'epoch-zero-ciphertext', '50000000-0000-0000-0000-000000000002')$$,
+  'the send RPC accepts a second message from the same author'
 );
-select is((select count(*) from public.messages), 2::bigint, 'authorized member can read encrypted messages');
+select is((select count(*) from public.messages), 2::bigint, 'an authorized member reads the messages of the channel');
 
 reset role;
-select is((select count(*) from information_schema.columns where table_schema = 'public' and table_name = 'messages' and column_name in ('text','body','plaintext')), 0::bigint, 'messages schema has no plaintext column');
+-- O corpo passou a ser guardado em claro por decisão de produto. A garantia
+-- que resta — e que os testes acima exercitam — é de acesso: só participante
+-- do canal lê, e é a RLS que decide. Este teste fixa o novo contrato para que
+-- a coluna não seja renomeada ou removida sem que alguém perceba.
+select is((select count(*) from information_schema.columns where table_schema = 'public' and table_name = 'messages' and column_name = 'body'), 1::bigint, 'messages stores the body in a plain column, guarded by RLS');
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000002', true);

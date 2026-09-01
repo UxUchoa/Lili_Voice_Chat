@@ -98,8 +98,8 @@ insert into public.devices(
 
 -- Mensagens de tamanhos e idades diferentes, no canal criado com o servidor.
 insert into public.messages(
-  id, channel_id, author_id, sender_device_id, ciphertext, nonce,
-  payload_version, mls_epoch, created_at
+  id, channel_id, author_id, sender_device_id, body,
+  payload_version, created_at
 )
 select
   ('1d0000aa-0000-0000-0000-00000000000' || n)::uuid,
@@ -108,10 +108,13 @@ select
    limit 1),
   '1d000000-0000-0000-0000-000000000001',
   '1d00de00-0000-0000-0000-000000000001',
-  repeat('x', 4000)::bytea,
-  gen_random_bytes(12),
-  1,
-  1,
+  -- 8 KB por mensagem, o teto do corpo. Antes eram 4000 caracteres virando
+  -- bytea numa coluna de texto, o que dobrava o tamanho na representação hex
+  -- e era esse total inflado que estourava a fatia. Com o corpo em claro o
+  -- tamanho é o real, então o teste pede o máximo para continuar exercitando
+  -- o expurgo.
+  repeat('x', 8000),
+  4,
   now() - make_interval(days => 10 - n)
 from generate_series(1, 5) as n;
 
@@ -182,24 +185,24 @@ select is(
 -- ============================================================
 reset role;
 insert into public.messages(
-  id, channel_id, author_id, sender_device_id, ciphertext, nonce,
-  payload_version, mls_epoch
+  id, channel_id, author_id, sender_device_id, body, payload_version
 ) values (
   '1d0000bb-0000-0000-0000-000000000001',
   (select id from public.channels
    where server_id = (select id from public.servers where name = 'Servidor da cota')
    limit 1),
   '1d000000-0000-0000-0000-000000000001',
-  '1d00de00-0000-0000-0000-000000000001', 'x'::bytea, gen_random_bytes(12), 1, 1
+  '1d00de00-0000-0000-0000-000000000001', 'x', 4
 );
 insert into public.message_attachments(
-  message_id, channel_id, storage_object, ciphertext_size, ciphertext_hash
+  message_id, channel_id, storage_object, byte_size, name, mime
 ) values (
   '1d0000bb-0000-0000-0000-000000000001',
   (select channel_id from public.messages where id = '1d0000bb-0000-0000-0000-000000000001'),
   'canal/arquivo-que-ficaria-orfao.bin',
   1024,
-  repeat('a', 64)
+  'arquivo-que-ficaria-orfao.bin',
+  'application/octet-stream'
 );
 
 delete from public.messages where id = '1d0000bb-0000-0000-0000-000000000001';

@@ -4,7 +4,11 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useEffect } from "react";
-import { getMlsEngine } from "../crypto/mlsEngine";
+import {
+  editMessage,
+  listMessagesPage,
+  sendMessage,
+} from "../services/online/messages";
 import { supabase } from "../services/online/client";
 import { reportRuntimeError } from "../services/runtimeErrors";
 import { useAppStore } from "../store/appStore";
@@ -65,24 +69,11 @@ export function useOnlineMessages(channelId: string, enabled = true) {
       .on(
         "postgres_changes",
         {
-          event: "INSERT",
+          event: "*",
           schema: "public",
-          table: "mls_group_events",
+          table: "message_attachments",
           filter: `channel_id=eq.${channelId}`,
         },
-        () => void queryClient.invalidateQueries({ queryKey }),
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "channel_key_envelopes",
-          filter: `channel_id=eq.${channelId}`,
-        },
-        // O Welcome deste dispositivo pode chegar depois de a listagem ter
-        // renderizado o histórico como bloqueado; reprocessar destrava o canal
-        // sem refresh manual.
         () => void queryClient.invalidateQueries({ queryKey }),
       )
       .subscribe((status) => {
@@ -119,15 +110,12 @@ export function useOnlineMessages(channelId: string, enabled = true) {
     enabled: enabled && Boolean(currentUserId),
     initialPageParam: undefined as string | undefined,
     queryFn: async ({ pageParam }) =>
-      (await getMlsEngine(currentUserId)).listMessagesPage(
-        channelId,
-        pageParam,
-      ),
+      listMessagesPage(channelId, pageParam),
     getNextPageParam: (lastPage) => lastPage.nextCursor,
-    // A chave do grupo pode chegar segundos depois de abrir o canal (Welcome,
-    // refundação, epoch novo). Sem novas tentativas a conversa ficava presa
-    // num erro vermelho até o usuário trocar de canal e voltar.
-    retry: 5,
+    // Uma falha aqui é de rede ou de permissão, não mais de chave. As
+    // tentativas continuam porque a primeira leitura costuma coincidir com a
+    // reconexão do realtime.
+    retry: 3,
     retryDelay: (attempt) => Math.min(1_000 * 2 ** attempt, 8_000),
   });
 
@@ -135,7 +123,7 @@ export function useOnlineMessages(channelId: string, enabled = true) {
   // como um aviso genérico; o detalhe técnico precisa chegar ao console.
   useEffect(() => {
     if (query.error)
-      console.error("[e2ee] falha ao listar mensagens", {
+      console.error("[messages] falha ao listar mensagens", {
         channelId,
         error: query.error,
       });
@@ -213,7 +201,7 @@ export function useOnlineMessages(channelId: string, enabled = true) {
       replyToId?: string;
       files?: File[];
     }) => {
-      return (await getMlsEngine(currentUserId)).sendMessage({
+      return sendMessage(currentUserId, {
         channelId,
         text: input.text,
         replyToId: input.replyToId,
@@ -225,7 +213,7 @@ export function useOnlineMessages(channelId: string, enabled = true) {
   });
   const edit = useMutation({
     mutationFn: async (input: { messageId: string; text: string }) =>
-      (await getMlsEngine(currentUserId)).editMessage(input.messageId, {
+      editMessage(input.messageId, {
         text: input.text,
         ...resolveMentions(input.text),
       }),

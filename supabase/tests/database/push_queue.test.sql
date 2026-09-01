@@ -31,7 +31,7 @@ select set_config('request.jwt.claim.sub', '11000000-0000-0000-0000-000000000001
 select set_config('request.jwt.claim.role', 'authenticated', true);
 
 select lives_ok(
-  $$select public.send_encrypted_message('41000000-0000-0000-0000-000000000001', '51000000-0000-0000-0000-000000000001', 'cipher-one', 'nonce-one', 3::smallint, 0, null, '{}')$$,
+  $$select public.send_message('41000000-0000-0000-0000-000000000001', 'cipher-one', '51000000-0000-0000-0000-000000000001', null, '{}')$$,
   'a non-mention encrypted message is accepted'
 );
 reset role;
@@ -45,7 +45,7 @@ select is(
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '11000000-0000-0000-0000-000000000001', true);
 select lives_ok(
-  $$select public.send_encrypted_message('41000000-0000-0000-0000-000000000001', '51000000-0000-0000-0000-000000000001', 'cipher-two', 'nonce-two', 3::smallint, 0, null, array['11000000-0000-0000-0000-000000000002'::uuid])$$,
+  $$select public.send_message('41000000-0000-0000-0000-000000000001', 'cipher-two', '51000000-0000-0000-0000-000000000001', null, array['11000000-0000-0000-0000-000000000002'::uuid])$$,
   'an encrypted mention is accepted'
 );
 reset role;
@@ -64,7 +64,7 @@ select is(
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '11000000-0000-0000-0000-000000000001', true);
 select throws_ok(
-  $$select public.send_encrypted_message('41000000-0000-0000-0000-000000000001', '51000000-0000-0000-0000-000000000001', 'cipher-invalid', 'nonce-invalid', 3::smallint, 0, null, array['11000000-0000-0000-0000-000000000099'::uuid])$$,
+  $$select public.send_message('41000000-0000-0000-0000-000000000001', 'cipher-invalid', '51000000-0000-0000-0000-000000000001', null, array['11000000-0000-0000-0000-000000000099'::uuid])$$,
   'P0001',
   'invalid mention recipient',
   'a sender cannot create notification metadata for a user without channel access'
@@ -79,15 +79,7 @@ delete from public.notification_envelopes;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '11000000-0000-0000-0000-000000000001', true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
-select public.send_encrypted_message(
-  p_channel_id => '41000000-0000-0000-0000-000000000001',
-  p_device_id => '51000000-0000-0000-0000-000000000001',
-  p_ciphertext => 'cipher-suppressed-everyone',
-  p_nonce => 'nonce-suppressed-everyone',
-  p_payload_version => 3::smallint,
-  p_mls_epoch => 0,
-  p_mentions_everyone => true
-);
+select public.send_message(p_channel_id => '41000000-0000-0000-0000-000000000001', p_body => 'cipher-suppressed-everyone', p_device_id => '51000000-0000-0000-0000-000000000001', p_mentions_everyone => true);
 reset role;
 select is(
   (select count(*) from public.notification_envelopes),
@@ -109,7 +101,7 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub', '11000000-0000-0000-0000-000000000001', true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select lives_ok(
-  $$select public.send_encrypted_message('41000000-0000-0000-0000-000000000001', '51000000-0000-0000-0000-000000000001', 'cipher-three', 'nonce-three', 3::smallint, 0, null, array['11000000-0000-0000-0000-000000000002'::uuid])$$,
+  $$select public.send_message('41000000-0000-0000-0000-000000000001', 'cipher-three', '51000000-0000-0000-0000-000000000001', null, array['11000000-0000-0000-0000-000000000002'::uuid])$$,
   'a message is still accepted while the recipient is muted'
 );
 select is((select count(*) from public.notification_envelopes), 0::bigint, 'NONE mode never enqueues push');

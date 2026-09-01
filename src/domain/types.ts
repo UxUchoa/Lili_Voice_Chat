@@ -196,11 +196,8 @@ export interface MessagePayload {
     name: string;
     size: number;
     mime: string;
-    /** Online-only fields. They are inside the MLS-encrypted payload. */
+    /** Caminho no bucket `attachments`; o acesso é o do Storage autenticado. */
     storageObject?: string;
-    fileKey?: string;
-    nonce?: string;
-    ciphertextHash?: string;
   }>;
 }
 
@@ -208,7 +205,8 @@ export interface MessageView extends MessagePayload {
   id: string;
   channelId: string;
   authorId: string;
-  senderDeviceId: string;
+  /** Sessão que enviou. Só rotula a origem; não tem papel de segurança. */
+  senderDeviceId?: string;
   replyToId?: string;
   pinned: boolean;
   createdAt: string;

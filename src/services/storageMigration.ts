@@ -20,9 +20,9 @@
  * Por isso a chave órfã é sempre **removida**, mesmo quando não há nada a
  * restaurar. Deixar o segundo cofre de pé é deixar a falha de pé.
  *
- * Nada aqui toca no material criptográfico. O IndexedDB do MLS e a master key
- * do dispositivo nunca foram renomeados justamente para não aposentar todo
- * dispositivo existente, então o histórico E2EE não depende desta migração.
+ * Esta migração só move chaves de `localStorage`. Ela nasceu para devolver a
+ * sessão do Supabase a quem abriu o aplicativo entre os dois deploys do rename
+ * e continua valendo enquanto existir alguém nesse estado.
  */
 const RENAMED: Array<[abandoned: string, current: string]> = [
   ["lili.supabase.session", "janja.supabase.session"],

@@ -35,24 +35,18 @@ select set_config('request.jwt.claim.sub', '12000000-0000-0000-0000-000000000002
 select set_config('request.jwt.claim.role', 'authenticated', true);
 
 select lives_ok(
-  $$select public.send_encrypted_message(
-    p_channel_id => '42000000-0000-0000-0000-000000000001',
-    p_device_id => '52000000-0000-0000-0000-000000000001',
-    p_ciphertext => 'cipher-role', p_nonce => 'nonce-role',
-    p_payload_version => 3::smallint, p_mls_epoch => 0,
-    p_mention_role_ids => array['32000000-0000-0000-0000-000000000002'::uuid]
-  )$$,
+  $$select public.send_message(p_channel_id => '42000000-0000-0000-0000-000000000001', p_body => 'cipher-role', p_device_id => '52000000-0000-0000-0000-000000000001', p_mention_role_ids => array['32000000-0000-0000-0000-000000000002'::uuid])$$,
   'a mentionable role can be mentioned without the global mention permission'
 );
 reset role;
 
 select is(
-  (select mention_recipient_ids from public.messages where ciphertext = 'cipher-role'),
+  (select mention_recipient_ids from public.messages where body = 'cipher-role'),
   array['12000000-0000-0000-0000-000000000003'::uuid],
   'role membership is resolved into recipient ids'
 );
 select is(
-  (select mention_role_ids from public.messages where ciphertext = 'cipher-role'),
+  (select mention_role_ids from public.messages where body = 'cipher-role'),
   array['32000000-0000-0000-0000-000000000002'::uuid],
   'role mention metadata is persisted'
 );
@@ -65,7 +59,7 @@ select is(
 );
 update public.messages
 set mention_role_ids = '{}'
-where ciphertext = 'cipher-role';
+where body = 'cipher-role';
 select is(
   (select mention_count from public.read_states
    where channel_id = '42000000-0000-0000-0000-000000000001'
@@ -75,7 +69,7 @@ select is(
 );
 update public.messages
 set mention_user_ids = array['12000000-0000-0000-0000-000000000003'::uuid]
-where ciphertext = 'cipher-role';
+where body = 'cipher-role';
 select is(
   (select mention_count from public.read_states
    where channel_id = '42000000-0000-0000-0000-000000000001'
@@ -87,24 +81,12 @@ select is(
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '12000000-0000-0000-0000-000000000002', true);
 select throws_ok(
-  $$select public.send_encrypted_message(
-    p_channel_id => '42000000-0000-0000-0000-000000000001',
-    p_device_id => '52000000-0000-0000-0000-000000000001',
-    p_ciphertext => 'cipher-locked', p_nonce => 'nonce-locked',
-    p_payload_version => 3::smallint, p_mls_epoch => 0,
-    p_mention_role_ids => array['32000000-0000-0000-0000-000000000003'::uuid]
-  )$$,
+  $$select public.send_message(p_channel_id => '42000000-0000-0000-0000-000000000001', p_body => 'cipher-locked', p_device_id => '52000000-0000-0000-0000-000000000001', p_mention_role_ids => array['32000000-0000-0000-0000-000000000003'::uuid])$$,
   'P0001', 'invalid or non-mentionable role',
   'a non-mentionable role is rejected without permission'
 );
 select throws_ok(
-  $$select public.send_encrypted_message(
-    p_channel_id => '42000000-0000-0000-0000-000000000001',
-    p_device_id => '52000000-0000-0000-0000-000000000001',
-    p_ciphertext => 'cipher-everyone-denied', p_nonce => 'nonce-everyone-denied',
-    p_payload_version => 3::smallint, p_mls_epoch => 0,
-    p_mentions_everyone => true
-  )$$,
+  $$select public.send_message(p_channel_id => '42000000-0000-0000-0000-000000000001', p_body => 'cipher-everyone-denied', p_device_id => '52000000-0000-0000-0000-000000000001', p_mentions_everyone => true)$$,
   'P0001', 'missing mention everyone permission',
   '@everyone is rejected without MENTION_EVERYONE'
 );
@@ -117,25 +99,18 @@ where id = '32000000-0000-0000-0000-000000000001';
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '12000000-0000-0000-0000-000000000002', true);
 select lives_ok(
-  $$select public.send_encrypted_message(
-    p_channel_id => '42000000-0000-0000-0000-000000000001',
-    p_device_id => '52000000-0000-0000-0000-000000000001',
-    p_ciphertext => 'cipher-special', p_nonce => 'nonce-special',
-    p_payload_version => 3::smallint, p_mls_epoch => 0,
-    p_mention_here_recipient_ids => array['12000000-0000-0000-0000-000000000003'::uuid],
-    p_mentions_everyone => true, p_mentions_here => true
-  )$$,
+  $$select public.send_message(p_channel_id => '42000000-0000-0000-0000-000000000001', p_body => 'cipher-special', p_device_id => '52000000-0000-0000-0000-000000000001', p_mention_here_recipient_ids => array['12000000-0000-0000-0000-000000000003'::uuid], p_mentions_everyone => true, p_mentions_here => true)$$,
   '@everyone and @here are accepted with permission'
 );
 reset role;
 
 select ok(
-  (select mentions_everyone and mentions_here from public.messages where ciphertext = 'cipher-special'),
+  (select mentions_everyone and mentions_here from public.messages where body = 'cipher-special'),
   'special mention flags are persisted'
 );
 select ok(
   (select mention_recipient_ids @> array['12000000-0000-0000-0000-000000000003'::uuid]
-   from public.messages where ciphertext = 'cipher-special'),
+   from public.messages where body = 'cipher-special'),
   'special mentions resolve the target member'
 );
 

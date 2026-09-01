@@ -45,22 +45,6 @@ describe("runStage", () => {
     );
   });
 
-  it("deixa passar a espera por Welcome, que é estado previsto", async () => {
-    class MlsWelcomePendingError extends Error {
-      constructor() {
-        super("aguardando");
-        this.name = "MlsWelcomePendingError";
-      }
-    }
-    const pending = new MlsWelcomePendingError();
-
-    const caught = await runStage("SEND", "GROUP_RESOLVED", {}, async () => {
-      throw pending;
-    }).catch((error: unknown) => error);
-
-    expect(caught).toBe(pending);
-  });
-
   it("não reembrulha um erro que já traz o estágio", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const inner = new MessagePipelineError(

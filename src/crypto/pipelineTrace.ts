@@ -61,8 +61,8 @@ export class MessagePipelineError extends Error {
 /**
  * Executa um estágio anotando onde ele quebrou.
  *
- * O erro original vai em `cause`, intacto: quem trata `MlsWelcomePendingError`
- * mais acima continua conseguindo reconhecê-lo.
+ * O erro original vai em `cause`, intacto, para que quem trata um tipo
+ * específico mais acima continue conseguindo reconhecê-lo.
  */
 export async function runStage<T>(
   phase: "SEND" | "RECEIVE",
@@ -74,11 +74,6 @@ export async function runStage<T>(
     return await step();
   } catch (caught) {
     if (caught instanceof MessagePipelineError) throw caught;
-    // Esperar um Welcome é estado previsto do protocolo, não falha de estágio.
-    // Comparado pelo nome para não importar o motor e fechar um ciclo entre os
-    // dois módulos.
-    if (caught instanceof Error && caught.name === "MlsWelcomePendingError")
-      throw caught;
     console.warn(`[pipeline] ${phase}_FAILED_AT=${stage}`, {
       ...detail,
       error: caught instanceof Error ? caught.name : typeof caught,

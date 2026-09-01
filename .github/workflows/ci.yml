@@ -45,16 +45,3 @@ jobs:
       - run: npx supabase test db
       - run: npx supabase db lint --local --schema public --level warning
 
-  openmls:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 22
-      - uses: dtolnay/rust-toolchain@stable
-      # `vendor/openmls` não é versionado: são 19 MB de código de terceiro mais
-      # o `target/` que passa de 1 GB depois do primeiro build. O script clona
-      # o commit fixado e aplica patches/openmls-wasm.patch.
-      - run: npm run vendor:openmls
-      - run: cargo test --manifest-path vendor/openmls/openmls-wasm/Cargo.toml

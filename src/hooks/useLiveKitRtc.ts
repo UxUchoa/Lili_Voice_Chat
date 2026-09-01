@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ExternalE2EEKeyProvider,
   Room,
   RoomEvent,
   Track,
@@ -9,11 +8,7 @@ import {
   type RemoteParticipant,
   type RemoteTrack,
 } from "livekit-client";
-import {
-  getMlsEngine,
-  MlsWelcomePendingError,
-  type MlsEngine,
-} from "../crypto/mlsEngine";
+import { ensureDevice } from "../services/online/messages";
 import { setOnlineVoiceMediaState } from "../services/online/calls";
 import { CAMERA_MODES, cameraMode } from "./cameraModes";
 import { supabase } from "../services/online/client";
@@ -38,7 +33,7 @@ export interface RemotePeer {
 
 export type RtcConnectionState =
   | "idle"
-  | "preparing-encryption"
+  | "preparing"
   | "connecting"
   | "connected"
   | "reconnecting"
@@ -99,25 +94,6 @@ function screenShareBitrate({
       : base;
 }
 
-async function exportMediaKeyWithRetry(
-  engine: MlsEngine,
-  roomId: string,
-  isDisposed: () => boolean,
-) {
-  let lastError: unknown;
-  for (let attempt = 0; attempt < 30 && !isDisposed(); attempt += 1) {
-    try {
-      return await engine.exportMediaKey(roomId);
-    } catch (caught) {
-      lastError = caught;
-      if (attempt < 29) await wait(1_000);
-    }
-  }
-  throw (
-    lastError ?? new Error("Não foi possível preparar a chave E2EE da sala.")
-  );
-}
-
 export function useLiveKitRtc(roomId: string, enabled = true) {
   const currentUserId = useAppStore((state) => state.currentUserId);
   const participantName = useAppStore((state) => {
@@ -139,7 +115,6 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
   const [connectionState, setConnectionState] =
     useState<RtcConnectionState>("idle");
   const [connectionError, setConnectionError] = useState("");
-  const [e2eeEpoch, setE2eeEpoch] = useState<number | null>(null);
 
   // Sessão e dispositivo desta chamada, para publicar o que está no ar. Vive
   // num ref porque quem precisa disso é `publishDesiredTracks`, que roda fora
@@ -238,15 +213,10 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
     }
     let disposed = false;
     let room: Room | undefined;
-    let encryptionTimer: number | undefined;
     let heartbeatTimer: number | undefined;
-    let encryptionSyncRunning = false;
-    let encryptionSyncFailures = 0;
-    let currentEpoch: number | null = null;
     let callSessionId: string | undefined;
     let markedLeft = false;
     let leaving: Promise<void> | undefined;
-    let worker: Worker | undefined;
     // Quem já foi anunciado nesta sessão. O som de entrada e o de saída
     // pertencem a uma transição real de presença: reconexão, renegociação de
     // track ou um segundo evento do mesmo participante não podem tocá-los.
@@ -271,29 +241,15 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
     let engineDeviceId = "";
     leaveSessionRef.current = markLeft;
 
-    setConnectionState("preparing-encryption");
+    setConnectionState("preparing");
     setConnectionError("");
-    setE2eeEpoch(null);
     setRemotePeers([]);
     setSpeakingIds([]);
 
     void (async () => {
-      const engine = await getMlsEngine(currentUserId);
-      engineDeviceId = engine.deviceId;
-      const media = await exportMediaKeyWithRetry(engine, roomId, isDisposed);
+      const deviceId = await ensureDevice(currentUserId);
+      engineDeviceId = deviceId;
       if (disposed) return;
-      currentEpoch = media.epoch;
-      setE2eeEpoch(media.epoch);
-      const keyProvider = new ExternalE2EEKeyProvider({
-        ratchetWindowSize: 16,
-      });
-      await keyProvider.setKey(media.key);
-      worker = new Worker(
-        new URL("livekit-client/e2ee-worker", import.meta.url),
-        {
-          type: "module",
-        },
-      );
       room = new Room({
         // adaptiveStream só sabe dimensionar a camada recebida quando os
         // elementos <video> são registrados via track.attach(). Esta interface
@@ -334,7 +290,6 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
           dtx: true,
           red: true,
         },
-        encryption: { keyProvider, worker },
       });
       const syncParticipant = (
         participant: RemoteParticipant,
@@ -492,22 +447,21 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
           : undefined,
       });
       if (disposed) return;
-      await room.setE2EEEnabled(true);
       const { error: historyError } = await supabase.rpc("join_call_session", {
         p_session_id: callSessionId,
-        p_device_id: engine.deviceId,
+        p_device_id: deviceId,
       });
       if (historyError) throw historyError;
       voiceIdentityRef.current = {
         sessionId: callSessionId,
-        deviceId: engine.deviceId,
+        deviceId,
       };
       const heartbeat = async () => {
         const { error: heartbeatError } = await supabase.rpc(
           "heartbeat_call_session",
           {
             p_session_id: callSessionId,
-            p_device_id: engine.deviceId,
+            p_device_id: deviceId,
           },
         );
         if (heartbeatError) throw heartbeatError;
@@ -532,37 +486,9 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
       playSound("self-join");
       presenceSoundsMuted = false;
 
-      const synchronizeEncryption = async () => {
-        if (disposed || encryptionSyncRunning) return;
-        encryptionSyncRunning = true;
-        try {
-          const next = await engine.exportMediaKey(roomId);
-          if (disposed || next.epoch === currentEpoch) return;
-          await keyProvider.setKey(next.key);
-          currentEpoch = next.epoch;
-          setE2eeEpoch(next.epoch);
-          encryptionSyncFailures = 0;
-        } catch (caught) {
-          encryptionSyncFailures += 1;
-          console.warn("Falha temporária ao sincronizar epoch E2EE", caught);
-          if (!disposed && encryptionSyncFailures >= 3)
-            setConnectionError(
-              `A criptografia da chamada não conseguiu sincronizar: ${rtcErrorMessage(caught)}`,
-            );
-        } finally {
-          encryptionSyncRunning = false;
-        }
-      };
-      encryptionTimer = window.setInterval(
-        () => void synchronizeEncryption(),
-        1_500,
-      );
     })().catch(async (caught) => {
       if (disposed) return;
-      // Chave pendente é um estado de espera legítimo, não uma falha de código.
-      if (caught instanceof MlsWelcomePendingError)
-        console.warn("Chave E2EE da sala ainda não disponível", caught.message);
-      else console.error("Falha ao conectar LiveKit E2EE", caught);
+      console.error("Falha ao conectar à sala do LiveKit", caught);
       await room?.disconnect();
       if (disposed) return;
       const message = rtcErrorMessage(caught);
@@ -575,11 +501,9 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
       // estado numa sessão que já acabou.
       voiceIdentityRef.current = null;
       void markLeft().catch(console.error);
-      if (encryptionTimer !== undefined) window.clearInterval(encryptionTimer);
       if (heartbeatTimer !== undefined) window.clearInterval(heartbeatTimer);
       roomRef.current = null;
       room?.disconnect();
-      worker?.terminate();
       setRemotePeers([]);
       setSpeakingIds([]);
     };
@@ -661,7 +585,6 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
     setLocalTrackMuted,
     connectionState,
     connectionError,
-    e2eeEpoch,
     leaveRoom,
   };
 }

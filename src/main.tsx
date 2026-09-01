@@ -39,12 +39,10 @@ import { useOnlinePresence } from "./hooks/useOnlinePresence";
 import { useTyping } from "./hooks/useTyping";
 import { useForegroundNotifications } from "./hooks/useForegroundNotifications";
 import {
-  closeMlsEngine,
   downloadOnlineAttachment,
-  forgetMlsDevice,
-  getMlsEngine,
-  type MlsPersistenceMode,
-} from "./crypto/mlsEngine";
+  ensureDevice,
+  releaseDevice,
+} from "./services/online/messages";
 import {
   getCurrentOnlineAccount,
   listOnlineAccountSessions,
@@ -129,6 +127,7 @@ import {
 import {
   listDecryptedOnlineMessages,
   listOnlineDevices,
+  revokeCurrentOnlineDevice,
   revokeOnlineDevice,
   saveOnlinePrivacy,
   saveOnlineProfile,
@@ -835,7 +834,7 @@ function NewDirectMessageModal({
       >
         <header>
           <div>
-            <span className="eyebrow">NOVA CONVERSA E2EE</span>
+            <span className="eyebrow">NOVA CONVERSA</span>
             <h2>{selected.length > 1 ? "Criar grupo" : "Iniciar conversa"}</h2>
           </div>
           <button
@@ -919,7 +918,7 @@ function NewDirectMessageModal({
           {busy
             ? "Abrindo…"
             : selected.length > 1
-              ? "Criar grupo cifrado"
+              ? "Criar grupo"
               : "Abrir conversa"}
         </button>
       </section>
@@ -1886,7 +1885,7 @@ function ChannelSidebar({
                 {server.description}
               </span>
             ) : (
-              <span className="eyebrow">SERVIDOR LOCAL E2EE</span>
+              <span className="eyebrow">NOVO SERVIDOR</span>
             )}
           </div>
         </div>
@@ -2452,7 +2451,7 @@ function Composer({
       <div className="composer">
         <button
           disabled={!canAttach || timedOut}
-          aria-label="Anexar arquivo cifrado"
+          aria-label="Anexar arquivo"
           onClick={() => fileInputRef.current?.click()}
         >
           <IconPlus size={20} />
@@ -2511,7 +2510,7 @@ function Composer({
       >
         <Icon>{disabledReason ? "!" : "🔒"}</Icon>{" "}
         {disabledReason ||
-          `Texto, metadados e anexos persistidos como ciphertext AES-GCM · ${value.length}/8.000`}
+          `${value.length}/8.000`}
       </span>
     </div>
   );
@@ -2940,7 +2939,7 @@ function ChatView({
           )}
           <div>
             <h1>{channel.name}</h1>
-            <span>{messages.length} mensagens E2EE sincronizadas</span>
+            <span>{messages.length} mensagens sincronizadas</span>
           </div>
         </div>
         <div className="conversation-tools">
@@ -3063,8 +3062,8 @@ function ChatView({
               : `Bem-vindo ao #${channel.name}!`}
           </h2>
           <p>
-            As mensagens são cifradas neste dispositivo e sincronizadas pelo
-            Supabase local.
+            As mensagens ficam no servidor e o acesso é restrito aos
+            participantes desta conversa.
           </p>
         </div>
         {isLoading && <p className="loading-copy">Decifrando mensagens…</p>}
@@ -3381,7 +3380,7 @@ function GroupDmSettingsPanel({
       await addOnlineGroupDmMember(channel.id, newMemberId);
       await refresh();
       setNewMemberId("");
-      setNotice("Membro adicionado ao grupo E2EE.");
+      setNotice("Membro adicionado ao grupo.");
     } catch (caught) {
       setNotice(
         caught instanceof Error ? caught.message : "Falha ao adicionar membro.",
@@ -3408,7 +3407,7 @@ function GroupDmSettingsPanel({
       >
         <header>
           <div>
-            <span className="eyebrow">GRUPO E2EE</span>
+            <span className="eyebrow">GRUPO</span>
             <h2>Configurar grupo</h2>
           </div>
           <button className="close-settings" onClick={onClose}>
@@ -3644,7 +3643,7 @@ function CallView({
     [chatOpen, setChatOpen] = useState(false),
     [privacyOpen, setPrivacyOpen] = useState(false);
   const [mediaNotice, setMediaNotice] = useState(
-    "Preparando a sala e a chave E2EE…",
+    "Preparando a sala…",
   );
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]),
     [audioInputId, setAudioInputId] = useState(""),
@@ -3686,7 +3685,6 @@ function CallView({
     setLocalTrackMuted,
     connectionState,
     connectionError,
-    e2eeEpoch,
     leaveRoom,
   } = useRtc(channel.id);
   const stopStream = (stream: MediaStream | null) =>
@@ -4098,14 +4096,12 @@ function CallView({
   useEffect(() => {
     if (connectionError)
       setMediaNotice(`Problema na chamada: ${connectionError}`);
-    else if (connectionState === "preparing-encryption")
-      setMediaNotice("Sincronizando o grupo OpenMLS e a chave da chamada…");
+    else if (connectionState === "preparing")
+      setMediaNotice("Preparando a chamada…");
     else if (connectionState === "connecting")
       setMediaNotice("Conectando ao servidor LiveKit…");
     else if (connectionState === "connected")
-      setMediaNotice(
-        `Sala conectada com mídia E2EE${e2eeEpoch === null ? "" : ` · epoch ${e2eeEpoch}`}.`,
-      );
+      setMediaNotice("Sala conectada.");
     else if (connectionState === "reconnecting")
       setMediaNotice("Conexão interrompida; reconectando à chamada…");
     else if (connectionState === "disconnected")
@@ -4114,7 +4110,7 @@ function CallView({
       setMediaNotice(
         `Falha ao entrar na chamada: ${connectionError || "verifique Supabase e LiveKit."}`,
       );
-  }, [connectionError, connectionState, e2eeEpoch]);
+  }, [connectionError, connectionState]);
   useEffect(() => {
     const refresh = async () => {
       if (!navigator.mediaDevices?.enumerateDevices) return;
@@ -4441,10 +4437,10 @@ function CallView({
               ? "Falha na conexão da chamada"
               : "Chamada conectada com falha"
             : connectionState === "connected"
-              ? `LiveKit conectado · E2EE epoch ${e2eeEpoch ?? "—"}`
+              ? "LiveKit conectado"
               : connectionState === "error"
                 ? "Falha na conexão da chamada"
-                : "Conectando LiveKit · E2EE OpenMLS"}{" "}
+                : "Conectando ao LiveKit"}{" "}
           <button
             aria-label="Detalhes de privacidade da chamada"
             aria-expanded={privacyOpen}
@@ -4481,12 +4477,8 @@ function CallView({
               <dd>LiveKit SFU / WebRTC</dd>
             </div>
             <div>
-              <dt>Criptografia</dt>
-              <dd>E2EE · chave exportada do grupo OpenMLS</dd>
-            </div>
-            <div>
-              <dt>Epoch atual</dt>
-              <dd>{e2eeEpoch ?? "sincronizando"}</dd>
+              <dt>Transporte</dt>
+              <dd>DTLS-SRTP até o servidor LiveKit</dd>
             </div>
             <div>
               <dt>Estado</dt>
@@ -5651,7 +5643,7 @@ function SearchModal({
                 .querySelector<HTMLButtonElement>(".search-suggestions button")
                 ?.focus();
             }}
-            placeholder="Pesquisar servidores, canais, pessoas e mensagens decifradas"
+            placeholder="Pesquisar servidores, canais, pessoas e mensagens"
           />
           <kbd>ESC</kbd>
         </div>
@@ -8203,8 +8195,6 @@ function ProfilePanel({
     [devices, setDevices] = useState<OnlineDevice[]>([]),
     [authSessions, setAuthSessions] = useState<OnlineAuthSession[]>([]),
     [currentDeviceId, setCurrentDeviceId] = useState(""),
-    [persistenceMode, setPersistenceMode] =
-      useState<MlsPersistenceMode>("durable"),
     [logoutBusy, setLogoutBusy] = useState(false),
     [newPassword, setNewPassword] = useState(""),
     [securityNotice, setSecurityNotice] = useState(""),
@@ -8212,21 +8202,20 @@ function ProfilePanel({
   useEffect(() => {
     void (async () => {
       try {
-        const engine = await getMlsEngine(account.profileId);
-        setPersistenceMode(engine.persistenceMode);
+        const deviceId = await ensureDevice(account.profileId);
         const [nextDevices, nextSessions] = await Promise.all([
           listOnlineDevices(account.profileId),
           listOnlineAccountSessions(),
         ]);
-        setCurrentDeviceId(engine.deviceId);
+        setCurrentDeviceId(deviceId);
         setDevices(nextDevices);
         setAuthSessions(nextSessions);
         const current = nextDevices.find(
-          (device) => device.id === engine.deviceId,
+          (device) => device.id === deviceId,
         );
         if (current)
           setSecurityNotice(
-            `Fingerprint deste dispositivo: ${current.fingerprint.slice(0, 16)}`,
+            `Identificador desta sessão: ${current.fingerprint.slice(0, 16)}`,
           );
       } catch (caught) {
         setSecurityNotice(
@@ -8266,7 +8255,7 @@ function ProfilePanel({
       await revokeOnlineDevice(deviceId);
       setDevices(await listOnlineDevices(account.profileId));
       setSecurityNotice(
-        "Dispositivo revogado. Os grupos OpenMLS removem a identidade na próxima sincronização do fundador.",
+        "Dispositivo revogado. Ele deixa de aparecer na lista de sessões.",
       );
     } catch (caught) {
       setSecurityNotice(
@@ -8291,25 +8280,12 @@ function ProfilePanel({
       setLogoutBusy(false);
     }
   };
-  const requestLogout = () => {
-    if (persistenceMode === "durable") {
-      void finishSession(false);
-      return;
-    }
-    confirm.ask({
-      title: "Sair com cofre temporário",
-      message:
-        "Este navegador não conseguiu persistir a chave E2EE. Ao sair, o histórico cifrado deste dispositivo ficará indisponível.",
-      confirmLabel: "Sair mesmo assim",
-      danger: true,
-      onConfirm: () => void finishSession(false),
-    });
-  };
+  const requestLogout = () => void finishSession(false);
   const requestRemoveDevice = () =>
     confirm.ask({
       title: "Sair e remover este dispositivo",
       message:
-        "A identidade E2EE será revogada e a chave, o estado dos canais e o cache desta conta serão apagados deste navegador. Esta ação não pode ser desfeita.",
+        "Esta sessão será revogada e deixará de aparecer na sua lista de dispositivos. O histórico continua no servidor e segue acessível nos seus outros dispositivos.",
       confirmLabel: "Remover dispositivo",
       danger: true,
       onConfirm: () => void finishSession(true),
@@ -9086,12 +9062,12 @@ function HelpPanel({ onClose }: { onClose: () => void }) {
         <span className="eyebrow">AJUDA LOCAL</span>
         <h2>Lili — Voice Chat</h2>
         <p>
-          Chamadas usam LiveKit/TURN e mídia E2EE vinculada ao grupo OpenMLS.
+          Chamadas de voz, vídeo e tela usam LiveKit com TURN.
         </p>
         <div className="help-grid">
           <div>
             <b>Ctrl + K</b>
-            <span>Busca canais, pessoas e mensagens decifradas.</span>
+            <span>Busca canais, pessoas e mensagens.</span>
           </div>
           <div>
             <b>Shift + Enter</b>
@@ -9107,9 +9083,10 @@ function HelpPanel({ onClose }: { onClose: () => void }) {
           </div>
         </div>
         <p className="help-security">
-          🔒 Mensagens e anexos são persistidos como ciphertext AES-GCM. Áudio,
-          vídeo e tela usam E2EE sobre LiveKit/WebRTC, com chaves derivadas do
-          grupo OpenMLS.
+          🔒 O acesso é controlado pela sua conta: só participantes do canal
+          leem as mensagens, e as regras valem no próprio banco. O transporte é
+          cifrado (HTTPS e DTLS-SRTP). Não há criptografia ponta a ponta — o
+          servidor consegue ler o conteúdo das mensagens e dos anexos.
         </p>
       </section>
     </div>
@@ -9292,9 +9269,7 @@ function App({
     [directUnreads, setDirectUnreads] = useState<DirectChannelUnread[]>([]),
     [voiceMembers, setVoiceMembers] = useState<OnlineVoiceMembers>({}),
     [workspaceError, setWorkspaceError] = useState(""),
-    [runtimeError, setRuntimeError] = useState(""),
-    [e2eePersistenceMode, setE2eePersistenceMode] =
-      useState<MlsPersistenceMode | null>(null);
+    [runtimeError, setRuntimeError] = useState("");
 
   // A navegação persistida pertence a uma conta; entrar com outra começa do
   // zero em vez de herdar canais que talvez nem existam para ela.
@@ -9305,18 +9280,14 @@ function App({
   useEffect(primeAudioOnUserGesture, []);
   useEffect(() => {
     let active = true;
-    void getMlsEngine(account.profileId)
-      .then((engine) => {
-        if (active) setE2eePersistenceMode(engine.persistenceMode);
-      })
-      .catch((caught) => {
-        if (active)
-          setRuntimeError(
-            caught instanceof Error
-              ? caught.message
-              : "Não foi possível abrir o cofre E2EE.",
-          );
-      });
+    void ensureDevice(account.profileId).catch((caught) => {
+      if (active)
+        setRuntimeError(
+          caught instanceof Error
+            ? caught.message
+            : "Não foi possível registrar esta sessão.",
+        );
+    });
     return () => {
       active = false;
     };
@@ -9819,15 +9790,6 @@ function App({
         onInbox={() => setInboxOpen(true)}
         onHelp={() => setHelpOpen(true)}
       />
-      {e2eePersistenceMode === "session" && (
-        <div className="e2ee-storage-warning" role="alert">
-          <Icon>!</Icon>
-          <span>
-            Cofre E2EE temporário: este navegador não conseguiu persistir a
-            chave. Fechar ou sair da conta pode tornar o histórico indisponível.
-          </span>
-        </div>
-      )}
       <div className="app-body">
         <button
           className="mobile-nav-backdrop"
@@ -9925,7 +9887,7 @@ function App({
         ) : !activeChannel ? (
           <main className="workspace-empty">
             <Logo />
-            <span className="eyebrow">LILI · LOCAL E2EE</span>
+            <span className="eyebrow">LILI · LOCAL</span>
             <h1>Converse com outras pessoas</h1>
             <p>
               Crie um servidor ou use um convite para entrar no mesmo espaço em
@@ -10237,7 +10199,7 @@ function NewPasswordCard({ onDone }: { onDone: () => void }) {
     <main className="auth-screen">
       <section className="auth-card">
         <Logo />
-        <span className="eyebrow">LILI · ONLINE E2EE</span>
+        <span className="eyebrow">LILI · ONLINE</span>
         <h1>Defina uma senha nova</h1>
         <p>
           O link do e-mail já provou que a conta é sua. Escolha a senha nova
@@ -10392,7 +10354,7 @@ function OnlineAuthGate() {
   };
 
   const logout = async () => {
-    if (account) await closeMlsEngine(account.profileId);
+    if (account) releaseDevice(account.profileId);
     await logoutOnlineAccount();
     queryClient.clear();
     setAccount(null);
@@ -10401,7 +10363,7 @@ function OnlineAuthGate() {
 
   const removeDeviceAndLogout = async () => {
     if (!account) return;
-    await forgetMlsDevice(account.profileId);
+    await revokeCurrentOnlineDevice(account.profileId);
     await logoutOnlineAccount();
     queryClient.clear();
     setAccount(null);
@@ -10447,7 +10409,7 @@ function OnlineAuthGate() {
     <main className="auth-screen">
       <section className="auth-card">
         <Logo />
-        <span className="eyebrow">LILI · ONLINE E2EE</span>
+        <span className="eyebrow">LILI · ONLINE</span>
         <h1>
           {mode === "register"
             ? "Criar conta"
@@ -10458,7 +10420,7 @@ function OnlineAuthGate() {
         <p>
           {mode === "recover"
             ? "Informe o e-mail da conta e a chave de recuperação que você guardou no cadastro. Não há link por e-mail: a chave é a única prova aceita."
-            : "Conta protegida pelo Supabase Auth; o conteúdo das mensagens permanece cifrado no servidor."}
+            : "Conta protegida pelo Supabase Auth; o acesso às mensagens é restrito aos participantes do canal."}
         </p>
         {mode === "register" && (
           <>

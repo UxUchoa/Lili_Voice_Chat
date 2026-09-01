@@ -3,7 +3,7 @@ import type {
   PresenceStatus,
   PrivacySetting,
 } from "../../domain/types";
-import { getMlsEngine } from "../../crypto/mlsEngine";
+import { ensureDevice, listMessages, releaseDevice } from "./messages";
 import { supabase } from "./client";
 import { assertOnlineStorageUploadAllowed } from "./quota";
 
@@ -112,7 +112,7 @@ export async function saveOnlinePrivacy(
 }
 
 export async function listOnlineDevices(userId: string) {
-  await getMlsEngine(userId);
+  await ensureDevice(userId);
   const { data, error } = await supabase
     .from("devices")
     .select("id,name,platform,fingerprint,last_seen_at,revoked_at,verified_at")
@@ -128,6 +128,20 @@ export async function listOnlineDevices(userId: string) {
     revokedAt: device.revoked_at ?? undefined,
     verifiedAt: device.verified_at ?? undefined,
   })) satisfies OnlineDevice[];
+}
+
+/**
+ * Revoga a sessão deste próprio dispositivo.
+ *
+ * É o "sair e remover este dispositivo": encerra o registro local e marca a
+ * linha como revogada, para que ela suma da lista de sessões da conta. O
+ * histórico continua no servidor — sem E2EE não existe mais material local
+ * cuja remoção pudesse tirar o acesso às mensagens.
+ */
+export async function revokeCurrentOnlineDevice(userId: string) {
+  const deviceId = await ensureDevice(userId);
+  releaseDevice(userId);
+  await revokeOnlineDevice(deviceId);
 }
 
 export async function revokeOnlineDevice(deviceId: string) {
@@ -152,9 +166,8 @@ export async function listDecryptedOnlineMessages(
   channelIds: string[],
   limit = 200,
 ): Promise<MessageView[]> {
-  const engine = await getMlsEngine(userId);
   const results = await Promise.allSettled(
-    channelIds.map((channelId) => engine.listMessages(channelId)),
+    channelIds.map((channelId) => listMessages(channelId)),
   );
   return results
     .flatMap((result) => (result.status === "fulfilled" ? result.value : []))

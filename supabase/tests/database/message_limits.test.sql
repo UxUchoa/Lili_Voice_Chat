@@ -53,8 +53,7 @@ values (
 );
 
 insert into public.messages(
-  id, channel_id, author_id, sender_device_id, ciphertext, nonce,
-  payload_version, mls_epoch
+  id, channel_id, author_id, sender_device_id, body, payload_version
 )
 select
   md5('limits-message-' || item)::uuid,
@@ -62,9 +61,7 @@ select
   '1a000000-0000-0000-0000-000000000001',
   '5a000000-0000-0000-0000-000000000001',
   'cipher-' || item,
-  'nonce-' || item,
-  3,
-  0
+  4
 from generate_series(1, 251) item;
 
 insert into public.message_pins(message_id, channel_id, pinned_by)

@@ -33,43 +33,26 @@ values
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '16000000-0000-0000-0000-000000000001', true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
-select public.send_encrypted_message(
-  p_channel_id => '46000000-0000-0000-0000-000000000001',
-  p_device_id => '56000000-0000-0000-0000-000000000001',
-  p_ciphertext => 'cipher-ordinary', p_nonce => 'nonce-ordinary',
-  p_payload_version => 3::smallint, p_mls_epoch => 0
-);
-select public.send_encrypted_message(
-  p_channel_id => '46000000-0000-0000-0000-000000000001',
-  p_device_id => '56000000-0000-0000-0000-000000000001',
-  p_ciphertext => 'cipher-mention', p_nonce => 'nonce-mention',
-  p_payload_version => 3::smallint, p_mls_epoch => 0,
-  p_mention_recipient_ids => array['16000000-0000-0000-0000-000000000002'::uuid]
-);
-select public.send_encrypted_message(
-  p_channel_id => '46000000-0000-0000-0000-000000000002',
-  p_device_id => '56000000-0000-0000-0000-000000000001',
-  p_ciphertext => 'cipher-muted', p_nonce => 'nonce-muted',
-  p_payload_version => 3::smallint, p_mls_epoch => 0,
-  p_mention_recipient_ids => array['16000000-0000-0000-0000-000000000002'::uuid]
-);
+select public.send_message(p_channel_id => '46000000-0000-0000-0000-000000000001', p_body => 'cipher-ordinary', p_device_id => '56000000-0000-0000-0000-000000000001');
+select public.send_message(p_channel_id => '46000000-0000-0000-0000-000000000001', p_body => 'cipher-mention', p_device_id => '56000000-0000-0000-0000-000000000001', p_mention_recipient_ids => array['16000000-0000-0000-0000-000000000002'::uuid]);
+select public.send_message(p_channel_id => '46000000-0000-0000-0000-000000000002', p_body => 'cipher-muted', p_device_id => '56000000-0000-0000-0000-000000000001', p_mention_recipient_ids => array['16000000-0000-0000-0000-000000000002'::uuid]);
 reset role;
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '16000000-0000-0000-0000-000000000002', true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select is(
-  public.notification_event_for_message((select id from public.messages where ciphertext = 'cipher-ordinary')),
+  public.notification_event_for_message((select id from public.messages where body = 'cipher-ordinary')),
   null,
   'SERVER MENTIONS overrides GLOBAL ALL for an ordinary message'
 );
 select is(
-  public.notification_event_for_message((select id from public.messages where ciphertext = 'cipher-mention')),
+  public.notification_event_for_message((select id from public.messages where body = 'cipher-mention')),
   'MENTION',
   'an effective mention is delivered in SERVER MENTIONS mode'
 );
 select is(
-  public.notification_event_for_message((select id from public.messages where ciphertext = 'cipher-muted')),
+  public.notification_event_for_message((select id from public.messages where body = 'cipher-muted')),
   null,
   'CHANNEL NONE overrides the server preference'
 );
@@ -81,7 +64,7 @@ where scope_type = 'SERVER';
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '16000000-0000-0000-0000-000000000002', true);
 select is(
-  public.notification_event_for_message((select id from public.messages where ciphertext = 'cipher-mention')),
+  public.notification_event_for_message((select id from public.messages where body = 'cipher-mention')),
   null,
   'a temporary server mute suppresses foreground delivery'
 );
@@ -93,7 +76,7 @@ where scope_type = 'SERVER';
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '16000000-0000-0000-0000-000000000002', true);
 select is(
-  public.notification_event_for_message((select id from public.messages where ciphertext = 'cipher-ordinary')),
+  public.notification_event_for_message((select id from public.messages where body = 'cipher-ordinary')),
   'MESSAGE',
   'server ALL delivers an ordinary message after the mute expires'
 );
@@ -102,7 +85,7 @@ reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '16000000-0000-0000-0000-000000000001', true);
 select is(
-  public.notification_event_for_message((select id from public.messages where ciphertext = 'cipher-mention')),
+  public.notification_event_for_message((select id from public.messages where body = 'cipher-mention')),
   null,
   'the author never receives a notification for the own message'
 );
@@ -111,7 +94,7 @@ reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '16000000-0000-0000-0000-000000000003', true);
 select is(
-  public.notification_event_for_message((select id from public.messages where ciphertext = 'cipher-mention')),
+  public.notification_event_for_message((select id from public.messages where body = 'cipher-mention')),
   null,
   'a user without channel access cannot inspect a delivery event'
 );

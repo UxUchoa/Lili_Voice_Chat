@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { getMlsEngine } from "../crypto/mlsEngine";
+import { listMessages } from "../services/online/messages";
 import { supabase } from "../services/online/client";
 import { reportRuntimeError } from "../services/runtimeErrors";
 import { useAppStore } from "../store/appStore";
@@ -15,7 +15,7 @@ const notificationBody = (text: string, attachmentCount: number) => {
   if (trimmed) return trimmed.slice(0, 240);
   if (attachmentCount > 0)
     return `${attachmentCount} ${attachmentCount === 1 ? "anexo" : "anexos"}`;
-  return "Nova mensagem cifrada";
+  return "Nova mensagem";
 };
 
 export function useForegroundNotifications(
@@ -47,9 +47,7 @@ export function useForegroundNotifications(
       if (error) throw error;
       if (!mounted || !eventType) return;
 
-      const messages = await (
-        await getMlsEngine(userId)
-      ).listMessages(row.channel_id);
+      const messages = await listMessages(row.channel_id);
       if (!mounted) return;
       const message = messages.find((item) => item.id === row.id);
       if (!message) return;

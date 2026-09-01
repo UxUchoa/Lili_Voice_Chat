@@ -140,10 +140,10 @@ Deno.serve(
       if (action === "disconnect") {
         await service.removeParticipant(room, targetId);
       } else if (action === "move") {
-        // O cliente precisa obter uma nova chave OpenMLS e um novo token para o
-        // canal de destino. Um move direto no LiveKit preservaria a chave E2EE
-        // da sala antiga; por isso desconectamos e deixamos o pedido persistido
-        // conduzir a troca segura no cliente alvo.
+        // O cliente precisa obter um novo token para o canal de destino, e o
+        // token é emitido por sala. Por isso desconectamos e deixamos o pedido
+        // persistido conduzir a reconexão no cliente alvo, em vez de mover o
+        // participante direto no LiveKit.
         await service.removeParticipant(room, targetId);
       } else if (action === "mute" || action === "unmute") {
         const participant = await service.getParticipant(room, targetId);

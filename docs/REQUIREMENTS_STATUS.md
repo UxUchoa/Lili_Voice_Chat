@@ -1,6 +1,14 @@
 # Lili — estado dos requisitos
 
-Revisão local de 29/08/2026, baseada no documento de requisitos anexado e em testes executados contra Supabase, Realtime, OpenMLS e LiveKit/TURN locais.
+Revisão local de 29/08/2026, baseada no documento de requisitos anexado e em
+testes executados contra Supabase, Realtime, OpenMLS e LiveKit/TURN locais.
+
+> **Desatualizado quanto à criptografia.** Em 01/09/2026 o E2EE foi removido do
+> produto por decisão de escopo: o OpenMLS saiu inteiro, mensagens e anexos
+> passaram a ser gravados legíveis e a proteção passou a ser autenticação do
+> Supabase mais RLS. A mídia do LiveKit também deixou de ser cifrada ponta a
+> ponta. Todo item abaixo que menciona OpenMLS, epoch, KeyPackage ou mídia E2EE
+> descreve o estado anterior a essa data.
 
 ## Funcional e validado
 

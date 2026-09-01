@@ -44,7 +44,7 @@ async function waitFor(check: () => Promise<boolean>, message: string) {
   throw new Error(message);
 }
 
-test("duas sessões isoladas trocam mensagens OpenMLS no mesmo canal", async ({
+test("duas sessões isoladas trocam mensagens no mesmo canal", async ({
   browser,
 }) => {
   test.setTimeout(240_000);
@@ -194,14 +194,6 @@ test("duas sessões isoladas trocam mensagens OpenMLS no mesmo canal", async ({
     await expect(ownerPage.locator(".composer textarea")).toBeVisible({
       timeout: 20_000,
     });
-    await waitFor(async () => {
-      const result = await ownerApi
-        .from("mls_groups")
-        .select("channel_id")
-        .eq("channel_id", textChannel.id);
-      return !result.error && result.data.length === 1;
-    }, "O dispositivo proprietário não inicializou o grupo MLS.");
-
     await login(memberPage, memberEmail, password);
     await openServer(memberPage, serverId);
     await expect(memberPage.locator(".composer textarea")).toBeVisible({
@@ -210,12 +202,16 @@ test("duas sessões isoladas trocam mensagens OpenMLS no mesmo canal", async ({
     await expect(
       ownerPage.locator(".member-group-title").first(),
     ).toContainText("ONLINE — 2", { timeout: 20_000 });
+    // Sem grupo criptográfico não há nada a sincronizar antes de conversar:
+    // basta que as duas sessões estejam registradas e vendo o canal.
     await waitFor(async () => {
-      const result = await ownerApi.rpc("channel_recipient_devices", {
-        p_channel_id: textChannel.id,
-      });
-      return !result.error && result.data.length === 2;
-    }, "O segundo dispositivo não publicou seu KeyPackage MLS.");
+      const result = await ownerApi
+        .from("devices")
+        .select("id")
+        .in("user_id", [userIds[0], userIds[1]])
+        .is("revoked_at", null);
+      return !result.error && result.data.length >= 2;
+    }, "As duas sessões não foram registradas.");
     const memberProfile = await unwrap(
       ownerApi
         .from("profiles")
@@ -352,7 +348,7 @@ test("duas sessões isoladas trocam mensagens OpenMLS no mesmo canal", async ({
     await memberAttachmentRow.getByText(attachmentName).click();
     const downloadedAttachment = await downloadPromise;
     const downloadedPath = await downloadedAttachment.path();
-    if (!downloadedPath) throw new Error("Download E2EE não gerou arquivo.");
+    if (!downloadedPath) throw new Error("O download não gerou arquivo.");
     expect(await readFile(downloadedPath, "utf8")).toBe(attachmentContents);
 
     const attachmentMetadata = await unwrap(
@@ -361,14 +357,17 @@ test("duas sessões isoladas trocam mensagens OpenMLS no mesmo canal", async ({
         .select("storage_object")
         .eq("channel_id", textChannel.id)
         .single(),
-      "localizar metadado do anexo E2E",
+      "localizar metadado do anexo",
     );
-    const encryptedObject = await admin.storage
+    // Sem E2EE o arquivo é guardado como está: o que protege é o bucket, que
+    // exige sessão autenticada. O teste confirma que o objeto salvo é o mesmo
+    // que foi enviado, e não um blob que ninguém consegue abrir.
+    const storedObject = await admin.storage
       .from("attachments")
       .download(attachmentMetadata.storage_object);
-    if (encryptedObject.error) throw encryptedObject.error;
-    const storedBytes = Buffer.from(await encryptedObject.data.arrayBuffer());
-    expect(storedBytes.includes(Buffer.from(attachmentContents))).toBe(false);
+    if (storedObject.error) throw storedObject.error;
+    const storedBytes = Buffer.from(await storedObject.data.arrayBuffer());
+    expect(storedBytes.toString("utf8")).toBe(attachmentContents);
 
     const editedAttachmentMessage = `${attachmentMessage}-editada`;
     const ownerAttachmentRow = ownerPage
@@ -492,26 +491,19 @@ test("duas sessões isoladas trocam mensagens OpenMLS no mesmo canal", async ({
       ownerApi
         .from("messages")
         .select(
-          "ciphertext,mention_recipient_ids,mention_role_ids,mention_here_recipient_ids,mentions_everyone,mentions_here",
+          "body,mention_recipient_ids,mention_role_ids,mention_here_recipient_ids,mentions_everyone,mentions_here",
         )
         .eq("channel_id", textChannel.id),
-      "verificar ciphertext",
+      "verificar corpo das mensagens",
     );
     expect(rows).toHaveLength(6);
-    expect(
-      rows.every(
-        (row) =>
-          !row.ciphertext.includes(firstMessage) &&
-          !row.ciphertext.includes(editedAttachmentMessage) &&
-          !row.ciphertext.includes(twiceEditedAttachmentMessage) &&
-          !row.ciphertext.includes(attachmentContents) &&
-          !row.ciphertext.includes(replyMessage) &&
-          !row.ciphertext.includes(mentionMessage) &&
-          !row.ciphertext.includes(groupMentionMessage) &&
-          !row.ciphertext.includes(editableMentionMessage) &&
-          !row.ciphertext.includes(mentionRemovedMessage),
-      ),
-    ).toBe(true);
+    // O corpo é guardado em claro por decisão de produto: quem o lê precisa
+    // de sessão e de participação no canal, e é a RLS que decide isso. O teste
+    // fixa esse contrato para que uma mudança futura de armazenamento não
+    // passe despercebida.
+    expect(rows.map((row) => row.body)).toEqual(
+      expect.arrayContaining([firstMessage, replyMessage, mentionMessage]),
+    );
     expect(
       rows.some((row) => row.mention_recipient_ids.includes(userIds[1])),
     ).toBe(true);
@@ -750,7 +742,7 @@ test("duas sessões isoladas trocam mensagens OpenMLS no mesmo canal", async ({
     const initialGroupName = `Grupo local ${runId}`;
     await createGroupPanel.getByLabel("Nome do grupo").fill(initialGroupName);
     await createGroupPanel
-      .getByRole("button", { name: "Criar grupo cifrado" })
+      .getByRole("button", { name: "Criar grupo" })
       .click();
     await expect(
       ownerPage.getByRole("heading", { name: initialGroupName, exact: true }),
@@ -823,9 +815,9 @@ test("duas sessões isoladas trocam mensagens OpenMLS no mesmo canal", async ({
       memberPage.getByText(groupMessage, { exact: true }),
     ).toBeVisible({ timeout: 30_000 });
 
-    // A mensagem do próprio remetente depende do cache local: o sender MLS
-    // não reprocessa o próprio ciphertext. Ela é a prova mais forte de que o
-    // mesmo cofre, e não apenas um Welcome novo, voltou depois do logout.
+    // Sem E2EE a mensagem do próprio remetente vem do servidor como qualquer
+    // outra. O teste continua valendo como prova de que o histórico sobrevive
+    // ao logout — agora sem depender de cofre local nenhum.
     const memberOwnedMessage = `mensagem-member-persistida-${runId}`;
     await memberGroupComposer.fill(memberOwnedMessage);
     await memberGroupComposer.press("Enter");

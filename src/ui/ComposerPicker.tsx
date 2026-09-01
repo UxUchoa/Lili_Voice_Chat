@@ -9,7 +9,7 @@ type Tab = "gifs" | "emoji";
  * A gaveta que abre acima do compositor, com GIFs e emoji.
  *
  * O GIF escolhido não vira link: ele é baixado aqui e entregue como arquivo
- * para o mesmo caminho de anexo cifrado que qualquer outro envio usa.
+ * para o mesmo caminho de anexo que qualquer outro envio usa.
  */
 export function ComposerPicker({
   onEmoji,

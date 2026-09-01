@@ -20,7 +20,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run src supabase/functions",
-    "test:livekit": "node scripts/test-livekit-e2ee.mjs",
+    "test:livekit": "node scripts/test-livekit-media.mjs",
     "test:workspace": "node scripts/test-shared-workspace.mjs",
     "test:chat": "playwright test",
     "test:db": "supabase test db && supabase db lint --local --schema public --level warning",
@@ -35,7 +35,6 @@
     "desktop:smoke": "electron scripts/test-desktop-smoke.mjs",
     "desktop:prod": "concurrently -k -n vite,electron \"vite --mode production --host 127.0.0.1\" \"npm:electron\"",
     "desktop:dist": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-desktop.ps1",
-    "vendor:openmls": "node scripts/setup-openmls-vendor.mjs",
     "deploy:supabase": "node scripts/deploy-supabase.mjs"
   },
   "dependencies": {

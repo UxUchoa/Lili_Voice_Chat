@@ -112,8 +112,8 @@ select is(
 
 insert into public.devices(id, user_id, name, platform, identity_public_key, fingerprint, mls_credential)
 values ('1c000000-0000-0000-0000-000000000001', '1b000000-0000-0000-0000-000000000001', 'Test device', 'test', 'chave', 'digital', 'cred');
-insert into public.messages(channel_id, author_id, sender_device_id, ciphertext, nonce, mls_epoch)
-values ((select channel_id from conversa_amiga), '1b000000-0000-0000-0000-000000000001', '1c000000-0000-0000-0000-000000000001', 'cipher', 'nonce', 1);
+insert into public.messages(channel_id, author_id, sender_device_id, body)
+values ((select channel_id from conversa_amiga), '1b000000-0000-0000-0000-000000000001', '1c000000-0000-0000-0000-000000000001', 'ola');
 
 select is(
   (select closed from public.dm_states

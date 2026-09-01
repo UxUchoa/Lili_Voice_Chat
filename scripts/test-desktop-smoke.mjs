@@ -6,14 +6,14 @@
  * teste de navegador:
  *
  * 1. `fetch()` de um arquivo local é recusado pelo Chromium. É assim que o
- *    wasm-bindgen carrega o `openmls_wasm_bg.wasm`, então uma falha aqui
- *    significa aplicativo instalado sem criptografia nenhuma.
+ *    o bundle carrega seus assets, então uma falha aqui significa aplicativo
+ *    instalado abrindo em branco.
  * 2. `window.location.origin` vale a string "null" numa página `file://`.
  * 3. A meta de CSP é reescrita no build com as origens de produção, e um
  *    `'self'` que não casa com `file:` bloqueia o próprio bundle.
  *
  * Roda com `npx electron scripts/test-desktop-smoke.mjs`; sai diferente de zero
- * quando o renderer não monta, quando o wasm não carrega ou quando o console
+ * quando o renderer não monta, quando um asset não carrega ou quando o console
  * registra erro.
  *
  * `LILI_SMOKE_DIST` aponta para outro `dist/` — é assim que o
@@ -69,10 +69,13 @@ const publicConfig = (() => {
 dialog.showErrorBox = (title, content) =>
   log(`[dialog] ${title} :: ${content}`);
 
-const wasmAsset = (() => {
+// Um asset qualquer do bundle serve de sonda: o que se quer detectar é o
+// `fetch()` de arquivo local recusado pelo Chromium, não este arquivo em
+// particular. O `.js` do bundle sempre existe depois de um build.
+const probeAsset = (() => {
   try {
     return readdirSync(path.join(distributionRoot, "assets")).find((name) =>
-      name.endsWith(".wasm"),
+      name.endsWith(".js"),
     );
   } catch {
     return undefined;
@@ -104,9 +107,9 @@ app
   .whenReady()
   .then(async () => {
     log(`[alvo] ${distributionRoot}`);
-    if (!wasmAsset)
+    if (!probeAsset)
       failures.push(
-        `nenhum .wasm em ${path.join(distributionRoot, "assets")} — ` +
+        `nenhum asset .js em ${path.join(distributionRoot, "assets")} — ` +
           "rode `npm run build` antes.",
       );
     for (const [name, value] of Object.entries(publicConfig))
@@ -142,7 +145,7 @@ app
     );
 
     await window_.loadFile(path.join(distributionRoot, "index.html"));
-    // O React monta depois do primeiro quadro; o wasm é buscado logo em
+    // O React monta depois do primeiro quadro; o asset é buscado logo em
     // seguida. Esperar aqui é mais barato que reagir a um evento por elemento.
     await new Promise((resolve) => setTimeout(resolve, 8_000));
 
@@ -177,12 +180,12 @@ app
         visibleText: (document.body.innerText ?? "").replace(/\\s+/g, " ").slice(0, 200),
       };
       try {
-        const response = await fetch(${JSON.stringify(`./assets/${wasmAsset ?? ""}`)});
-        result.wasm = response.ok
+        const response = await fetch(${JSON.stringify(`./assets/${probeAsset ?? ""}`)});
+        result.asset = response.ok
           ? \`ok (\${response.headers.get("content-type") ?? "sem content-type"})\`
           : \`HTTP \${response.status}\`;
       } catch (error) {
-        result.wasm = \`ERRO: \${error.message}\`;
+        result.asset = \`ERRO: \${error.message}\`;
       }
       try {
         window.localStorage.setItem("lili.smoke", "1");
@@ -254,10 +257,10 @@ app
       );
     if (!probe.livekitAllowedByCsp)
       failures.push("a origem do LiveKit não está no connect-src da CSP.");
-    if (probe.wasm !== undefined && !String(probe.wasm).startsWith("ok"))
+    if (probe.asset !== undefined && !String(probe.asset).startsWith("ok"))
       failures.push(
-        `o wasm do OpenMLS não carrega por file:// (${probe.wasm}): sem ele o ` +
-          "aplicativo instalado não cifra nada.",
+        `o bundle não carrega seus assets por file:// (${probe.asset}): o ` +
+          "aplicativo instalado abriria em branco.",
       );
     if (probe.localStorage !== true)
       failures.push(`localStorage indisponível (${probe.localStorage}).`);

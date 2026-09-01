@@ -20,7 +20,7 @@ const apiSecret =
   process.env.LIVEKIT_API_SECRET ??
   "janja_local_secret_change_before_any_remote_deployment";
 const forceTurn = process.env.LILI_FORCE_TURN !== "false";
-const roomName = `lili-e2ee-${randomUUID()}`;
+const roomName = `lili-media-${randomUUID()}`;
 const sharedKey = randomBytes(32);
 
 const timeout = (promise, milliseconds, label) =>
@@ -110,7 +110,7 @@ try {
       ),
     ),
     15_000,
-    "assinatura da faixa E2EE",
+    "assinatura da faixa de áudio",
   );
 
   const sampleRate = 48_000;
@@ -154,10 +154,10 @@ try {
             peak = Math.max(peak, Math.abs(sample));
           if (peak > 5_000) return;
         }
-        throw new Error(`áudio E2EE permaneceu silencioso (pico ${peak})`);
+        throw new Error(`o áudio permaneceu silencioso (pico ${peak})`);
       })(),
       20_000,
-      "recepção do áudio E2EE",
+      "recepção do áudio",
     );
   } finally {
     publishing = false;
@@ -180,7 +180,7 @@ try {
       room: roomName,
       participants: 2,
       media: "synthetic-audio",
-      e2ee: true,
+
       forceTurn,
       relayCandidate: candidateTypes.includes(3),
       peak,

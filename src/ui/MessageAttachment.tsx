@@ -40,7 +40,7 @@ export function MessageAttachment({
   createdAt: string;
   isAuthor: boolean;
   resend?: AttachmentResendState;
-  /** Decifra e devolve o blob do anexo. */
+  /** Baixa e devolve o blob do anexo. */
   onOpen: (attachment: Attachment) => Promise<Blob>;
   onDownload: (attachment: Attachment) => void;
   onRequestResend: (attachment: Attachment) => void;
@@ -146,7 +146,7 @@ export function MessageAttachment({
 
   const meta = (
     <small>
-      {formatBytes(attachment.size)} · cifrado · {attachmentTimeLeft(createdAt)}
+      {formatBytes(attachment.size)} · {attachmentTimeLeft(createdAt)}
     </small>
   );
 
@@ -193,7 +193,7 @@ export function MessageAttachment({
             onClick={() => void load()}
           >
             {loading
-              ? "Decifrando…"
+              ? "Carregando…"
               : error
                 ? "Tentar de novo"
                 : `Carregar ${kind === "image" ? "imagem" : kind === "video" ? "vídeo" : "áudio"} · ${formatBytes(attachment.size)}`}

@@ -37,14 +37,14 @@ values (
   'anexo-public-key', 'anexo:device'
 );
 insert into public.messages(
-  id, channel_id, author_id, sender_device_id, ciphertext, nonce, mls_epoch
+  id, channel_id, author_id, sender_device_id, body
 )
 values (
   '25000000-0000-0000-0000-000000000001',
   '23000000-0000-0000-0000-000000000001',
   '20000000-0000-0000-0000-000000000001',
   '24000000-0000-0000-0000-000000000001',
-  'cipher', 'nonce', 1
+  'cipher'
 );
 
 -- ------------------------------------------------------------
@@ -52,23 +52,23 @@ values (
 -- ------------------------------------------------------------
 select lives_ok(
   $$insert into public.message_attachments(
-      message_id, channel_id, storage_object, ciphertext_size, ciphertext_hash
+      message_id, channel_id, storage_object, byte_size, name, mime
     ) values (
       '25000000-0000-0000-0000-000000000001',
       '23000000-0000-0000-0000-000000000001',
       '23000000-0000-0000-0000-000000000001/grande/cipher.bin',
-      104857616, 'hash-grande'
+      104857616, 'grande.bin', 'application/octet-stream'
     )$$,
   'a 100 MB attachment fits, tag of the AEAD included'
 );
 select throws_ok(
   $$insert into public.message_attachments(
-      message_id, channel_id, storage_object, ciphertext_size, ciphertext_hash
+      message_id, channel_id, storage_object, byte_size, name, mime
     ) values (
       '25000000-0000-0000-0000-000000000001',
       '23000000-0000-0000-0000-000000000001',
       '23000000-0000-0000-0000-000000000001/enorme/cipher.bin',
-      209715200, 'hash-enorme'
+      209715200, 'enorme.bin', 'application/octet-stream'
     )$$,
   '23514', null,
   'anything past the ceiling is rejected by the database'
@@ -84,7 +84,7 @@ select is(
 -- ------------------------------------------------------------
 select ok(
   (select expires_at from public.message_attachments
-   where ciphertext_hash = 'hash-grande')
+   where name = 'grande.bin')
     between now() + interval '23 hours' and now() + interval '25 hours',
   'an attachment expires one day after being sent'
 );
@@ -94,13 +94,13 @@ select ok(
 -- arquivo do ar. O que o banco garante é a marcação de vencimento, que é o
 -- critério que a função usa.
 insert into public.message_attachments(
-  message_id, channel_id, storage_object, ciphertext_size, ciphertext_hash,
+  message_id, channel_id, storage_object, byte_size, name, mime,
   expires_at
 ) values (
   '25000000-0000-0000-0000-000000000001',
   '23000000-0000-0000-0000-000000000001',
   '23000000-0000-0000-0000-000000000001/velho/cipher.bin',
-  2048, 'hash-velho', now() - interval '1 minute'
+  2048, 'velho.bin', 'application/octet-stream', now() - interval '1 minute'
 );
 
 select is(

@@ -5,7 +5,7 @@ import { ATTACHMENT_MAX_BYTES } from "../domain/attachments";
  * Busca de GIFs no Tenor v2, a mesma fonte que o Discord usa.
  *
  * O GIF escolhido **não** vira uma URL na mensagem: ele é baixado aqui e
- * enviado como anexo cifrado, igual a qualquer outro arquivo. Postar a URL
+ * enviado como anexo, igual a qualquer outro arquivo. Postar a URL
  * entregaria ao Tenor quem abriu a conversa e quando, e o arquivo ficaria
  * fora da validade de um dia e do teto de tamanho — as duas coisas que
  * valem para todo o resto do chat.
@@ -127,7 +127,7 @@ export async function gifCategories(): Promise<GifCategory[]> {
   }));
 }
 
-/** Baixa o GIF escolhido para virar anexo cifrado. */
+/** Baixa o GIF escolhido para virar anexo. */
 export async function downloadGifAsFile(gif: GifResult) {
   const response = await fetch(gif.url);
   if (!response.ok)
