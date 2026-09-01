@@ -82,6 +82,8 @@ jobs:
         run: |
           $installer = Get-ChildItem release -File -Filter '*.exe' | Select-Object -First 1
           if (-not $installer) { throw "NSIS installer was not generated." }
+          $blockmap = Get-ChildItem release -File -Filter '*.exe.blockmap' | Select-Object -First 1
+          if (-not $blockmap) { throw "NSIS blockmap was not generated." }
           $signature = Get-AuthenticodeSignature -LiteralPath $installer.FullName
           if ($env:RELEASE_SIGNED -eq 'true' -and $signature.Status -ne 'Valid') {
             throw "Installer signature is not valid: $($signature.Status)"
@@ -106,4 +108,5 @@ jobs:
             "$hash *$($installer.Name)`n",
             (New-Object Text.UTF8Encoding $false)
           )
-          gh release upload $env:GITHUB_REF_NAME release/SHA256SUMS.txt --clobber
+          gh release upload $env:GITHUB_REF_NAME `
+            $blockmap.FullName release/SHA256SUMS.txt --clobber
