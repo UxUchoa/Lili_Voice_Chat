@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { expect, test } from "@playwright/test";
 import {
   applyCrop,
+  chooseInSelect,
   finishOnlineLogin,
   openServer,
   openServerSettings,
@@ -79,7 +80,7 @@ test("perfil P0 e mídia privada persistem no Supabase local", async ({
     await page.getByLabel("Username").fill(username);
     await page.getByLabel("Pronomes (opcional)").fill("ela/dela");
     await page.getByLabel("Status personalizado").fill("Testando em local");
-    await page.getByLabel("Presença").selectOption("dnd");
+    await chooseInSelect(page, "Presença", "Não perturbe");
     const logo = path.resolve("public/logo-vetorizada.png");
     await page.getByLabel("Alterar avatar").setInputFiles(logo);
     await applyCrop(page);

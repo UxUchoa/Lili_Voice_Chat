@@ -3,6 +3,7 @@ import type { Channel, PermissionOverride, Role, ServerMember, Profile } from ".
 import { Permissions, hasPermission } from "../domain/permissions";
 import { IconHash, IconTrash, IconVolume, IconX } from "./icons";
 import { ModalPortal } from "./ModalPortal";
+import { Select } from "./Select";
 import { useConfirm } from "./ConfirmModal";
 
 export type ChannelPermissionState = "inherit" | "allow" | "deny";
@@ -325,17 +326,16 @@ export function ChannelSettingsModal({
               {channel.kind === "text" && (
                 <label className="server-profile-field">
                   <span>Modo lento</span>
-                  <select
-                    value={slowmode}
+                  <Select
+                    ariaLabel="Modo lento"
+                    value={String(slowmode)}
                     disabled={busy}
-                    onChange={(event) => setSlowmode(Number(event.target.value))}
-                  >
-                    {SLOWMODE_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(next) => setSlowmode(Number(next))}
+                    options={SLOWMODE_OPTIONS.map((option) => ({
+                      value: String(option.value),
+                      label: option.label,
+                    }))}
+                  />
                   <small>
                     Membros só podem enviar uma mensagem a cada intervalo, a
                     menos que tenham a permissão de ignorar o modo lento.

@@ -23,6 +23,7 @@ import {
 } from "./domain/permissions";
 import { partitionBySize } from "./domain/attachments";
 import { ReactionComposer } from "./ui/ReactionComposer";
+import { Select } from "./ui/Select";
 import {
   REACTION_MAX_GRAPHEMES,
   countGraphemes,
@@ -3003,6 +3004,34 @@ function ChatView({
    * do navegador media `length`, que conta unidades UTF-16 e recusava um
    * emoji só como se fossem varios caracteres.
    */
+  /**
+   * Item 3 — o chat desce ao enviar, mas não sequestra quem está lendo.
+   *
+   * `pinnedToBottom` guarda se a pessoa estava no fim **antes** de a lista
+   * crescer: depois que o React renderiza a mensagem nova, `scrollTop` já não
+   * distingue "estava no fim" de "subiu para reler". A margem de 120px existe
+   * porque o fim raramente é exato — imagem carregando, fonte assentando.
+   *
+   * Mensagem enviada pela própria pessoa desce sempre; mensagem que chega de
+   * outra só desce se a pessoa já estava no fim.
+   */
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const pinnedToBottom = useRef(true);
+  const scrollToEnd = useCallback((behavior: ScrollBehavior = "smooth") => {
+    const node = listRef.current;
+    if (!node) return;
+    node.scrollTo({ top: node.scrollHeight, behavior });
+  }, []);
+  const rememberScrollAnchor = () => {
+    const node = listRef.current;
+    if (!node) return;
+    pinnedToBottom.current =
+      node.scrollHeight - node.scrollTop - node.clientHeight < 120;
+  };
+  useEffect(() => {
+    if (pinnedToBottom.current) scrollToEnd("auto");
+  }, [messages.length, scrollToEnd]);
+
   const chooseReaction = (messageId: string) =>
     setReactingTo(messageId);
   const submitReaction = (messageId: string, emoji: string) => {
@@ -3151,7 +3180,11 @@ function ChatView({
           {pinnedMessages.length === 0 && <p>Nenhuma mensagem fixada.</p>}
         </aside>
       )}
-      <div className="message-list">
+      <div
+        className="message-list"
+        ref={listRef}
+        onScroll={rememberScrollAnchor}
+      >
         <div className="welcome-message">
           <div className="welcome-icon">
             {channel.kind === "dm" ? "@" : "#"}
@@ -3399,15 +3432,21 @@ function ChatView({
           }
           onTyping={announceTyping}
           disabled={send.isPending}
-          onSend={(text, files) =>
+          onSend={(text, files) => {
+            // A própria mensagem sempre traz o chat de volta ao fim, mesmo
+            // que a pessoa estivesse lendo history acima.
+            pinnedToBottom.current = true;
             send.mutate(
               { authorId: currentUserId, text, files, replyToId },
               {
-                onSuccess: () => setReplyToId(undefined),
+                onSuccess: () => {
+                  setReplyToId(undefined);
+                  scrollToEnd();
+                },
                 onError: (error) => setSendError(error.message),
               },
-            )
-          }
+            );
+          }}
         />
       )}
       {groupSettingsOpen && (
@@ -3551,17 +3590,16 @@ function GroupDmSettingsPanel({
         <div className="group-dm-add-member">
           <label>
             Adicionar amigo
-            <select
+            <Select
+              ariaLabel="Adicionar amigo"
+              placeholder="Escolha uma pessoa"
               value={newMemberId}
-              onChange={(event) => setNewMemberId(event.target.value)}
-            >
-              <option value="">Escolha uma pessoa</option>
-              {available.map((profile) => (
-                <option key={profile.id} value={profile.id}>
-                  {profile.displayName} (@{profile.username})
-                </option>
-              ))}
-            </select>
+              onChange={setNewMemberId}
+              options={available.map((profile) => ({
+                value: profile.id,
+                label: `${profile.displayName} (@${profile.username})`,
+              }))}
+            />
           </label>
           <button disabled={!newMemberId} onClick={() => void addMember()}>
             Adicionar
@@ -6418,18 +6456,15 @@ function SettingsPanel({
                   </p>
                   <label>
                     Canal
-                    <select
+                    <Select
+                      ariaLabel="Canal simulado"
                       value={simulationChannelId}
-                      onChange={(event) =>
-                        setSimulationChannelId(event.target.value)
-                      }
-                    >
-                      {channels.map((channel) => (
-                        <option key={channel.id} value={channel.id}>
-                          {channel.kind === "voice" ? "◉" : "#"} {channel.name}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={setSimulationChannelId}
+                      options={channels.map((channel) => ({
+                        value: channel.id,
+                        label: `${channel.kind === "voice" ? "◉" : "#"} ${channel.name}`,
+                      }))}
+                    />
                   </label>
                   <div className="simulation-role-picker">
                     {roles
@@ -6876,25 +6911,27 @@ function ServerGeneralSettings({
         </div>
         <label>
           Modo
-          <select
-            aria-label="Notificações do servidor"
+          <Select
+            ariaLabel="Notificações do servidor"
             value={serverNotifications?.mode ?? "INHERIT"}
-            onChange={(event) => {
-              if (event.target.value === "INHERIT")
+            onChange={(next) => {
+              if (next === "INHERIT")
                 clearNotificationSetting("SERVER", serverId);
               else
                 saveServerNotifications({
-                  mode: event.target.value as "ALL" | "MENTIONS" | "NONE",
+                  mode: next as "ALL" | "MENTIONS" | "NONE",
                 });
             }}
-          >
-            <option value="INHERIT">
-              Herdar global ({globalNotifications.mode})
-            </option>
-            <option value="ALL">Todas as mensagens</option>
-            <option value="MENTIONS">Somente menções</option>
-            <option value="NONE">Silenciado</option>
-          </select>
+            options={[
+              {
+                value: "INHERIT",
+                label: `Herdar global (${globalNotifications.mode})`,
+              },
+              { value: "ALL", label: "Todas as mensagens" },
+              { value: "MENTIONS", label: "Somente menções" },
+              { value: "NONE", label: "Silenciado" },
+            ]}
+          />
         </label>
         <label className="check-setting">
           <input
@@ -6957,20 +6994,20 @@ function ServerGeneralSettings({
       {owner ? (
         <div className="server-danger-zone">
           <h4>Transferir propriedade</h4>
-          <select
+          <Select
+            ariaLabel="Novo dono do servidor"
+            placeholder="Escolha um membro"
             value={newOwnerId}
-            onChange={(event) => setNewOwnerId(event.target.value)}
-          >
-            <option value="">Escolha um membro</option>
-            {members
+            onChange={setNewOwnerId}
+            options={members
               .filter((member) => member.userId !== currentUserId)
-              .map((member) => (
-                <option key={member.userId} value={member.userId}>
-                  {profiles.find((profile) => profile.id === member.userId)
-                    ?.displayName ?? member.userId}
-                </option>
-              ))}
-          </select>
+              .map((member) => ({
+                value: member.userId,
+                label:
+                  profiles.find((profile) => profile.id === member.userId)
+                    ?.displayName ?? member.userId,
+              }))}
+          />
           <button
             className="outline-button"
             disabled={!newOwnerId}
@@ -7156,21 +7193,19 @@ function ChannelManagementSettings({ serverId }: { serverId: string }) {
               Editar
             </button>
             {channel.kind !== "category" && (
-              <select
+              <Select
                 className="admin-category-select"
-                aria-label={`Categoria de ${channel.name}`}
+                ariaLabel={`Categoria de ${channel.name}`}
                 value={channel.category}
-                onChange={(event) =>
-                  void moveToCategory(channel.id, event.target.value)
-                }
-              >
-                <option value="">Sem categoria</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(next) => void moveToCategory(channel.id, next)}
+                options={[
+                  { value: "", label: "Sem categoria" },
+                  ...categories.map((category) => ({
+                    value: category.id,
+                    label: category.name,
+                  })),
+                ]}
+              />
             )}
             <button
               className="outline-button"
@@ -7342,48 +7377,45 @@ function ChannelPermissionsSettingsView({ serverId }: { serverId: string }) {
       <div className="override-selectors">
         <label>
           Canal
-          <select
+          <Select
+            ariaLabel="Canal"
             value={channelId}
-            onChange={(event) => setChannelId(event.target.value)}
-          >
-            {channels.map((channel) => (
-              <option key={channel.id} value={channel.id}>
-                {channel.kind === "voice" ? "◉" : "#"} {channel.name}
-              </option>
-            ))}
-          </select>
+            onChange={setChannelId}
+            options={channels.map((channel) => ({
+              value: channel.id,
+              label: `${channel.kind === "voice" ? "◉" : "#"} ${channel.name}`,
+            }))}
+          />
         </label>
         <label>
           Alvo
-          <select
+          <Select
+            ariaLabel="Tipo de alvo"
             value={targetType}
-            onChange={(event) =>
-              setTargetType(event.target.value as "ROLE" | "MEMBER")
-            }
-          >
-            <option value="ROLE">Cargo</option>
-            <option value="MEMBER">Membro</option>
-          </select>
+            onChange={(next) => setTargetType(next as "ROLE" | "MEMBER")}
+            options={[
+              { value: "ROLE", label: "Cargo" },
+              { value: "MEMBER", label: "Membro" },
+            ]}
+          />
         </label>
         <label>
           {targetType === "ROLE" ? "Cargo" : "Membro"}
-          <select
+          <Select
+            ariaLabel={targetType === "ROLE" ? "Cargo" : "Membro"}
             value={targetId}
-            onChange={(event) => setTargetId(event.target.value)}
-          >
-            {targetType === "ROLE"
-              ? roles.map((role) => (
-                  <option key={role.id} value={role.id}>
-                    {role.name}
-                  </option>
-                ))
-              : members.map((member) => (
-                  <option key={member.userId} value={member.userId}>
-                    {profiles.find((profile) => profile.id === member.userId)
-                      ?.displayName ?? member.userId}
-                  </option>
-                ))}
-          </select>
+            onChange={setTargetId}
+            options={
+              targetType === "ROLE"
+                ? roles.map((role) => ({ value: role.id, label: role.name }))
+                : members.map((member) => ({
+                    value: member.userId,
+                    label:
+                      profiles.find((profile) => profile.id === member.userId)
+                        ?.displayName ?? member.userId,
+                  }))
+            }
+          />
         </label>
       </div>
       <div className="override-grid">
@@ -7539,33 +7571,29 @@ function MembersSettingsView({ serverId }: { serverId: string }) {
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Pesquisar membro"
         />
-        <select
+        <Select
           className="admin-search"
+          ariaLabel="Filtrar por cargo"
           value={roleFilter}
-          onChange={(event) => setRoleFilter(event.target.value)}
-        >
-          <option value="">Todos os cargos</option>
-          {serverRoles
-            .filter((role) => !role.isDefault)
-            .map((role) => (
-              <option value={role.id} key={role.id}>
-                {role.name}
-              </option>
-            ))}
-        </select>
+          onChange={setRoleFilter}
+          options={[
+            { value: "", label: "Todos os cargos" },
+            ...serverRoles
+              .filter((role) => !role.isDefault)
+              .map((role) => ({ value: role.id, label: role.name })),
+          ]}
+        />
         {canModerateVoice && (
-          <select
+          <Select
             className="admin-search"
-            aria-label="Canal de voz para moderação"
+            ariaLabel="Canal de voz para moderação"
             value={voiceChannelId}
-            onChange={(event) => setVoiceChannelId(event.target.value)}
-          >
-            {voiceChannels.map((channel) => (
-              <option key={channel.id} value={channel.id}>
-                ◉ {channel.name}
-              </option>
-            ))}
-          </select>
+            onChange={setVoiceChannelId}
+            options={voiceChannels.map((channel) => ({
+              value: channel.id,
+              label: `◉ ${channel.name}`,
+            }))}
+          />
         )}
       </div>
       {actionError && (
@@ -7613,31 +7641,21 @@ function MembersSettingsView({ serverId }: { serverId: string }) {
             </div>
             <div className="member-admin-actions">
               {canManageRoles && (
-                <select
+                <Select
                   className="admin-role-select"
                   value=""
-                  aria-label={`Adicionar cargo a ${profile.displayName}`}
-                  onChange={(event) => {
-                    if (event.target.value)
-                      void setMemberRole(
-                        member.userId,
-                        event.target.value,
-                        true,
-                      );
+                  placeholder="+ Cargo"
+                  ariaLabel={`Adicionar cargo a ${profile.displayName}`}
+                  onChange={(next) => {
+                    if (next) void setMemberRole(member.userId, next, true);
                   }}
-                >
-                  <option value="">+ Cargo</option>
-                  {serverRoles
+                  options={serverRoles
                     .filter(
                       (role) =>
                         !role.isDefault && !member.roleIds.includes(role.id),
                     )
-                    .map((role) => (
-                      <option value={role.id} key={role.id}>
-                        {role.name}
-                      </option>
-                    ))}
-                </select>
+                    .map((role) => ({ value: role.id, label: role.name }))}
+                />
               )}
               {(canManageNicknames || (self && canChangeNickname)) && (
                 <button
@@ -7679,29 +7697,23 @@ function MembersSettingsView({ serverId }: { serverId: string }) {
               )}
               {canMoveMembers && (
                 <>
-                  <select
+                  <Select
                     className="admin-role-select"
                     value=""
+                    placeholder="Mover para…"
                     disabled={self || !voiceChannelId}
-                    aria-label={`Mover ${profile.displayName} para outro canal de voz`}
-                    onChange={(event) => {
-                      if (event.target.value)
-                        void moderateVoice(
-                          member.userId,
-                          "move",
-                          event.target.value,
-                        );
+                    ariaLabel={`Mover ${profile.displayName} para outro canal de voz`}
+                    onChange={(next) => {
+                      if (next)
+                        void moderateVoice(member.userId, "move", next);
                     }}
-                  >
-                    <option value="">Mover para…</option>
-                    {voiceChannels
+                    options={voiceChannels
                       .filter((channel) => channel.id !== voiceChannelId)
-                      .map((channel) => (
-                        <option key={channel.id} value={channel.id}>
-                          {channel.name}
-                        </option>
-                      ))}
-                  </select>
+                      .map((channel) => ({
+                        value: channel.id,
+                        label: channel.name,
+                      }))}
+                  />
                   <button
                     className="outline-button"
                     disabled={self || !voiceChannelId}
@@ -7846,16 +7858,15 @@ function InvitesSettingsView({ serverId }: { serverId: string }) {
         </div>
       )}
       <div className="invite-controls">
-        <select
+        <Select
+          ariaLabel="Canal do convite"
           value={channelId}
-          onChange={(event) => setChannelId(event.target.value)}
-        >
-          {channels.map((channel) => (
-            <option value={channel.id} key={channel.id}>
-              #{channel.name}
-            </option>
-          ))}
-        </select>
+          onChange={setChannelId}
+          options={channels.map((channel) => ({
+            value: channel.id,
+            label: `#${channel.name}`,
+          }))}
+        />
         <label>
           Expira em
           <input
@@ -8620,17 +8631,17 @@ function ProfilePanel({
         </label>
         <label>
           Presença
-          <select
+          <Select
+            ariaLabel="Presença"
             value={presence}
-            onChange={(event) =>
-              setPresence(event.target.value as Profile["status"])
-            }
-          >
-            <option value="online">Online</option>
-            <option value="idle">Ausente</option>
-            <option value="dnd">Não perturbe</option>
-            <option value="invisible">Invisível</option>
-          </select>
+            onChange={(next) => setPresence(next as Profile["status"])}
+            options={[
+              { value: "online", label: "Online" },
+              { value: "idle", label: "Ausente" },
+              { value: "dnd", label: "Não perturbe" },
+              { value: "invisible", label: "Invisível" },
+            ]}
+          />
         </label>
         <label>
           Bio
@@ -8652,35 +8663,40 @@ function ProfilePanel({
           <div>
             <label>
               Quem pode enviar DM
-              <select
+              <Select
+                ariaLabel="Quem pode enviar mensagem direta"
                 value={privacy.dmPolicy}
-                onChange={(event) =>
+                onChange={(next) =>
                   void savePrivacy({
-                    dmPolicy: event.target.value as
-                      "EVERYONE" | "FRIENDS" | "NOBODY",
+                    dmPolicy: next as "EVERYONE" | "FRIENDS" | "NOBODY",
                   })
                 }
-              >
-                <option value="EVERYONE">Todos</option>
-                <option value="FRIENDS">Somente amigos</option>
-                <option value="NOBODY">Ninguém</option>
-              </select>
+                options={[
+                  { value: "EVERYONE", label: "Todos" },
+                  { value: "FRIENDS", label: "Somente amigos" },
+                  { value: "NOBODY", label: "Ninguém" },
+                ]}
+              />
             </label>
             <label>
               Pedidos de amizade
-              <select
+              <Select
+                ariaLabel="Quem pode enviar pedido de amizade"
                 value={privacy.friendRequestPolicy}
-                onChange={(event) =>
+                onChange={(next) =>
                   void savePrivacy({
-                    friendRequestPolicy: event.target.value as
-                      "EVERYONE" | "SERVER_MEMBERS" | "NOBODY",
+                    friendRequestPolicy: next as
+                      | "EVERYONE"
+                      | "SERVER_MEMBERS"
+                      | "NOBODY",
                   })
                 }
-              >
-                <option value="EVERYONE">Todos</option>
-                <option value="SERVER_MEMBERS">Membros de servidores</option>
-                <option value="NOBODY">Ninguém</option>
-              </select>
+                options={[
+                  { value: "EVERYONE", label: "Todos" },
+                  { value: "SERVER_MEMBERS", label: "Membros de servidores" },
+                  { value: "NOBODY", label: "Ninguém" },
+                ]}
+              />
             </label>
             <label className="check-setting">
               <input
@@ -8699,25 +8715,26 @@ function ProfilePanel({
           <div>
             <label>
               Modo global
-              <select
+              <Select
+                ariaLabel="Notificações globais"
                 value={globalNotifications.mode}
-                onChange={(event) => {
+                onChange={(next) => {
                   setNotificationSetting({
                     scopeType: "GLOBAL",
                     scopeId: "*",
-                    mode: event.target.value as "ALL" | "MENTIONS" | "NONE",
+                    mode: next as "ALL" | "MENTIONS" | "NONE",
                     suppressEveryone: globalNotifications.suppressEveryone,
                     suppressRoles: globalNotifications.suppressRoles,
                     mutedUntil: globalNotifications.mutedUntil,
                   });
-                  if (event.target.value !== "NONE")
-                    requestNotificationAccess();
+                  if (next !== "NONE") requestNotificationAccess();
                 }}
-              >
-                <option value="ALL">Todas as mensagens</option>
-                <option value="MENTIONS">Somente menções</option>
-                <option value="NONE">Silenciado</option>
-              </select>
+                options={[
+                  { value: "ALL", label: "Todas as mensagens" },
+                  { value: "MENTIONS", label: "Somente menções" },
+                  { value: "NONE", label: "Silenciado" },
+                ]}
+              />
             </label>
             <label className="check-setting">
               <input

@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { createClient } from "@supabase/supabase-js";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import {
+  chooseInSelect,
   finishOnlineLogin,
   openServer,
   openServerSettings,
@@ -812,7 +813,11 @@ test("duas sessões isoladas trocam mensagens no mesmo canal", async ({
       "Grupo atualizado",
       { timeout: 20_000 },
     );
-    await groupPanel.getByLabel("Adicionar amigo").selectOption(userIds[3]);
+    await chooseInSelect(
+      groupPanel,
+      "Adicionar amigo",
+      new RegExp(fourthUsername),
+    );
     await groupPanel
       .getByRole("button", { name: "Adicionar", exact: true })
       .click();

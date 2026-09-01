@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 
 /**
  * Helpers de navegação para os testes de UI.
@@ -56,4 +56,26 @@ export async function openServerSettings(page: Page, tab: string) {
     timeout: 20_000,
   });
   await page.getByRole("button", { name: tab, exact: true }).click();
+}
+
+/**
+ * Escolhe um valor na lista suspensa do design system.
+ *
+ * O `<select>` nativo saiu do projeto — o popup dele é desenhado pelo sistema
+ * operacional e não aceita CSS. Com isso `selectOption` deixou de funcionar:
+ * agora é um `button` que abre um `listbox`, então o teste clica e escolhe a
+ * opção como uma pessoa faria.
+ */
+export async function chooseInSelect(
+  scope: Page | Locator,
+  accessibleName: string | RegExp,
+  optionName: string | RegExp,
+) {
+  await scope.getByRole("button", { name: accessibleName }).click();
+  // A lista e montada dentro do proprio componente, entao vive no mesmo
+  // escopo do gatilho.
+  const list = scope.getByRole("listbox", { name: accessibleName });
+  await expect(list).toBeVisible({ timeout: 10_000 });
+  await list.getByRole("option", { name: optionName }).click();
+  await expect(list).toBeHidden({ timeout: 10_000 });
 }

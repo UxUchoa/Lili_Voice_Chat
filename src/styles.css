@@ -16,6 +16,10 @@
   --secondary: #b8b2b5;
   --muted: #817b7f;
   --line: rgba(255, 255, 255, 0.07);
+  /* Altura da barra de titulo. Vira variavel porque o backdrop das
+     configuracoes precisa comecar abaixo dela: `inset: 0` cobria a janela
+     inteira e o X do painel nascia embaixo do X da janela. */
+  --titlebar-height: 54px;
 }
 html {
   font-size: calc(16px * var(--text-scale, 1));
@@ -150,8 +154,8 @@ a:focus-visible,
   font-size: 20px;
 }
 .titlebar {
-  height: 54px;
-  flex: 0 0 54px;
+  height: var(--titlebar-height);
+  flex: 0 0 var(--titlebar-height);
   display: flex;
   align-items: center;
   padding: 0 14px 0 18px;
@@ -313,8 +317,8 @@ a:focus-visible,
   flex: 0 0 auto;
 }
 .server-rail {
-  width: 74px;
-  flex: 0 0 74px;
+  width: 76px;
+  flex: 0 0 76px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -331,8 +335,10 @@ a:focus-visible,
 .rail-home,
 .server-avatar,
 .rail-action {
-  width: 44px;
-  height: 44px;
+  /* 48px e a proporcao que o Discord usa e que da area de clique confortavel;
+     44px deixava o icone principal pequeno demais ao lado dos servidores. */
+  width: 48px;
+  height: 48px;
   /* Sem flex:none o rail (coluna flex) esmagava estes botões até 2px de
      altura assim que a lista de servidores passava da altura da janela. */
   flex: none;
@@ -353,7 +359,7 @@ a:focus-visible,
   transform: translateY(-1px);
 }
 .rail-home img {
-  width: 29px;
+  width: 32px;
 }
 .rail-divider {
   width: 31px;
@@ -1837,6 +1843,10 @@ a:focus-visible,
 .settings-backdrop {
   place-items: stretch;
   padding: 0;
+  /* Comeca abaixo da barra de titulo. Sem isto o X que fecha as configuracoes
+     nascia colado no X que fecha a janela, e nao dava para saber qual era
+     qual. De quebra a barra continua arrastavel com o painel aberto. */
+  top: var(--titlebar-height);
 }
 .settings-panel {
   width: min(960px, calc(100vw - 130px));
@@ -5093,4 +5103,169 @@ button svg,
 .composer-attach-error button:hover {
   background: rgba(255, 255, 255, 0.08);
   color: var(--primary);
+}
+
+/* ============================================================
+   Scrollbar do design system — itens 17 e 20
+
+   Havia 20 regioes rolaveis no arquivo e apenas 3 declaravam scrollbar. As
+   outras 17 apareciam com a barra nativa do navegador, e em telas que ja
+   tinham a customizada isso produzia duas barras lado a lado.
+
+   A regra vale para tudo de uma vez, em vez de ser repetida a cada container
+   novo. Quem precisa de outro comportamento continua vencendo por
+   especificidade: `.server-rail` esconde a propria barra com `.classe`, que e
+   (0,1,0) contra o (0,0,0) daqui.
+
+   A barra continua visivel de proposito: escondê-la faria o conteudo extra
+   deixar de ser sinalizado.
+   ============================================================ */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #30292c transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: #30292c;
+  /* Sem isto a borda transparente pinta por cima do trilho e o polegar fica
+     colado nas bordas do container. */
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #453c40;
+  background-clip: padding-box;
+}
+
+/* Texto longo nao pode gerar rolagem horizontal — item 20.
+
+   Uma URL sem espacos ou uma palavra colada estouravam a largura do container
+   e o navegador respondia com uma barra horizontal atravessando a interface.
+   `anywhere` quebra dentro da palavra so quando nao ha outro ponto de quebra,
+   entao o texto normal continua quebrando por espaco. */
+.message-text,
+.message-body,
+.message-list p,
+.settings-panel p,
+.profile-bio,
+.invite-code,
+.confirm-modal p {
+  overflow-wrap: anywhere;
+}
+/* Um filho de flex tem `min-width: auto` e se recusa a encolher abaixo do
+   conteudo; e o que transforma um texto longo em rolagem do container inteiro
+   em vez de quebra de linha. */
+.message-body,
+.toggle-row span,
+.member-row > *,
+.invite-row > * {
+  min-width: 0;
+}
+
+/* Lista suspensa do design system — item 19.
+   O popup do <select> nativo e desenhado pelo sistema operacional e nao aceita
+   CSS: dentro desta interface escura ele aparecia como um retangulo branco do
+   Windows. */
+.ds-select {
+  position: relative;
+  min-width: 0;
+}
+.ds-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--primary);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.ds-select-trigger > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ds-select-trigger:hover:not(:disabled) {
+  background: var(--surface-3);
+}
+.ds-select-trigger:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+.ds-select.open .ds-select-trigger {
+  border-color: var(--brand);
+}
+.ds-select-trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.ds-select-trigger svg {
+  flex: none;
+  color: var(--muted);
+  transition: transform 0.15s ease;
+}
+.ds-select.open .ds-select-trigger svg {
+  transform: rotate(180deg);
+}
+.ds-select-placeholder {
+  color: var(--muted);
+}
+.ds-select-list {
+  position: absolute;
+  z-index: 40;
+  left: 0;
+  right: 0;
+  top: calc(100% + 5px);
+  max-height: 260px;
+  margin: 0;
+  padding: 5px;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-1);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55);
+}
+/* Abre para cima quando nao ha espaco embaixo. */
+.ds-select-list.up {
+  top: auto;
+  bottom: calc(100% + 5px);
+}
+.ds-select-list li {
+  padding: 8px 10px;
+  border-radius: 6px;
+  color: var(--secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+.ds-select-list li.active {
+  background: var(--surface-3);
+  color: var(--primary);
+}
+.ds-select-list li.selected {
+  color: var(--primary);
+  font-weight: 600;
+}
+.ds-select-list li.selected::after {
+  content: "✓";
+  float: right;
+  color: var(--brand);
+}
+.ds-select-list li.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }

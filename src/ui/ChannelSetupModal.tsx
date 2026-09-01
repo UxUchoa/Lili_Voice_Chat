@@ -3,6 +3,7 @@ import type { Channel } from "../domain/types";
 import { IconHash, IconVolume, IconX } from "./icons";
 import { createOnlineChannel } from "../services/online/data";
 import { ModalPortal } from "./ModalPortal";
+import { Select } from "./Select";
 
 export type NewChannelKind = "text" | "voice" | "category";
 
@@ -232,18 +233,19 @@ export function ChannelSetupModal({
         {kind !== "category" && categories.length > 0 && (
           <label className="channel-setup-field">
             <span>Categoria</span>
-            <select
+            <Select
+              ariaLabel="Categoria"
               value={categoryId}
               disabled={busy}
-              onChange={(event) => setCategoryId(event.target.value)}
-            >
-              <option value="">Sem categoria</option>
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
+              onChange={setCategoryId}
+              options={[
+                { value: "", label: "Sem categoria" },
+                ...categories.map((category) => ({
+                  value: category.id,
+                  label: category.name,
+                })),
+              ]}
+            />
           </label>
         )}
 
