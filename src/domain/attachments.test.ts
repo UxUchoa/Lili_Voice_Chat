@@ -1,62 +1,38 @@
 import { describe, expect, it } from "vitest";
 import {
   ATTACHMENT_MAX_BYTES,
-  ATTACHMENT_TTL_MS,
-  attachmentKind,
-  attachmentTimeLeft,
-  formatBytes,
-  isAttachmentExpired,
+  ATTACHMENT_MAX_LABEL,
+  attachmentSizeError,
+  partitionBySize,
 } from "./attachments";
 
-const base = Date.parse("2026-08-29T12:00:00.000Z");
+const file = (name: string, size: number) => ({ name, size });
 
-describe("attachmentKind", () => {
-  it("separa o que o chat sabe exibir do que só dá para baixar", () => {
-    expect(attachmentKind("image/png")).toBe("image");
-    expect(attachmentKind("image/gif")).toBe("image");
-    expect(attachmentKind("video/mp4")).toBe("video");
-    expect(attachmentKind("audio/ogg")).toBe("audio");
-    expect(attachmentKind("application/pdf")).toBe("file");
-    expect(attachmentKind("")).toBe("file");
-  });
-});
-
-describe("validade de um dia", () => {
-  it("continua válido até o instante do vencimento", () => {
-    expect(isAttachmentExpired(base, base + ATTACHMENT_TTL_MS - 1)).toBe(false);
+describe("limite de anexo", () => {
+  it("é de 30 MB", () => {
+    expect(ATTACHMENT_MAX_BYTES).toBe(30 * 1024 * 1024);
+    expect(ATTACHMENT_MAX_LABEL).toBe("30 MB");
   });
 
-  it("vence exatamente em 24 h", () => {
-    expect(isAttachmentExpired(base, base + ATTACHMENT_TTL_MS)).toBe(true);
+  it("aceita exatamente o teto", () => {
+    expect(attachmentSizeError(file("a.png", ATTACHMENT_MAX_BYTES))).toBeUndefined();
   });
 
-  it("aceita tanto ISO quanto epoch, que é o que chega da mensagem", () => {
-    const iso = "2026-08-29T12:00:00.000Z";
-    expect(isAttachmentExpired(iso, base + ATTACHMENT_TTL_MS + 1)).toBe(true);
-    expect(isAttachmentExpired(iso, base)).toBe(false);
-  });
-
-  it("conta o tempo restante em horas e depois em minutos", () => {
-    expect(attachmentTimeLeft(base, base)).toBe("24 h restantes");
-    expect(attachmentTimeLeft(base, base + 23 * 3_600_000)).toBe(
-      "1 h restantes",
+  it("recusa um byte além do teto, dizendo o limite", () => {
+    expect(attachmentSizeError(file("filme.mp4", ATTACHMENT_MAX_BYTES + 1))).toBe(
+      "filme.mp4 não foi anexado. O tamanho máximo permitido é 30 MB.",
     );
-    expect(attachmentTimeLeft(base, base + 23.5 * 3_600_000)).toBe(
-      "30 min restantes",
-    );
-    // Nunca "0 min": enquanto houver arquivo, sobra pelo menos um minuto.
-    expect(attachmentTimeLeft(base, base + ATTACHMENT_TTL_MS - 1_000)).toBe(
-      "1 min restantes",
-    );
-    expect(attachmentTimeLeft(base, base + ATTACHMENT_TTL_MS)).toBe("expirado");
   });
-});
 
-describe("formatBytes", () => {
-  it("troca de unidade nos limites certos", () => {
-    expect(formatBytes(512)).toBe("512 B");
-    expect(formatBytes(1024)).toBe("1.0 KB");
-    expect(formatBytes(1024 * 1024)).toBe("1.0 MB");
-    expect(formatBytes(ATTACHMENT_MAX_BYTES)).toBe("100.0 MB");
+  it("separa o que cabe do que foi recusado, preservando a ordem", () => {
+    const { accepted, errors } = partitionBySize([
+      file("ok-1.png", 1024),
+      file("grande.mp4", ATTACHMENT_MAX_BYTES * 2),
+      file("ok-2.png", 2048),
+    ]);
+
+    expect(accepted.map((item) => item.name)).toEqual(["ok-1.png", "ok-2.png"]);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain("30 MB");
   });
 });

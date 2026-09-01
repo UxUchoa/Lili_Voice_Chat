@@ -21,6 +21,15 @@ import {
   hasPermission,
   resolvePermissions,
 } from "./domain/permissions";
+import { partitionBySize } from "./domain/attachments";
+import { ReactionComposer } from "./ui/ReactionComposer";
+import {
+  REACTION_MAX_GRAPHEMES,
+  countGraphemes,
+  normalizeReaction,
+  reactionError,
+  truncateGraphemes,
+} from "./domain/reactions";
 import type {
   Channel,
   Friendship,
@@ -2276,10 +2285,25 @@ function Composer({
 }) {
   const [value, setValue] = useState(""),
     [files, setFiles] = useState<File[]>([]),
+    [attachError, setAttachError] = useState(""),
     [nextAllowedAt, setNextAllowedAt] = useState(0),
     [, setClock] = useState(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  /**
+   * Acrescenta anexos recusando o que passa do teto.
+   *
+   * Vale para as tres entradas — seletor, arrastar-soltar e clipboard — para a
+   * regra nao divergir entre elas. O arquivo grande e recusado aqui, antes de
+   * qualquer byte subir, e os que cabem continuam anexados.
+   */
+  const addFiles = (incoming: File[]) => {
+    if (!incoming.length) return;
+    const { accepted, errors } = partitionBySize(incoming);
+    setAttachError(errors[0] ?? "");
+    if (accepted.length)
+      setFiles((current) => [...current, ...accepted].slice(0, 10));
+  };
   const [pickerOpen, setPickerOpen] = useState(false);
   /** Insere o emoji onde o cursor está, não no fim do texto. */
   const insertEmoji = (char: string) => {
@@ -2408,8 +2432,61 @@ function Composer({
         setNextAllowedAt(Date.now() + channel.slowmodeSeconds * 1_000);
       setValue("");
       setFiles([]);
+      setAttachError("");
     }
   };
+  /**
+   * Item 2 — comecar a digitar sem clicar no compositor.
+   *
+   * O ouvinte fica no documento porque a tecla chega em `document.body` quando
+   * nada tem foco. As guardas importam mais que o efeito: digitar numa busca,
+   * num modal, num campo de formulario ou usar um atalho nao pode ser
+   * sequestrado. Por isso so passa tecla imprimivel de um unico caractere, sem
+   * Ctrl/Meta/Alt, e com o foco em nenhum campo editavel.
+   */
+  useEffect(() => {
+    if (blocked) return;
+    const typingTarget = (node: EventTarget | null) => {
+      if (!(node instanceof HTMLElement)) return false;
+      if (node.isContentEditable) return true;
+      const tag = node.tagName;
+      return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      // Uma tecla imprimivel tem `key` de um caractere; "Enter", "Tab",
+      // "ArrowUp" e companhia tem nome e ficam de fora.
+      if (event.key.length !== 1) return;
+      const node = composerRef.current;
+      if (!node || document.activeElement === node) return;
+      if (typingTarget(document.activeElement)) return;
+      // Um modal aberto tem o foco preso nele; nao roubamos a tecla.
+      if (document.querySelector(".modal-backdrop, [role='dialog']")) return;
+      node.focus();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [blocked]);
+
+  /**
+   * Item 4 — colar imagem direto no compositor.
+   *
+   * O clipboard entrega o print como `File` dentro de `items`. Passa pelo
+   * mesmo `addFiles` do seletor, entao herda o teto de tamanho e o limite de
+   * dez anexos. Colar texto continua funcionando: so intercepta quando ha
+   * arquivo, e ai o `preventDefault` evita o navegador colar o nome do arquivo
+   * junto.
+   */
+  const onPaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const pasted = Array.from(event.clipboardData?.items ?? [])
+      .filter((item) => item.kind === "file")
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => Boolean(file));
+    if (!pasted.length) return;
+    event.preventDefault();
+    addFiles(pasted);
+  };
+
   const disabledReason = timedOut
     ? "Você está em timeout neste servidor."
     : directBlocked
@@ -2421,6 +2498,17 @@ function Composer({
           : "";
   return (
     <div className="composer-wrap">
+      {attachError && (
+        <p className="composer-attach-error" role="alert">
+          {attachError}
+          <button
+            aria-label="Fechar aviso"
+            onClick={() => setAttachError("")}
+          >
+            ×
+          </button>
+        </p>
+      )}
       {files.length > 0 && (
         <div className="attachment-drafts">
           {files.map((file, index) => (
@@ -2461,9 +2549,11 @@ function Composer({
           className="file-input"
           type="file"
           multiple
-          onChange={(event) =>
-            setFiles(Array.from(event.target.files ?? []).slice(0, 10))
-          }
+          onChange={(event) => {
+            addFiles(Array.from(event.target.files ?? []));
+            // Sem isto, escolher o mesmo arquivo de novo nao dispara `change`.
+            event.target.value = "";
+          }}
         />
         <textarea
           ref={composerRef}
@@ -2481,6 +2571,7 @@ function Composer({
               submit();
             }
           }}
+          onPaste={onPaste}
           placeholder={disabledReason || `Mensagem em ${channelName}`}
         />
         <div className="composer-actions">
@@ -2713,6 +2804,7 @@ function ChatView({
     [pinsOpen, setPinsOpen] = useState(false),
     [groupSettingsOpen, setGroupSettingsOpen] = useState(false),
     [sendError, setSendError] = useState(""),
+    [reactingTo, setReactingTo] = useState<string | null>(null),
     [unreadBoundary, setUnreadBoundary] = useState(() => ({
       channelId: channel.id,
       lastReadAt:
@@ -2905,25 +2997,33 @@ function ChatView({
     )
       void Notification.requestPermission();
   };
-  const chooseReaction = (messageId: string) => {
-    const emoji = window
-      .prompt(
-        "Digite um emoji Unicode ou código de expressão (até 128 caracteres)",
-        "👍",
-      )
-      ?.trim();
-    if (!emoji) return;
-    if (emoji.length > 128) {
-      setSendError("A reação deve ter no máximo 128 caracteres.");
+  /**
+   * Abre o campo de reação. A validação de verdade mora em `reactionError`,
+   * compartilhada com o campo e com a checagem antes de enviar — o `prompt`
+   * do navegador media `length`, que conta unidades UTF-16 e recusava um
+   * emoji só como se fossem varios caracteres.
+   */
+  const chooseReaction = (messageId: string) =>
+    setReactingTo(messageId);
+  const submitReaction = (messageId: string, emoji: string) => {
+    const invalid = reactionError(emoji);
+    if (invalid) {
+      setSendError(invalid);
       return;
     }
     react.mutate(
-      { messageId, emoji, userId: currentUserId },
+      { messageId, emoji: normalizeReaction(emoji), userId: currentUserId },
       { onError: (error) => setSendError(error.message) },
     );
   };
   return (
     <main className="conversation">
+      {reactingTo && (
+        <ReactionComposer
+          onSubmit={(emoji) => submitReaction(reactingTo, emoji)}
+          onClose={() => setReactingTo(null)}
+        />
+      )}
       <div className="conversation-header">
         <div className="conversation-title">
           {channel.kind === "gdm" && channel.iconUrl ? (

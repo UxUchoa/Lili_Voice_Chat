@@ -570,8 +570,27 @@ test("duas sessões isoladas trocam mensagens no mesmo canal", async ({
       markdownRow.getByRole("link", { name: "documentação" }),
     ).toHaveAttribute("href", "https://example.com/docs");
     await markdownRow.hover();
-    ownerPage.once("dialog", (dialog) => dialog.accept("🔥"));
+    // A reação deixou de usar `window.prompt`: agora é um campo do design
+    // system, com contador em grafemas e recusa antes de enviar.
     await markdownRow.getByTitle("Reagir").click();
+    const reactionModal = ownerPage.getByRole("dialog", {
+      name: "Adicionar reação",
+    });
+    await expect(reactionModal).toBeVisible({ timeout: 20_000 });
+    const reactionField = reactionModal.getByLabel("Reação");
+
+    // Dezesseis caracteres não passam, e o botão fica travado.
+    await reactionField.fill("a".repeat(16));
+    await expect(reactionModal.getByText("15 / 15")).toBeVisible();
+
+    // Um emoji ZWJ conta como UM caractere, e não como as 8 unidades UTF-16
+    // que `length` devolveria.
+    await reactionField.fill("👨‍👩‍👧");
+    await expect(reactionModal.getByText("1 / 15")).toBeVisible();
+
+    await reactionField.fill("🔥");
+    await reactionModal.getByRole("button", { name: "Reagir" }).click();
+    await expect(reactionModal).toBeHidden({ timeout: 20_000 });
     await expect(markdownRow.getByRole("button", { name: "🔥 1" })).toBeVisible(
       {
         timeout: 20_000,

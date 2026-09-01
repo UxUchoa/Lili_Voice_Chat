@@ -704,8 +704,12 @@ a:focus-visible,
   flex: none;
   padding: 1px 5px;
   border-radius: 4px;
-  background: var(--primary, #f00c14);
-  color: white;
+  /* `--primary` e a cor de TEXTO (#f7f7f8, quase branco). Usa-la como fundo
+     com `color: white` deixava o rotulo branco no branco, ilegivel. O
+     fallback vermelho nunca entrava porque a variavel existe. A cor de marca
+     e `--brand`. */
+  background: var(--brand);
+  color: #fff;
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -2092,6 +2096,10 @@ a:focus-visible,
   font-weight: 400;
 }
 .toggle {
+  /* `.toggle-row` e uma linha flex e o botao encolhia junto com o texto ao
+     lado; o thumb continuava com 14px e o deslocamento fixo, entao a bolinha
+     saia do track. O tamanho do controle nao negocia com o rotulo. */
+  flex: none;
   width: 31px;
   height: 18px;
   padding: 2px;
@@ -5014,4 +5022,75 @@ button svg,
   .friends-header {
     align-items: flex-start;
   }
+}
+
+/* Campo de reação personalizada — item 1.
+   Herda o desenho do `.confirm-modal`; só acrescenta o campo com contador. */
+.reaction-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2, #191416);
+}
+.reaction-field input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 0;
+  border: 0;
+  background: none;
+  color: var(--primary);
+  font-size: 15px;
+}
+.reaction-field input:focus {
+  outline: none;
+}
+.reaction-field:focus-within {
+  border-color: var(--brand);
+}
+.reaction-counter {
+  flex: none;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.reaction-counter.over {
+  color: var(--brand);
+  font-weight: 700;
+}
+.reaction-error {
+  margin: 8px 0 0;
+  color: var(--brand);
+  font-size: 12px;
+}
+
+/* Anexo recusado pelo teto de tamanho — item 16. */
+.composer-attach-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--brand);
+  border-radius: 8px;
+  background: rgba(240, 12, 20, 0.12);
+  color: var(--primary);
+  font-size: 12px;
+}
+.composer-attach-error button {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  font-size: 15px;
+  cursor: pointer;
+}
+.composer-attach-error button:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--primary);
 }

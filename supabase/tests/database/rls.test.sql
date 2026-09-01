@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(29);
+select plan(31);
 
 insert into auth.users(id, email, aud, role, raw_user_meta_data)
 values
@@ -117,6 +117,36 @@ select lives_ok(
   'the send RPC accepts a second message from the same author'
 );
 select is((select count(*) from public.messages), 2::bigint, 'an authorized member reads the messages of the channel');
+
+-- Reação: o servidor recusa o que só tem espaço em branco. O limite de 15
+-- grafemas é do cliente (Postgres não segmenta grafemas); aqui vale o que o
+-- banco garante sozinho.
+--
+-- O papel do dono isola o que está sob teste: com `authenticated` a RLS
+-- recusaria antes, e o teste passaria a medir a política em vez da constraint.
+-- `service_role` não serve aqui: ele não recebe grant direto nesta tabela.
+reset role;
+select throws_ok(
+  $$insert into public.message_reactions(message_id, user_id, emoji)
+    values (
+      (select id from public.messages limit 1),
+      '10000000-0000-0000-0000-000000000002',
+      '   '
+    )$$,
+  '23514', null,
+  'a whitespace-only reaction is rejected by the database'
+);
+select lives_ok(
+  $$insert into public.message_reactions(message_id, user_id, emoji)
+    values (
+      (select id from public.messages limit 1),
+      '10000000-0000-0000-0000-000000000002',
+      '👨‍👩‍👧'
+    )$$,
+  'a single ZWJ emoji is accepted even though its length is 8'
+);
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000002', true);
 
 -- Mensagem só de mídia. O guard antigo media o ciphertext, que nunca era
 -- vazio nem sem legenda; com o corpo em claro, exigir texto passou a recusar

@@ -1,5 +1,5 @@
 import type { MessagePayload, MessageView } from "../../domain/types";
-import { ATTACHMENT_MAX_BYTES } from "../../domain/attachments";
+import { attachmentSizeError } from "../../domain/attachments";
 import { collectBatches, selectOlderPage } from "../../crypto/messagePagination";
 import { supabase } from "./client";
 import { assertOnlineStorageUploadAllowed } from "./quota";
@@ -201,9 +201,12 @@ export async function listMessagesPage(channelId: string, before?: string) {
  */
 async function uploadAttachments(files: File[], channelId: string) {
   const selected = files.slice(0, 10);
-  for (const file of selected)
-    if (file.size > ATTACHMENT_MAX_BYTES)
-      throw new Error(`O arquivo ${file.name} excede o limite permitido.`);
+  // Antes de subir qualquer byte: um arquivo recusado no fim do upload gasta a
+  // banda de quem enviou para nada.
+  for (const file of selected) {
+    const tooLarge = attachmentSizeError(file);
+    if (tooLarge) throw new Error(tooLarge);
+  }
   await assertOnlineStorageUploadAllowed(
     selected.reduce((total, file) => total + file.size, 0),
   );

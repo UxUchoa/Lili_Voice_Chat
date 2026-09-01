@@ -1,5 +1,39 @@
 /** Teto por arquivo. O bucket e o check de `message_attachments` usam o mesmo. */
-export const ATTACHMENT_MAX_BYTES = 100 * 1024 * 1024;
+export const ATTACHMENT_MAX_BYTES = 30 * 1024 * 1024;
+
+/** "30 MB" — o mesmo texto em toda mensagem de erro. */
+export const ATTACHMENT_MAX_LABEL = `${Math.round(
+  ATTACHMENT_MAX_BYTES / (1024 * 1024),
+)} MB`;
+
+/**
+ * Devolve o erro pronto, ou `undefined` quando o arquivo cabe.
+ *
+ * Uma função só, usada na escolha do arquivo, no clipboard, no arrastar-soltar
+ * e antes do upload: assim a regra não diverge entre as entradas. A checagem
+ * acontece sobre o `File`, antes de qualquer byte subir.
+ */
+export function attachmentSizeError(file: {
+  name: string;
+  size: number;
+}): string | undefined {
+  if (file.size <= ATTACHMENT_MAX_BYTES) return undefined;
+  return `${file.name} não foi anexado. O tamanho máximo permitido é ${ATTACHMENT_MAX_LABEL}.`;
+}
+
+/** Separa o que cabe do que foi recusado, preservando a ordem da escolha. */
+export function partitionBySize<T extends { name: string; size: number }>(
+  files: T[],
+): { accepted: T[]; errors: string[] } {
+  const accepted: T[] = [];
+  const errors: string[] = [];
+  for (const file of files) {
+    const error = attachmentSizeError(file);
+    if (error) errors.push(error);
+    else accepted.push(file);
+  }
+  return { accepted, errors };
+}
 
 /** Quanto tempo o arquivo fica disponível antes de ser apagado do servidor. */
 export const ATTACHMENT_TTL_MS = 24 * 60 * 60 * 1000;

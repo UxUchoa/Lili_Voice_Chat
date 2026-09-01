@@ -57,9 +57,9 @@ select lives_ok(
       '25000000-0000-0000-0000-000000000001',
       '23000000-0000-0000-0000-000000000001',
       '23000000-0000-0000-0000-000000000001/grande/cipher.bin',
-      104857616, 'grande.bin', 'application/octet-stream'
+      31457280, 'no-teto.bin', 'application/octet-stream'
     )$$,
-  'a 100 MB attachment fits, tag of the AEAD included'
+  'an attachment exactly at the 30 MB ceiling fits'
 );
 select throws_ok(
   $$insert into public.message_attachments(
@@ -68,7 +68,7 @@ select throws_ok(
       '25000000-0000-0000-0000-000000000001',
       '23000000-0000-0000-0000-000000000001',
       '23000000-0000-0000-0000-000000000001/enorme/cipher.bin',
-      209715200, 'enorme.bin', 'application/octet-stream'
+      31457281, 'enorme.bin', 'application/octet-stream'
     )$$,
   '23514', null,
   'anything past the ceiling is rejected by the database'
@@ -84,7 +84,7 @@ select is(
 -- ------------------------------------------------------------
 select ok(
   (select expires_at from public.message_attachments
-   where name = 'grande.bin')
+   where name = 'no-teto.bin')
     between now() + interval '23 hours' and now() + interval '25 hours',
   'an attachment expires one day after being sent'
 );
