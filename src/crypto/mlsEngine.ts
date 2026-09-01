@@ -22,7 +22,14 @@ import {
   type MlsPersistenceMode,
 } from "./mlsPersistence";
 
+import {
+  MessagePipelineError,
+  runStage,
+  traceDecryptFailure,
+} from "./pipelineTrace";
+
 export type { MlsPersistenceMode } from "./mlsPersistence";
+export { MessagePipelineError } from "./pipelineTrace";
 
 interface DeviceStateRow {
   userId: string;
@@ -1109,8 +1116,13 @@ export class MlsEngine {
   private async sendMessageUnlocked(input: SendMessageInput) {
     if (input.text.length > 8_000)
       throw new Error("A mensagem excede o limite de 8.000 caracteres.");
-    const group = await this.loadOrJoinGroup(input.channelId);
-    await this.reconcileRecipients(input.channelId, group);
+    const where = { channelId: input.channelId, deviceId: this.deviceId };
+    const group = await runStage("SEND", "GROUP_RESOLVED", where, () =>
+      this.loadOrJoinGroup(input.channelId),
+    );
+    await runStage("SEND", "RECIPIENTS_RECONCILED", where, () =>
+      this.reconcileRecipients(input.channelId, group),
+    );
     if (input.files?.length)
       await assertOnlineStorageUploadAllowed(
         input.files
@@ -1150,12 +1162,29 @@ export class MlsEngine {
         reactions: {},
         attachments: encryptedAttachments.map((item) => item.metadata),
       };
-      const ciphertext = group.create_message(
-        this.provider,
-        this.identity,
-        encoder.encode(JSON.stringify(payload)),
+      const ciphertext = await runStage("SEND", "ENCRYPTION", where, async () =>
+        group.create_message(
+          this.provider,
+          this.identity,
+          encoder.encode(JSON.stringify(payload)),
+        ),
       );
-      await this.persistProvider();
+      // Um ciphertext vazio chegaria ao banco como uma linha que ninguém
+      // consegue abrir depois, e o defeito só apareceria na leitura — longe da
+      // causa. A validação custa nada e mantém o erro no lugar onde nasceu.
+      if (!ciphertext?.byteLength)
+        throw new MessagePipelineError(
+          "SEND",
+          "ENCRYPTION",
+          where,
+          new Error("A cifragem devolveu um ciphertext vazio."),
+        );
+      // O segredo da época precisa estar no disco antes de a mensagem existir
+      // para os outros: o inverso deixa uma mensagem que este dispositivo não
+      // reabre depois de um recarregamento no meio do caminho.
+      await runStage("SEND", "STATE_PERSISTED", where, () =>
+        this.persistProvider(),
+      );
       const { data: messageId, error } = await this.client.rpc(
         "send_encrypted_message",
         {
@@ -1173,7 +1202,8 @@ export class MlsEngine {
           p_mentions_here: input.mentionsHere ?? false,
         },
       );
-      if (error) throw error;
+      if (error)
+        throw new MessagePipelineError("SEND", "DATABASE_INSERT", where, error);
       traceE2ee("message-sent", {
         channelId: input.channelId,
         messageId,
@@ -1201,7 +1231,13 @@ export class MlsEngine {
           throw metadataError;
         }
       }
-      await this.cachePayload(messageId, input.channelId, payload);
+      // O remetente nunca reprocessa o próprio ciphertext no MLS: este cache é
+      // a única cópia legível da mensagem que ele mesmo enviou. Se falhar, a
+      // mensagem existe para os outros e vira cadeado para o autor — vale um
+      // registro nomeado em vez do silêncio.
+      await runStage("SEND", "CACHE_WRITTEN", { ...where, messageId }, () =>
+        this.cachePayload(messageId, input.channelId, payload),
+      );
       return messageId as string;
     } catch (caught) {
       if (uploadedObjects.length)
@@ -1384,9 +1420,37 @@ export class MlsEngine {
             payload,
             row.edited_at ?? undefined,
           );
-        } catch {
-          // Messages sent before this device joined are intentionally unavailable.
+        } catch (caught) {
+          // Mensagem anterior à entrada deste dispositivo no grupo é
+          // indisponível por desenho do E2EE. O que não pode continuar é o
+          // silêncio: sem registro, esse caso e um defeito real de chave
+          // chegavam à tela com a mesma aparência.
+          traceDecryptFailure({
+            messageId: row.id,
+            channelId,
+            deviceId: this.deviceId,
+            senderDeviceId: row.sender_device_id ?? undefined,
+            epoch: Number(group.epoch()),
+            reason: "PROCESS_MESSAGE_FAILED",
+            error: caught,
+          });
         }
+      } else if (!payload && !group) {
+        traceDecryptFailure({
+          messageId: row.id,
+          channelId,
+          deviceId: this.deviceId,
+          reason: "NO_GROUP",
+        });
+      } else if (!payload && row.author_id === this.userId) {
+        // A própria mensagem só existe legível no cache local. Chegar aqui
+        // significa que o cache se perdeu — é o sintoma de troca de cofre.
+        traceDecryptFailure({
+          messageId: row.id,
+          channelId,
+          deviceId: this.deviceId,
+          reason: "CACHE_MISS_OWN_MESSAGE",
+        });
       }
       payload ??= {
         version: 1,

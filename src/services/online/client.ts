@@ -1,7 +1,14 @@
 import { createClient } from "@supabase/supabase-js";
 import { assertOnlineConfig, onlineConfig } from "./config";
+import { migrateLegacyStorageKeysOnce } from "../storageMigration";
 
 assertOnlineConfig();
+
+// Precisa acontecer antes de `createClient`: é ele quem lê o storageKey abaixo.
+// Se a sessão ainda estiver sob o nome do rename, este é o momento de trazê-la
+// de volta — e de apagar o cofre abandonado, que senão continua renovando o
+// mesmo refresh token por fora e derrubando esta sessão.
+migrateLegacyStorageKeysOnce();
 
 export const supabase = createClient(
   onlineConfig.supabaseUrl,

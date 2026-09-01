@@ -1,3 +1,7 @@
+// Primeiro import do aplicativo, de propósito: os módulos são avaliados na
+// ordem em que aparecem, e as stores persistidas leem o localStorage já na
+// avaliação. A migração precisa ter acontecido antes da primeira leitura.
+import "./services/storageMigration.boot";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Fragment,
