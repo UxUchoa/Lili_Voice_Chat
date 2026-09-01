@@ -200,6 +200,7 @@ export function useOnlineMessages(channelId: string, enabled = true) {
       text: string;
       replyToId?: string;
       files?: File[];
+      spoilerNames?: Set<string>;
     }) => {
       return sendMessage(currentUserId, {
         channelId,
@@ -207,6 +208,7 @@ export function useOnlineMessages(channelId: string, enabled = true) {
         replyToId: input.replyToId,
         ...resolveMentions(input.text),
         files: input.files,
+        spoilerNames: input.spoilerNames,
       });
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey }),

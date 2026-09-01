@@ -22,6 +22,7 @@ import {
   resolvePermissions,
 } from "./domain/permissions";
 import { partitionBySize } from "./domain/attachments";
+import { CategoryDeleteModal } from "./ui/CategoryDeleteModal";
 import { ReactionComposer } from "./ui/ReactionComposer";
 import { Select } from "./ui/Select";
 import {
@@ -103,6 +104,7 @@ import {
   createOnlineDirectChannel,
   blockOnlineUser,
   createOnlineRole,
+  deleteOnlineCategory,
   deleteOnlineChannel,
   deleteOnlineRole,
   deleteOnlineServer,
@@ -1757,6 +1759,10 @@ function ChannelSidebar({
   /** Abre o modal de criação já no tipo e na categoria de onde veio o clique. */
   const addChannel = (kind: NewChannelKind, parentId?: string) =>
     setChannelSetup({ kind, parentId: parentId ?? "" });
+  /** Categoria em processo de exclusão; o modal decide o destino dos canais. */
+  const [deletingCategory, setDeletingCategory] = useState<Channel | null>(
+    null,
+  );
   const openChannelMenu = (event: ReactMouseEvent, channel: Channel) => {
     const isCategory = channel.kind === "category";
     contextMenu.open(event, [
@@ -1851,11 +1857,18 @@ function ChannelSidebar({
         label: isCategory ? "Excluir categoria" : "Excluir canal",
         danger: true,
         disabled: !canManageChannels,
-        onSelect: () =>
+        onSelect: () => {
+          // Categoria tem um modal próprio: os canais de dentro sobrevivem, e
+          // para onde eles vão é escolha de quem exclui, não um efeito
+          // colateral descoberto depois.
+          if (isCategory) {
+            setDeletingCategory(channel);
+            return;
+          }
           ask({
-            title: isCategory ? "Excluir categoria" : "Excluir canal",
+            title: "Excluir canal",
             message: `“${channel.name}” e todas as mensagens dele são apagadas. Não dá para desfazer.`,
-            confirmLabel: isCategory ? "Excluir categoria" : "Excluir canal",
+            confirmLabel: "Excluir canal",
             danger: true,
             onConfirm: () => {
               void deleteOnlineChannel(channel.id)
@@ -1864,7 +1877,8 @@ function ChannelSidebar({
                   reportRuntimeError("Falha ao excluir o canal", caught),
                 );
             },
-          }),
+          });
+        },
       },
     ]);
   };
@@ -1882,6 +1896,29 @@ function ChannelSidebar({
   };
   return (
     <aside className="channel-sidebar">
+      {deletingCategory && (
+        <CategoryDeleteModal
+          categoryName={deletingCategory.name}
+          channelNames={channels
+            .filter((item) => item.category === deletingCategory.id)
+            .map((item) => item.name)}
+          otherCategories={categories
+            .filter((category) => category.id !== deletingCategory.id)
+            .map((category) => ({ id: category.id, name: category.name }))}
+          onClose={() => setDeletingCategory(null)}
+          onConfirm={(strategy, targetCategoryId) => {
+            void deleteOnlineCategory(
+              deletingCategory.id,
+              strategy,
+              targetCategoryId,
+            )
+              .then(refreshWorkspace)
+              .catch((caught: unknown) =>
+                reportRuntimeError("Falha ao excluir a categoria", caught),
+              );
+          }}
+        />
+      )}
       <div
         className="server-heading"
         onContextMenu={(event) => openServerMenu(event)}
@@ -2280,13 +2317,15 @@ function Composer({
 }: {
   channelId: string;
   channelName: string;
-  onSend: (text: string, files: File[]) => void;
+  onSend: (text: string, files: File[], spoilerNames: Set<string>) => void;
   onTyping: () => void;
   disabled?: boolean;
 }) {
   const [value, setValue] = useState(""),
     [files, setFiles] = useState<File[]>([]),
     [attachError, setAttachError] = useState(""),
+    /** Nomes marcados como spoiler; o nome e o unico id antes do upload. */
+    [spoilerNames, setSpoilerNames] = useState<Set<string>>(new Set()),
     [nextAllowedAt, setNextAllowedAt] = useState(0),
     [, setClock] = useState(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -2428,12 +2467,13 @@ function Composer({
   }, [nextAllowedAt]);
   const submit = () => {
     if (!blocked && (value.trim() || files.length)) {
-      onSend(value.trim(), files);
+      onSend(value.trim(), files, spoilerNames);
       if (channel?.slowmodeSeconds && !bypassSlowmode)
         setNextAllowedAt(Date.now() + channel.slowmodeSeconds * 1_000);
       setValue("");
       setFiles([]);
       setAttachError("");
+      setSpoilerNames(new Set());
     }
   };
   /**
@@ -2512,27 +2552,56 @@ function Composer({
       )}
       {files.length > 0 && (
         <div className="attachment-drafts">
-          {files.map((file, index) => (
-            <span key={`${file.name}-${index}`}>
-              🔒 {file.name}
-              <button
-                onClick={() =>
-                  setFiles((current) =>
-                    current.filter((_, fileIndex) => fileIndex !== index),
-                  )
-                }
+          {files.map((file, index) => {
+            const marked = spoilerNames.has(file.name);
+            return (
+              <span
+                key={`${file.name}-${index}`}
+                className={marked ? "spoiler-marked" : ""}
               >
-                ×
-              </button>
-            </span>
-          ))}
+                {file.name}
+                <button
+                  className="attachment-draft-spoiler"
+                  aria-pressed={marked}
+                  title={
+                    marked ? "Não marcar como spoiler" : "Marcar como spoiler"
+                  }
+                  aria-label={
+                    marked
+                      ? `Não marcar ${file.name} como spoiler`
+                      : `Marcar ${file.name} como spoiler`
+                  }
+                  onClick={() =>
+                    setSpoilerNames((current) => {
+                      const next = new Set(current);
+                      if (next.has(file.name)) next.delete(file.name);
+                      else next.add(file.name);
+                      return next;
+                    })
+                  }
+                >
+                  {marked ? "🙈" : "👁"}
+                </button>
+                <button
+                  aria-label={`Remover ${file.name}`}
+                  onClick={() =>
+                    setFiles((current) =>
+                      current.filter((_, fileIndex) => fileIndex !== index),
+                    )
+                  }
+                >
+                  ×
+                </button>
+              </span>
+            );
+          })}
         </div>
       )}
       {pickerOpen && (
         <ComposerPicker
           onEmoji={insertEmoji}
           onFile={async (file) => {
-            onSend("", [file]);
+            onSend("", [file], new Set());
           }}
           onClose={() => setPickerOpen(false)}
         />
@@ -3432,12 +3501,12 @@ function ChatView({
           }
           onTyping={announceTyping}
           disabled={send.isPending}
-          onSend={(text, files) => {
+          onSend={(text, files, spoilerNames) => {
             // A própria mensagem sempre traz o chat de volta ao fim, mesmo
             // que a pessoa estivesse lendo history acima.
             pinnedToBottom.current = true;
             send.mutate(
-              { authorId: currentUserId, text, files, replyToId },
+              { authorId: currentUserId, text, files, replyToId, spoilerNames },
               {
                 onSuccess: () => {
                   setReplyToId(undefined);
@@ -5026,8 +5095,8 @@ function VoiceTextPanel({
         channelName={channel.name}
         onTyping={announceTyping}
         disabled={send.isPending}
-        onSend={(text, files) =>
-          send.mutate({ authorId: currentUserId, text, files })
+        onSend={(text, files, spoilerNames) =>
+          send.mutate({ authorId: currentUserId, text, files, spoilerNames })
         }
       />
     </aside>
@@ -7137,8 +7206,39 @@ function ChannelManagementSettings({ serverId }: { serverId: string }) {
     await moveOnlineChannelToCategory(channelId, categoryId || undefined, true);
     await hydrateOnlineWorkspace(currentUserId);
   };
+  /**
+   * Categoria excluída daqui passa pelo mesmo modal do menu de contexto. Dois
+   * caminhos para a mesma ação não podem ter comportamentos diferentes: num
+   * deles a pessoa escolheria o destino dos canais e no outro não.
+   */
+  const [deletingCategory, setDeletingCategory] = useState<Channel | null>(
+    null,
+  );
   return (
     <div className="settings-content single-content">
+      {deletingCategory && (
+        <CategoryDeleteModal
+          categoryName={deletingCategory.name}
+          channelNames={channels
+            .filter((item) => item.category === deletingCategory.id)
+            .map((item) => item.name)}
+          otherCategories={categories
+            .filter((category) => category.id !== deletingCategory.id)
+            .map((category) => ({ id: category.id, name: category.name }))}
+          onClose={() => setDeletingCategory(null)}
+          onConfirm={(strategy, targetCategoryId) => {
+            void deleteOnlineCategory(
+              deletingCategory.id,
+              strategy,
+              targetCategoryId,
+            )
+              .then(refresh)
+              .catch((caught: unknown) =>
+                reportRuntimeError("Falha ao excluir a categoria", caught),
+              );
+          }}
+        />
+      )}
       <div className="editor-top">
         <div>
           <span className="eyebrow">ESTRUTURA DO SERVIDOR</span>
@@ -7243,7 +7343,10 @@ function ChannelManagementSettings({ serverId }: { serverId: string }) {
             </button>
             <button
               className="outline-button danger-text"
-              onClick={() => void removeChannel(channel.id)}
+              onClick={() => {
+                if (channel.kind === "category") setDeletingCategory(channel);
+                else void removeChannel(channel.id);
+              }}
             >
               Excluir
             </button>

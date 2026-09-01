@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactElement } from "react";
 import type { MessagePayload } from "../domain/types";
 import {
   ATTACHMENT_AUTOPLAY_MAX_BYTES,
@@ -52,6 +52,13 @@ export function MessageAttachment({
   const [error, setError] = useState("");
   const [missing, setMissing] = useState(false);
   const [lightbox, setLightbox] = useState(false);
+  /**
+   * Item 13 — revelado é decisão de quem lê, e não sai deste cliente.
+   * Sincronizar entre dispositivos não daria nada a ninguém: revelar no
+   * celular não deveria revelar no desktop de quem está acompanhado.
+   */
+  const [revealed, setRevealed] = useState(false);
+  const covered = Boolean(attachment.spoiler) && !revealed;
   const urlRef = useRef("");
   // O relógio local diz quando o prazo acabou, mas o arquivo pode ter saído
   // antes — a limpeza roda em lote e o download é a fonte da verdade.
@@ -144,14 +151,50 @@ export function MessageAttachment({
     );
   }
 
+  if (covered)
+    return (
+      <button
+        className="attachment-spoiler"
+        onClick={() => setRevealed(true)}
+        aria-label={`Mostrar ${attachment.name}, marcado como spoiler`}
+      >
+        <span aria-hidden="true">👁</span>
+        <b>Mostrar spoiler</b>
+        <small>{attachment.name}</small>
+      </button>
+    );
+
   const meta = (
     <small>
       {formatBytes(attachment.size)} · {attachmentTimeLeft(createdAt)}
     </small>
   );
 
+  /**
+   * Envolve o anexo revelado para oferecer o "ocultar".
+   *
+   * O controle não pode morar dentro do conteúdo: o anexo comum é um
+   * `<button>` inteiro, e um botão dentro de outro é HTML inválido — o clique
+   * em "ocultar" dispararia o download junto.
+   */
+  const withRehide = (content: ReactElement) =>
+    attachment.spoiler ? (
+      <div className="attachment-revealed">
+        {content}
+        <button
+          className="attachment-rehide"
+          onClick={() => setRevealed(false)}
+          aria-label={`Ocultar ${attachment.name} de novo`}
+        >
+          🙈 Ocultar
+        </button>
+      </div>
+    ) : (
+      content
+    );
+
   if (kind === "image" || kind === "video" || kind === "audio") {
-    return (
+    return withRehide(
       <div className={`attachment-media attachment-media-${kind}`}>
         {url ? (
           kind === "image" ? (
@@ -228,22 +271,22 @@ export function MessageAttachment({
             onDownload={() => onDownload(attachment)}
           />
         )}
-      </div>
+      </div>,
     );
   }
 
-  return (
+  return withRehide(
     <button
       className="attachment"
       onClick={() => onDownload(attachment)}
       title={`Salvar ${attachment.name}`}
     >
-      <span aria-hidden="true">🔒</span>
+      <span aria-hidden="true">📎</span>
       <span>
         <b>{attachment.name}</b>
         {meta}
       </span>
       ↓
-    </button>
+    </button>,
   );
 }

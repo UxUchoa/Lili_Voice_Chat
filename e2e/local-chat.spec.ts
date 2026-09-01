@@ -389,6 +389,35 @@ test("duas sessões isoladas trocam mensagens no mesmo canal", async ({
     ).toBeVisible({ timeout: 30_000 });
     await expect(ownerPage.locator(".composer .send-error")).toHaveCount(0);
 
+    // Spoiler — item 13. Marcado no compositor, nasce coberto para quem
+    // recebe; revelar e ocultar sao decisao de quem le e nao saem do cliente.
+    const spoilerName = `spoiler-${runId}.txt`;
+    await ownerPage.locator('.composer input[type="file"]').setInputFiles({
+      name: spoilerName,
+      mimeType: "text/plain",
+      buffer: Buffer.from(`coberto-${runId}`),
+    });
+    await ownerPage
+      .getByRole("button", { name: `Marcar ${spoilerName} como spoiler` })
+      .click();
+    await ownerComposer.fill(`com-spoiler-${runId}`);
+    await ownerComposer.press("Enter");
+
+    const spoilerRow = memberPage
+      .locator(".message")
+      .filter({ hasText: `com-spoiler-${runId}` });
+    const cover = spoilerRow.getByRole("button", {
+      name: new RegExp(`Mostrar ${spoilerName}`),
+    });
+    await expect(cover).toBeVisible({ timeout: 30_000 });
+    await cover.click();
+    await expect(cover).toBeHidden();
+    await expect(spoilerRow.getByText(spoilerName)).toBeVisible();
+    await spoilerRow
+      .getByRole("button", { name: new RegExp(`Ocultar ${spoilerName}`) })
+      .click();
+    await expect(cover).toBeVisible();
+
     const editedAttachmentMessage = `${attachmentMessage}-editada`;
     const ownerAttachmentRow = ownerPage
       .locator(".message")
@@ -517,7 +546,7 @@ test("duas sessões isoladas trocam mensagens no mesmo canal", async ({
       "verificar corpo das mensagens",
     );
     // Sete: as seis com texto mais a de mídia sem legenda, cujo corpo é vazio.
-    expect(rows).toHaveLength(7);
+    expect(rows).toHaveLength(8);
     expect(rows.filter((row) => row.body === "")).toHaveLength(1);
     // O corpo é guardado em claro por decisão de produto: quem o lê precisa
     // de sessão e de participação no canal, e é a RLS que decide isso. O teste

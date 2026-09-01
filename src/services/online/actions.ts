@@ -34,6 +34,31 @@ export async function duplicateOnlineChannel(channelId: string) {
     p_channel_id: channelId,
   })) as string;
 }
+
+/** O que fazer com os canais de uma categoria que vai ser excluída. */
+export type CategoryDeleteStrategy =
+  | "UNCATEGORIZE"
+  | "MOVE_TO_CATEGORY"
+  | "DELETE_CHANNELS";
+
+/**
+ * Exclui a categoria dizendo para onde vão os canais.
+ *
+ * O `parent_id` é `on delete set null`, então nenhum canal era apagado por
+ * acidente nem antes — o que faltava era a escolha ser explícita, em vez de
+ * quem excluiu descobrir depois onde os canais foram parar.
+ */
+export const deleteOnlineCategory = (
+  categoryId: string,
+  strategy: CategoryDeleteStrategy = "UNCATEGORIZE",
+  targetCategoryId?: string,
+) =>
+  rpc("delete_category", {
+    p_category_id: categoryId,
+    p_strategy: strategy,
+    p_target_category_id: targetCategoryId ?? null,
+  });
+
 export const reorderOnlineChannel = (
   channelId: string,
   direction: "up" | "down",

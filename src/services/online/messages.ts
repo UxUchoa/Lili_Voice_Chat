@@ -26,6 +26,8 @@ interface SendMessageInput {
   mentionsHere?: boolean;
   resolvedMentionRecipientIds?: string[];
   files?: File[];
+  /** Nomes dos arquivos que devem nascer cobertos. */
+  spoilerNames?: Set<string>;
 }
 
 interface EditMessageInput {
@@ -122,6 +124,7 @@ interface AttachmentRow {
   byte_size: number;
   name: string;
   mime: string;
+  spoiler: boolean | null;
 }
 
 interface MessageRow {
@@ -157,6 +160,7 @@ function toMessageView(row: MessageRow): MessageView {
       size: Number(attachment.byte_size),
       mime: attachment.mime,
       storageObject: attachment.storage_object,
+      spoiler: attachment.spoiler ?? false,
     })),
     id: row.id,
     channelId: row.channel_id,
@@ -199,7 +203,11 @@ export async function listMessagesPage(channelId: string, before?: string) {
  * na mesma mensagem não protegeria de ninguém. O acesso é o do bucket, que
  * exige sessão autenticada.
  */
-async function uploadAttachments(files: File[], channelId: string) {
+async function uploadAttachments(
+  files: File[],
+  channelId: string,
+  spoilerNames: Set<string> = new Set(),
+) {
   const selected = files.slice(0, 10);
   // Antes de subir qualquer byte: um arquivo recusado no fim do upload gasta a
   // banda de quem enviou para nada.
@@ -216,6 +224,7 @@ async function uploadAttachments(files: File[], channelId: string) {
     name: string;
     mime: string;
     size: number;
+    spoiler: boolean;
   }> = [];
   for (const file of selected) {
     const id = crypto.randomUUID();
@@ -243,6 +252,9 @@ async function uploadAttachments(files: File[], channelId: string) {
       name: file.name,
       mime: file.type || "application/octet-stream",
       size: file.size,
+      // `spoilerNames` chega do compositor: marcar acontece por arquivo, e o
+      // nome e o unico identificador que existe antes do upload.
+      spoiler: spoilerNames.has(file.name),
     });
   }
   return uploaded;
@@ -257,7 +269,11 @@ export async function sendMessage(userId: string, input: SendMessageInput) {
   );
   const attachments = input.files?.length
     ? await runStage("SEND", "ATTACHMENTS_UPLOADED", where, () =>
-        uploadAttachments(input.files ?? [], input.channelId),
+        uploadAttachments(
+          input.files ?? [],
+          input.channelId,
+          input.spoilerNames,
+        ),
       )
     : [];
   try {
@@ -281,6 +297,7 @@ export async function sendMessage(userId: string, input: SendMessageInput) {
         byte_size: attachment.size,
         name: attachment.name,
         mime: attachment.mime,
+        spoiler: attachment.spoiler,
       })),
     });
     if (error) throw error;

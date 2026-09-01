@@ -198,6 +198,11 @@ export interface MessagePayload {
     mime: string;
     /** Caminho no bucket `attachments`; o acesso é o do Storage autenticado. */
     storageObject?: string;
+    /**
+     * Nasce coberto para todo mundo. Quem envia decide; "revelado" é decisão
+     * de cada leitor e não sai do cliente dele.
+     */
+    spoiler?: boolean;
   }>;
 }
 

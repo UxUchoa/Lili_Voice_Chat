@@ -178,8 +178,34 @@ test("categorias podem ser editadas, ocultadas e excluídas pela UI", async ({
     expect(persisted.name).toBe("Operações E2E");
     expect(persisted.private).toBe(true);
 
+    // Item 9 — excluir categoria nunca leva os canais junto por acidente. O
+    // canal criado aqui dentro tem que sobreviver com o destino padrão.
+    const canalDentro = await unwrap(
+      ownerApi.rpc("create_channel", {
+        p_server_id: serverId,
+        p_name: "sobrevivente",
+        p_kind: "text",
+        p_parent_id: persisted.id,
+        p_private: false,
+      }),
+      "criar canal dentro da categoria",
+    );
+
     await categoryRow.getByRole("button", { name: "Excluir" }).click();
+    const deleteModal = page.getByRole("alertdialog", {
+      name: "Excluir categoria",
+    });
+    await expect(deleteModal).toBeVisible({ timeout: 10_000 });
+    await expect(deleteModal.getByText("#sobrevivente")).toBeVisible();
+    // O padrão é soltar os canais, não apagá-los.
+    await expect(
+      deleteModal.getByRole("radio", { name: /Sem categoria/ }),
+    ).toBeChecked();
+    await deleteModal
+      .getByRole("button", { name: "Excluir categoria" })
+      .click();
     await expect(categoryRow).toHaveCount(0, { timeout: 10_000 });
+
     const { count, error: countError } = await ownerApi
       .from("channels")
       .select("id", { count: "exact", head: true })
@@ -187,6 +213,16 @@ test("categorias podem ser editadas, ocultadas e excluídas pela UI", async ({
     if (countError)
       throw new Error(`verificar exclusão de categoria: ${countError.message}`);
     expect(count).toBe(0);
+
+    const sobrevivente = await unwrap(
+      ownerApi
+        .from("channels")
+        .select("id,parent_id")
+        .eq("id", canalDentro)
+        .single(),
+      "verificar canal preservado",
+    );
+    expect(sobrevivente.parent_id).toBeNull();
   } finally {
     if (serverId)
       await ownerApi.rpc("delete_server", { p_server_id: serverId });

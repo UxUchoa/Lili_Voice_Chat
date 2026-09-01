@@ -5269,3 +5269,148 @@ button svg,
   opacity: 0.45;
   cursor: not-allowed;
 }
+
+/* Spoiler em anexo — item 13.
+   A capa substitui o conteudo em vez de so desfoca-lo: assim o arquivo nem
+   chega a ser baixado antes de a pessoa decidir ver. O desfoque fica na
+   propria capa, para o efeito continuar sendo o que se espera de um spoiler. */
+.attachment-spoiler {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background:
+    repeating-linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.035) 0 10px,
+      transparent 10px 20px
+    ),
+    var(--surface-2);
+  color: var(--secondary);
+  text-align: left;
+  cursor: pointer;
+}
+.attachment-spoiler:hover {
+  border-color: var(--brand);
+  color: var(--primary);
+}
+.attachment-spoiler b {
+  font-size: 13px;
+}
+.attachment-spoiler small {
+  margin-left: auto;
+  overflow: hidden;
+  max-width: 45%;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* Desfoque no nome: um titulo entrega o spoiler tanto quanto a imagem. */
+  filter: blur(3px);
+}
+.attachment-spoiler:hover small {
+  filter: none;
+}
+.attachment-revealed {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.attachment-revealed > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+.attachment-rehide {
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--surface-3);
+  color: var(--secondary);
+  font-size: 10px;
+  cursor: pointer;
+}
+.attachment-rehide:hover {
+  color: var(--primary);
+}
+
+/* Rascunho marcado como spoiler no compositor. */
+.attachment-drafts .spoiler-marked {
+  border-color: var(--brand);
+}
+.attachment-draft-spoiler {
+  background: none;
+  cursor: pointer;
+}
+
+/* Exclusao de categoria com destino explicito — item 9. */
+.category-delete-modal {
+  max-width: 460px;
+}
+.category-delete-list {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  list-style: none;
+  max-height: 130px;
+  overflow-y: auto;
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--secondary);
+  font-size: 12px;
+}
+.category-delete-list li + li {
+  margin-top: 4px;
+}
+.category-delete-list .more {
+  color: var(--muted);
+  font-style: italic;
+}
+.category-delete-choice {
+  margin: 0 0 6px;
+  padding: 0;
+  border: 0;
+}
+.category-delete-choice legend {
+  padding: 0 0 8px;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.category-delete-choice label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.category-delete-choice label:hover {
+  background: var(--surface-2);
+}
+.category-delete-choice label.unavailable {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.category-delete-choice label span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.category-delete-choice b {
+  color: var(--primary);
+  font-size: 13px;
+}
+.category-delete-choice small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.category-delete-choice label.danger b {
+  color: var(--brand);
+}
+.category-delete-target {
+  padding: 0 10px 10px 34px;
+}
