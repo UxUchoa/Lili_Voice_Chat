@@ -130,12 +130,10 @@ E no painel:
     aplicativo com a senha nova. Um `redirectTo` com esquema próprio exigiria
     registrar o protocolo no Windows e reconstruir a sessão a partir do
     fragmento — caminho que este código não tem.
-- **Authentication → SMTP Settings**: configure um provedor próprio (Resend,
-  SendGrid, Postmark, SES). O servidor embutido do Supabase entrega poucas
-  mensagens por hora, é explicitamente marcado como impróprio para produção e
-  pode ser desligado sem aviso. Como confirmação de cadastro **e** recuperação
-  de senha passam por e-mail, um SMTP que não aguenta é um aplicativo em que
-  ninguém consegue entrar.
+- **Authentication → Providers → Email**: desligue _Confirm email_. O servidor
+  embutido do Supabase entrega poucas mensagens por hora, e com a confirmação
+  ligada o cadastro esbarra em `email rate limit exceeded`. Quem recupera a
+  conta é a chave entregue no cadastro (seção 3b), não o e-mail.
 - **Settings → Storage**: limite de upload em **101 MiB**. O bucket
   `attachments` aceita 104861696 bytes (100 MiB + a folga de 4 KB da tag do
   AES-GCM); um teto global menor recusa o upload antes de a política ser
@@ -248,30 +246,35 @@ borda e o login por link não volta para o site.
 HTTPS não é opcional: Web Push e as APIs de mídia só existem em origem segura
 fora de `localhost`.
 
-## 3b. Recuperação de senha e expurgo de conta
+## 3b. Recuperação de conta e expurgo
 
-A recuperação é por link de e-mail, o mesmo caminho da confirmação de cadastro.
-Duas consequências que valem estar escritas:
+**Não há confirmação de e-mail e não há link de recuperação.** O servidor de
+e-mail embutido do Supabase entrega poucas mensagens por hora, e cadastro novo
+passou a esbarrar em `email rate limit exceeded` — a confirmação virou um
+portão que ninguém atravessava. Desligue _Confirm email_ em
+**Authentication → Providers → Email**.
 
-- **A segurança da conta é a da caixa de entrada.** Quem entra no e-mail troca
-  a senha. Não há segunda barreira.
-- **Sem SMTP próprio não há recuperação.** É o mesmo canal da confirmação, e o
-  servidor embutido do Supabase não aguenta produção.
+No lugar entra uma **chave única**, entregue no cadastro e mostrada uma vez. O
+botão de entrar só destrava depois que a pessoa confirma ter guardado, porque
+é o único momento em que dá para avisar: quem perde a chave perde a conta.
 
-O link devolve o usuário para a raiz do site com `type=recovery` no fragmento.
-O `supabase-js` consome o token e a sessão nasce autenticada — por isso o
-aplicativo se interpõe antes de abrir e exige a senha nova. Sem essa tela, quem
-clica em "esqueci a senha" entraria no aplicativo com a senha antiga ainda
-valendo e sairia achando que trocou. Trocar a senha também encerra as outras
-sessões.
+O servidor guarda apenas o SHA-256 da chave normalizada — 160 bits de
+entropia, sem dicionário a atacar — e o cadastro nunca transmite a chave em si.
+Recuperar troca a senha, derruba todas as sessões vivas e emite uma chave nova;
+a anterior morre na mesma operação. Cinco erros travam a conta por quinze
+minutos, e chave errada, conta inexistente e conta expurgada respondem a mesma
+coisa, para que ninguém descubra quem tem conta perguntando.
+
+Conta criada antes de a chave existir recebe a dela no primeiro login.
+
+Se um dia houver SMTP próprio (Resend, SendGrid, Postmark, SES), a confirmação
+e o link de recuperação podem voltar — nada no código impede. Enquanto não
+houver, ligá-los é trancar a porta.
 
 Conta sem login por 90 dias vira **lápide**: login, senha, sessões,
 dispositivos e chaves são destruídos e a identidade é anonimizada, mas
 mensagens, canais e servidores permanecem. Um servidor cujo dono sumiu passa
-para o administrador mais antigo; sem ninguém, é apagado. Apagar a linha do
-perfil era impossível de qualquer forma — `messages.author_id` e
-`servers.owner_id` são NO ACTION de propósito, para que a conversa de trinta
-pessoas não evapore porque quem criou o servidor sumiu por três meses.
+para o administrador mais antigo; sem ninguém, é apagado.
 
 Ajuste o prazo com `ACCOUNTS_PRUNE_DAYS` nos segredos das funções.
 
@@ -384,9 +387,8 @@ Uma build autoassinada não estabelece confiança para usuário final.
 - [ ] TURN/TLS funciona em rede com UDP bloqueado
 - [ ] push chega com o aplicativo fechado
 - [ ] anexo enviado há mais de 24 h desapareceu sozinho (cron ativo)
-- [ ] o link de "esqueci a senha" chega e leva à tela de senha nova
-- [ ] o link de confirmação volta para o domínio de produção, não para
-      localhost:3000
+- [ ] a chave de recuperação troca a senha e a chave antiga deixa de valer
+- [ ] uma conta antiga, sem chave, recebe a dela no primeiro login
 - [ ] `list_inactive_accounts(90)` devolve o que você espera antes de o
       expurgo rodar pela primeira vez
 - [ ] o aplicativo instalado abre a tela de login (janela em branco significa

@@ -8235,7 +8235,13 @@ function ProfilePanel({
   }, [account.profileId]);
   useEffect(() => {
     if (!window.janjaDesktop) return;
-    void window.janjaDesktop.updateStatus().then(setUpdateState);
+    // Sem o catch, uma falha de IPC vira rejeição não tratada — não crítico
+    // (a UI de atualização simplesmente não aparece), mas barulhento no
+    // console de quem está depurando outra coisa.
+    void window.janjaDesktop
+      .updateStatus()
+      .then(setUpdateState)
+      .catch(() => {});
     return window.janjaDesktop.onUpdateState(setUpdateState);
   }, []);
   const changePassword = async () => {
@@ -10575,12 +10581,112 @@ function AuthGate() {
   return <OnlineAuthGate />;
 }
 
+/**
+ * Chave de sessionStorage lida uma vez por lançamento: guarda a versão que
+ * este processo já viu, para diferenciar "acabei de atualizar" de "estou
+ * numa aba que recarregou". `localStorage` sobreviveria ao fechar o
+ * aplicativo, que é justamente quando a versão nova é instalada — usar
+ * `localStorage` faria o aviso aparecer de novo a cada abertura seguinte,
+ * não só na primeira depois da troca.
+ */
+const DESKTOP_LAST_SEEN_VERSION_KEY = "janja.desktop.lastSeenVersion";
+
+/**
+ * Avisa sobre a atualização nas duas pontas do ciclo, sempre visível — monta
+ * ao lado do portão de autenticação, não dentro dele, porque o
+ * `electron-updater` roda independente de haver sessão: uma pessoa parada na
+ * tela de login perderia o aviso se ele vivesse só dentro do app autenticado.
+ *
+ * Como o Electron aqui é só uma casca nativa sobre o mesmo bundle da web, uma
+ * atualização não é mais que abrir a versão nova do `dist/` — o equivalente a
+ * um F5. O popup existe para que isso não pareça o aplicativo sumindo sozinho:
+ * antes de reiniciar, avisa que uma versão nova está pronta; depois de
+ * reiniciar, confirma que foi só isso.
+ */
+function DesktopUpdateNotice() {
+  const [updateState, setUpdateState] = useState<LiliUpdateState | null>(null);
+  const [justUpdatedFrom, setJustUpdatedFrom] = useState<string | null>(null);
+  const [dismissedReady, setDismissedReady] = useState(false);
+
+  useEffect(() => {
+    if (!window.janjaDesktop) return;
+    // Sem o catch, uma falha de IPC vira rejeição não tratada — não crítico
+    // (a UI de atualização simplesmente não aparece), mas barulhento no
+    // console de quem está depurando outra coisa.
+    void window.janjaDesktop
+      .updateStatus()
+      .then(setUpdateState)
+      .catch(() => {});
+    return window.janjaDesktop.onUpdateState(setUpdateState);
+  }, []);
+
+  useEffect(() => {
+    if (!window.janjaDesktop || !updateState?.version) return;
+    let lastSeen: string | null = null;
+    try {
+      lastSeen = sessionStorage.getItem(DESKTOP_LAST_SEEN_VERSION_KEY);
+      sessionStorage.setItem(
+        DESKTOP_LAST_SEEN_VERSION_KEY,
+        updateState.version,
+      );
+    } catch {
+      return; // Armazenamento bloqueado: sem aviso, sem quebrar o app.
+    }
+    if (lastSeen && lastSeen !== updateState.version)
+      setJustUpdatedFrom(lastSeen);
+  }, [updateState?.version]);
+
+  useEffect(() => {
+    if (!justUpdatedFrom) return;
+    const timer = setTimeout(() => setJustUpdatedFrom(null), 8_000);
+    return () => clearTimeout(timer);
+  }, [justUpdatedFrom]);
+
+  if (!window.janjaDesktop) return null;
+
+  if (justUpdatedFrom)
+    return (
+      <div className="update-banner update-banner-info" role="status">
+        <span>Atualizado para a versão {updateState?.version}.</span>
+        <button
+          aria-label="Fechar aviso de atualização"
+          onClick={() => setJustUpdatedFrom(null)}
+        >
+          ×
+        </button>
+      </div>
+    );
+
+  if (updateState?.status === "ready" && !dismissedReady)
+    return (
+      <div className="update-banner" role="status">
+        <span>
+          Versão {updateState.version} pronta. Reinicie para atualizar.
+        </span>
+        <div className="update-banner-actions">
+          <button onClick={() => window.janjaDesktop?.installUpdate()}>
+            Reiniciar e instalar
+          </button>
+          <button
+            aria-label="Adiar atualização"
+            onClick={() => setDismissedReady(true)}
+          >
+            Depois
+          </button>
+        </div>
+      </div>
+    );
+
+  return null;
+}
+
 const rootElement = document.getElementById("root")!;
 const reactRoot = window.__liliReactRoot ?? createRoot(rootElement);
 window.__liliReactRoot = reactRoot;
 reactRoot.render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
+      <DesktopUpdateNotice />
       <AuthGate />
     </QueryClientProvider>
   </StrictMode>,
