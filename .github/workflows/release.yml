@@ -72,8 +72,18 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($siteUrl)) {
             throw "VITE_SITE_URL nao resolveu: o pacote abriria sem endereco."
           }
+          # `--publish never`: quem envia e o passo de upload, com o `gh`.
+          # Com `always`, o electron-builder sobe cada artefato por um
+          # publisher proprio e os dois tentam criar a release ao mesmo tempo
+          # quando ela ainda nao existe. Um cria, o outro perde a corrida - e o
+          # upload do instalador e do latest.yml morre junto, sem erro e com
+          # exit 0. Foi o que deixou a 0.1.3 no ar so com o blockmap.
+          #
+          # A configuracao de publish continua aqui porque e dela que sai o
+          # `app-update.yml` embarcado no pacote: sem ele o aplicativo
+          # instalado nao sabe onde procurar atualizacao.
           $arguments = @(
-            'electron-builder', '--win', 'nsis', '--publish', 'always',
+            'electron-builder', '--win', 'nsis', '--publish', 'never',
             "--config.extraMetadata.liliSiteUrl=$siteUrl",
             '--config.publish.provider=github',
             "--config.publish.owner=$env:GITHUB_REPOSITORY_OWNER",
@@ -127,5 +137,28 @@ jobs:
             "$hash *$($installer.Name)`n",
             (New-Object Text.UTF8Encoding $false)
           )
+          # A release e criada aqui, uma vez, antes de qualquer upload.
+          gh release view $env:GITHUB_REF_NAME 2>$null | Out-Null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $env:GITHUB_REF_NAME `
+              --title $env:GITHUB_REF_NAME.TrimStart('v') `
+              --notes "Versao $($env:GITHUB_REF_NAME.TrimStart('v'))"
+            if ($LASTEXITCODE -ne 0) { throw "Nao foi possivel criar a release." }
+          }
           gh release upload $env:GITHUB_REF_NAME `
-            $blockmap.FullName release/SHA256SUMS.txt --clobber
+            $installer.FullName `
+            $blockmap.FullName `
+            release/latest.yml `
+            release/SHA256SUMS.txt --clobber
+          if ($LASTEXITCODE -ne 0) { throw "O upload dos artefatos falhou." }
+
+          # O que o updater precisa encontrar publicado. Sem esta conferencia a
+          # release pode ficar incompleta e so o usuario descobre, semanas
+          # depois, que a atualizacao nunca chegou.
+          $published = (gh release view $env:GITHUB_REF_NAME --json assets `
+            --jq '.assets[].name') -split "`n"
+          foreach ($required in @($installer.Name, 'latest.yml')) {
+            if ($published -notcontains $required) {
+              throw "A release ficou sem $required."
+            }
+          }
