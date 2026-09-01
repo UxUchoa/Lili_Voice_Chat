@@ -11,7 +11,7 @@ import {
   Tray,
 } from "electron";
 import electronUpdater from "electron-updater";
-import { appendFileSync, existsSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -62,6 +62,64 @@ let updateState = { status: "idle", version: app.getVersion(), progress: 0 };
 
 const hasPackagedUpdateConfiguration = () =>
   existsSync(path.join(process.resourcesPath, "app-update.yml"));
+
+/**
+ * Endereço que a janela carrega.
+ *
+ * O aplicativo instalado é uma casca nativa sobre o **mesmo** site: ele não
+ * embarca mais uma cópia do bundle. Antes carregava `dist/index.html` por
+ * `file://`, e a consequência era que um deploy da web não chegava a quem
+ * tinha o app instalado — só um instalador novo levava. Agora o front vem do
+ * site a cada abertura, e o `electron-updater` fica reservado ao que de fato
+ * precisa de instalador: Electron, `preload.cjs` e este processo.
+ *
+ * O valor é gravado no `package.json` empacotado pelo electron-builder
+ * (`--config.extraMetadata.liliSiteUrl`). `LILI_SITE_URL` tem precedência para
+ * que o teste de fumaça aponte a janela para um servidor local.
+ */
+const siteUrl = (() => {
+  const clean = (value) => String(value ?? "").trim().replace(/\/+$/, "");
+  const fromEnvironment = clean(process.env.LILI_SITE_URL);
+  if (/^https?:\/\//i.test(fromEnvironment)) return fromEnvironment;
+  if (isDevelopment) return "http://127.0.0.1:5173";
+  try {
+    const manifest = JSON.parse(
+      readFileSync(path.join(app.getAppPath(), "package.json"), "utf8"),
+    );
+    const configured = clean(manifest.liliSiteUrl);
+    return /^https:\/\//i.test(configured) ? configured : "";
+  } catch {
+    return "";
+  }
+})();
+
+/** Origem única autorizada a rodar dentro da janela. */
+const siteOrigin = (() => {
+  try {
+    return new URL(siteUrl).origin;
+  } catch {
+    return "";
+  }
+})();
+
+/**
+ * Tela de indisponibilidade.
+ *
+ * Sem cópia local do aplicativo, um site fora do ar deixaria a janela em
+ * branco — o mesmo sintoma silencioso que já custou caro aqui. Esta página é
+ * estática, não faz parte do aplicativo e existe só para dizer o que houve e
+ * oferecer uma nova tentativa.
+ */
+const offlinePage = path.join(directory, "offline.html");
+
+/** Abre o site na janela; sem endereço configurado, abre a tela de aviso. */
+const loadSite = async () => {
+  if (!siteUrl) {
+    console.error("[shell] nenhum endereço de site configurado nesta build.");
+    return mainWindow?.loadFile(offlinePage);
+  }
+  return mainWindow?.loadURL(siteUrl);
+};
 
 const recordUpdateTest = (event, details = {}) => {
   if (!updateTestResult) return;
@@ -231,14 +289,32 @@ function createWindow() {
         (input.control && input.shift && input.key.toUpperCase() === "I"));
     if (isToggle) mainWindow?.webContents.toggleDevTools();
   });
+  // A janela só roda a origem do site e a página de indisponibilidade. O
+  // `preload` expõe `safeStorage` e canais de IPC: qualquer outra origem que
+  // conseguisse navegar aqui herdaria esse acesso nativo.
   mainWindow.webContents.on("will-navigate", (event, url) => {
-    const allowed = isDevelopment
-      ? url.startsWith("http://127.0.0.1:5173")
-      : url.startsWith("file:");
-    if (!allowed) event.preventDefault();
+    if (url.startsWith("file:")) return;
+    let origin = "";
+    try {
+      origin = new URL(url).origin;
+    } catch {
+      origin = "";
+    }
+    if (!siteOrigin || origin !== siteOrigin) event.preventDefault();
   });
-  if (isDevelopment) void mainWindow.loadURL("http://127.0.0.1:5173");
-  else void mainWindow.loadFile(path.join(directory, "../dist/index.html"));
+
+  // `did-fail-load` também dispara para sub-recursos; só a navegação principal
+  // significa que o aplicativo não abriu.
+  mainWindow.webContents.on(
+    "did-fail-load",
+    (_event, errorCode, errorDescription, validatedUrl, isMainFrame) => {
+      if (!isMainFrame || errorCode === -3) return; // -3 = cancelado por nova navegação
+      console.warn(`[shell] falha ao carregar ${validatedUrl}: ${errorDescription}`);
+      void mainWindow?.loadFile(offlinePage);
+    },
+  );
+
+  void loadSite();
   mainWindow.on("close", (event) => {
     if (!isQuitting) {
       event.preventDefault();
@@ -305,6 +381,11 @@ app.on("before-quit", () => {
   isQuitting = true;
 });
 
+// Só a página de indisponibilidade usa isto: o aplicativo em si nunca precisa
+// pedir para ser recarregado.
+ipcMain.on("shell:retry", (event) => {
+  if (event.sender === mainWindow?.webContents) void loadSite();
+});
 ipcMain.on("window:minimize", (event) => {
   if (event.sender === mainWindow?.webContents) mainWindow.minimize();
 });

@@ -56,17 +56,25 @@ jobs:
       - run: npm test
       - run: npm run typecheck
       # Falha antes de empacotar se a configuração pública estiver ausente ou
-      # errada: um instalador assinado sem backend é pior que nenhum.
-      - run: npm run build:web
-      # O bundle é carregado por file:// no aplicativo instalado, e quase tudo
-      # que quebra por causa disso passa em branco no navegador.
+      # errada: um instalador assinado sem endereço de site é pior que nenhum.
+      - run: node scripts/check-web-env.mjs
+        env:
+          LILI_DESKTOP_BUILD: "true"
+          LILI_STRICT_ENV: "true"
+      # A casca precisa levar a tela de indisponibilidade e a ponte do preload;
+      # sem elas um site fora do ar deixa a janela em branco.
       - run: npx electron scripts/test-desktop-smoke.mjs
       - name: Build and publish NSIS release
         shell: pwsh
         run: |
           $repository = $env:GITHUB_REPOSITORY.Split('/')[1]
+          $siteUrl = (& node scripts/check-web-env.mjs --print-site-url)
+          if ([string]::IsNullOrWhiteSpace($siteUrl)) {
+            throw "VITE_SITE_URL nao resolveu: o pacote abriria sem endereco."
+          }
           $arguments = @(
             'electron-builder', '--win', 'nsis', '--publish', 'always',
+            "--config.extraMetadata.liliSiteUrl=$siteUrl",
             '--config.publish.provider=github',
             "--config.publish.owner=$env:GITHUB_REPOSITORY_OWNER",
             "--config.publish.repo=$repository",
@@ -77,6 +85,17 @@ jobs:
           }
           & npx.cmd @arguments
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify packaged shell
+        shell: pwsh
+        env:
+          LILI_SMOKE_ASAR: resources/app.asar
+        run: |
+          $unpacked = Get-ChildItem -Recurse -Directory -Filter 'win-unpacked' |
+            Select-Object -First 1
+          if (-not $unpacked) { throw "win-unpacked nao foi gerado." }
+          $env:LILI_SMOKE_ASAR = Join-Path $unpacked.FullName 'resources/app.asar'
+          & npx.cmd electron scripts/test-desktop-smoke.mjs
+          if ($LASTEXITCODE -ne 0) { throw "O app.asar nao passou no teste de fumaca." }
       - name: Verify installer and update metadata
         shell: pwsh
         run: |

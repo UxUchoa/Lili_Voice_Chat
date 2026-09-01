@@ -72,7 +72,6 @@
       "output": "release"
     },
     "files": [
-      "dist/**/*",
       "electron/**/*",
       "package.json"
     ],

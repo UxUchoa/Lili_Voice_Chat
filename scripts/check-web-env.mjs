@@ -12,6 +12,14 @@ import process from "node:process";
 import { loadEnv } from "vite";
 
 const env = { ...loadEnv("production", process.cwd(), ""), ...process.env };
+
+// O build do desktop precisa do endereço do site para gravá-lo no pacote, e
+// resolvê-lo em outro lugar criaria uma segunda fonte de verdade. Este modo
+// imprime só o valor e sai, para o script de empacotamento consumir.
+if (process.argv.includes("--print-site-url")) {
+  process.stdout.write((env.VITE_SITE_URL ?? "").trim());
+  process.exit(0);
+}
 const errors = [];
 const warnings = [];
 

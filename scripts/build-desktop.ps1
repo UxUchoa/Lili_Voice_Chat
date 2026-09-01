@@ -52,27 +52,34 @@ if (-not $temporaryOutput.StartsWith($systemTempRoot, [StringComparison]::Ordina
 
 Push-Location $projectRoot
 try {
-  # Diz ao Vite para gerar caminhos relativos: o `dist/` empacotado é aberto
-  # por file://, onde "/assets/..." aponta para a raiz do disco.
+  # O pacote não leva mais uma cópia do bundle: a janela carrega o site
+  # publicado. `LILI_DESKTOP_BUILD` continua ligado porque é ele que torna
+  # `VITE_SITE_URL` obrigatória na validação — sem endereço, o aplicativo
+  # instalado abriria direto na tela de indisponibilidade.
   $env:LILI_DESKTOP_BUILD = "true"
-
   $env:LILI_STRICT_ENV = "true"
-  & npm.cmd run build:web
-  if ($LASTEXITCODE -ne 0) { throw "O build web falhou com código $LASTEXITCODE." }
+
+  & node scripts/check-web-env.mjs
+  if ($LASTEXITCODE -ne 0) { throw "Configuração pública inválida para o desktop." }
+
+  $siteUrl = (& node scripts/check-web-env.mjs --print-site-url)
+  if ([string]::IsNullOrWhiteSpace($siteUrl)) { throw "VITE_SITE_URL não resolveu." }
 
   & npx.cmd electron scripts/test-desktop-smoke.mjs
-  if ($LASTEXITCODE -ne 0) { throw "O dist não sobreviveu ao carregamento por file://." }
+  if ($LASTEXITCODE -ne 0) { throw "A casca desktop não passou no teste de fumaça." }
 
-  & npx.cmd electron-builder --win nsis "--config.directories.output=$temporaryOutput"
+  & npx.cmd electron-builder --win nsis `
+    "--config.directories.output=$temporaryOutput" `
+    "--config.extraMetadata.liliSiteUrl=$siteUrl"
   if ($LASTEXITCODE -ne 0) { throw "O empacotamento desktop falhou com código $LASTEXITCODE." }
 
-  $packagedDist = Join-Path $temporaryOutput "win-unpacked\resources\app.asar\dist"
-  $env:LILI_SMOKE_DIST = $packagedDist
+  $packagedApp = Join-Path $temporaryOutput "win-unpacked\resources\app.asar"
+  $env:LILI_SMOKE_ASAR = $packagedApp
   try {
     & npx.cmd electron scripts/test-desktop-smoke.mjs
-    if ($LASTEXITCODE -ne 0) { throw "O bundle dentro do app.asar não carrega por file://." }
+    if ($LASTEXITCODE -ne 0) { throw "O app.asar não tem endereço de site ou tela de aviso." }
   }
-  finally { Remove-Item Env:\LILI_SMOKE_DIST -ErrorAction SilentlyContinue }
+  finally { Remove-Item Env:\LILI_SMOKE_ASAR -ErrorAction SilentlyContinue }
 
   New-Item -ItemType Directory -Path $releaseRoot -Force | Out-Null
   $artifacts = Get-ChildItem -LiteralPath $temporaryOutput -File | Where-Object {

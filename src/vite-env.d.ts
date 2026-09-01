@@ -4,6 +4,8 @@ interface Window {
   __liliReactRoot?: import("react-dom/client").Root;
   janjaDesktop?: {
     platform: string;
+    /** Recarrega o site. Só a tela de indisponibilidade do Electron usa. */
+    retry: () => void;
     minimize: () => void;
     maximize: () => void;
     close: () => void;

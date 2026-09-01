@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld(
   "janjaDesktop",
   Object.freeze({
     platform: process.platform,
+    retry: () => ipcRenderer.send("shell:retry"),
     minimize: () => ipcRenderer.send("window:minimize"),
     maximize: () => ipcRenderer.send("window:maximize"),
     close: () => ipcRenderer.send("window:close"),
