@@ -104,6 +104,51 @@ a:focus-visible,
   background: transparent;
   font-size: 20px;
 }
+/*
+ * Mesmo esqueleto do .runtime-alert (fixo, logo abaixo da barra de título),
+ * mas em amarelo: é aviso, não erro. Fica acima de tudo porque monta ao lado
+ * do portão de autenticação — precisa aparecer tanto na tela de login quanto
+ * dentro do app.
+ */
+.update-banner {
+  position: fixed;
+  z-index: 10001;
+  top: 62px;
+  left: 50%;
+  width: min(560px, calc(100vw - 32px));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid rgba(251, 198, 5, 0.55);
+  border-radius: 8px;
+  background: #2b2408;
+  color: #fff;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  transform: translateX(-50%);
+}
+.update-banner-info {
+  border-color: rgba(35, 196, 131, 0.55);
+  background: #0c2417;
+}
+.update-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.update-banner-actions button:first-child {
+  padding: 6px 12px;
+  border-radius: 6px;
+  background: var(--brand);
+  color: #fff;
+}
+.update-banner > button {
+  flex: 0 0 auto;
+  background: transparent;
+  font-size: 20px;
+}
 .titlebar {
   height: 54px;
   flex: 0 0 54px;

@@ -220,6 +220,17 @@ function createWindow() {
     if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
     return { action: "deny" };
   });
+  // A janela empacotada não tem barra de endereço nem menu: sem um atalho
+  // fixo, um erro em produção não deixa rastro nenhum que dê para inspecionar
+  // depois. F12/Ctrl+Shift+I é a convenção que Discord, Slack e VS Code já
+  // usam nos respectivos apps empacotados.
+  mainWindow.webContents.on("before-input-event", (_event, input) => {
+    const isToggle =
+      input.type === "keyDown" &&
+      (input.key === "F12" ||
+        (input.control && input.shift && input.key.toUpperCase() === "I"));
+    if (isToggle) mainWindow?.webContents.toggleDevTools();
+  });
   mainWindow.webContents.on("will-navigate", (event, url) => {
     const allowed = isDevelopment
       ? url.startsWith("http://127.0.0.1:5173")
