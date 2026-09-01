@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { createClient } from "@supabase/supabase-js";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
-import { openServer } from "./navigation";
+import { finishOnlineLogin, openServer } from "./navigation";
 
 const status = JSON.parse(
   execFileSync(
@@ -26,9 +26,9 @@ const unwrap = async <T>(
 async function login(page: Page, email: string, password: string) {
   await page.goto("/");
   await page.getByLabel("E-mail").fill(email);
-  await page.getByLabel("Senha").fill(password);
+  await page.getByLabel("Senha", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Entrar", exact: true }).click();
-  await expect(page.locator(".app-shell")).toBeVisible({ timeout: 20_000 });
+  await finishOnlineLogin(page);
 }
 
 /**
@@ -70,6 +70,8 @@ async function chooseDevice(
 
 async function enterLounge(page: Page) {
   await page.getByRole("button", { name: /Lounge/ }).click();
+  const join = page.getByRole("button", { name: "Entrar no canal" });
+  if (await join.isVisible()) await join.click();
   await expect(page.locator(".call-view")).toBeVisible();
   await expect(page.locator('[data-rtc-state="connected"]')).toBeVisible({
     timeout: 45_000,
@@ -199,25 +201,34 @@ test("duas contas permanecem visíveis na mesma chamada local E2EE", async ({
       ).toHaveText("2", { timeout: 20_000 });
     }
 
-    await ownerPage.getByRole("button", { name: "Ativar microfone" }).click();
-    await memberPage.getByRole("button", { name: "Ativar microfone" }).click();
+    await ownerPage
+      .locator(".call-controls")
+      .getByRole("button", { name: "Ativar microfone" })
+      .click();
+    await memberPage
+      .locator(".call-controls")
+      .getByRole("button", { name: "Ativar microfone" })
+      .click();
     await expect(
-      ownerPage.getByRole("button", { name: "Silenciar microfone" }),
+      ownerPage
+        .locator(".call-controls")
+        .getByRole("button", { name: "Silenciar microfone" }),
     ).toBeVisible();
     await expect(
-      memberPage.getByRole("button", { name: "Silenciar microfone" }),
+      memberPage
+        .locator(".call-controls")
+        .getByRole("button", { name: "Silenciar microfone" }),
     ).toBeVisible();
     for (const page of [ownerPage, memberPage]) {
       await expect
         .poll(
           () =>
-            remoteMedia(page)
-              .evaluate(
-                (video) =>
-                  (
-                    (video as HTMLVideoElement).srcObject as MediaStream | null
-                  )?.getAudioTracks().length ?? 0,
-              ),
+            remoteMedia(page).evaluate(
+              (video) =>
+                (
+                  (video as HTMLVideoElement).srcObject as MediaStream | null
+                )?.getAudioTracks().length ?? 0,
+            ),
           { timeout: 30_000 },
         )
         .toBeGreaterThan(0);
@@ -232,31 +243,34 @@ test("duas contas permanecem visíveis na mesma chamada local E2EE", async ({
     await expect
       .poll(
         () =>
-          remoteMedia(memberPage)
-            .evaluate(
-              (video) =>
-                (
-                  (video as HTMLVideoElement).srcObject as MediaStream | null
-                )?.getAudioTracks().length ?? 0,
-            ),
+          remoteMedia(memberPage).evaluate(
+            (video) =>
+              (
+                (video as HTMLVideoElement).srcObject as MediaStream | null
+              )?.getAudioTracks().length ?? 0,
+          ),
         { timeout: 30_000 },
       )
       .toBeGreaterThan(0);
 
-    await ownerPage.getByRole("button", { name: "Ligar câmera" }).click();
+    await ownerPage
+      .locator(".call-controls")
+      .getByRole("button", { name: "Ligar câmera" })
+      .click();
     await expect(
-      ownerPage.getByRole("button", { name: "Desligar câmera" }),
+      ownerPage
+        .locator(".call-controls")
+        .getByRole("button", { name: "Desligar câmera" }),
     ).toBeVisible();
     await expect
       .poll(
         () =>
-          remoteMedia(memberPage)
-            .evaluate(
-              (video) =>
-                (
-                  (video as HTMLVideoElement).srcObject as MediaStream | null
-                )?.getVideoTracks().length ?? 0,
-            ),
+          remoteMedia(memberPage).evaluate(
+            (video) =>
+              (
+                (video as HTMLVideoElement).srcObject as MediaStream | null
+              )?.getVideoTracks().length ?? 0,
+          ),
         { timeout: 30_000 },
       )
       .toBeGreaterThan(0);
@@ -267,13 +281,12 @@ test("duas contas permanecem visíveis na mesma chamada local E2EE", async ({
     await expect
       .poll(
         () =>
-          remoteMedia(memberPage)
-            .evaluate(
-              (video) =>
-                (
-                  (video as HTMLVideoElement).srcObject as MediaStream | null
-                )?.getVideoTracks().length ?? 0,
-            ),
+          remoteMedia(memberPage).evaluate(
+            (video) =>
+              (
+                (video as HTMLVideoElement).srcObject as MediaStream | null
+              )?.getVideoTracks().length ?? 0,
+          ),
         { timeout: 30_000 },
       )
       .toBeGreaterThan(0);
@@ -285,7 +298,12 @@ test("duas contas permanecem visíveis na mesma chamada local E2EE", async ({
     );
     if (outputDevices.length < 2)
       throw new Error("O navegador não expôs uma saída de áudio de teste.");
-    await chooseDevice(memberPage, "Dispositivos de áudio", "SAÍDA DE ÁUDIO", 2);
+    await chooseDevice(
+      memberPage,
+      "Dispositivos de áudio",
+      "SAÍDA DE ÁUDIO",
+      2,
+    );
     await expect
       .poll(() =>
         remoteMedia(memberPage).evaluate(
@@ -294,25 +312,28 @@ test("duas contas permanecem visíveis na mesma chamada local E2EE", async ({
       )
       .toBe(outputDevices[1]);
 
-    await memberPage.getByRole("button", { name: "Ensurdecer" }).click();
-    await expect(remoteMedia(memberPage)).toHaveJSProperty(
-      "muted",
-      true,
-    );
-    await memberPage.getByRole("button", { name: "Voltar a ouvir" }).click();
-    await expect(remoteMedia(memberPage)).toHaveJSProperty(
-      "muted",
-      false,
-    );
+    await memberPage
+      .locator(".call-controls")
+      .getByRole("button", { name: "Ensurdecer" })
+      .click();
+    await expect(remoteMedia(memberPage)).toHaveJSProperty("muted", true);
+    await memberPage
+      .locator(".call-controls")
+      .getByRole("button", { name: "Voltar a ouvir" })
+      .click();
+    await expect(remoteMedia(memberPage)).toHaveJSProperty("muted", false);
 
     // O compartilhamento usa getDisplayMedia de verdade no Edge. A faixa da
     // tela é publicada separadamente da câmera, renderizada pelo segundo
     // participante e removida novamente ao encerrar o compartilhamento.
     await ownerPage
+      .locator(".call-controls")
       .getByRole("button", { name: "Compartilhar sua tela" })
       .click();
     await expect(
-      ownerPage.getByRole("button", { name: "Parar compartilhamento" }),
+      ownerPage
+        .locator(".call-controls")
+        .getByRole("button", { name: "Parar compartilhamento" }),
     ).toBeVisible({ timeout: 15_000 });
     await expect
       .poll(
@@ -351,19 +372,23 @@ test("duas contas permanecem visíveis na mesma chamada local E2EE", async ({
     await expect
       .poll(
         () =>
-          remoteMedia(memberPage)
-            .evaluate(
-              (video) =>
-                (
-                  (video as HTMLVideoElement).srcObject as MediaStream | null
-                )?.getVideoTracks().length ?? 0,
-            ),
+          remoteMedia(memberPage).evaluate(
+            (video) =>
+              (
+                (video as HTMLVideoElement).srcObject as MediaStream | null
+              )?.getVideoTracks().length ?? 0,
+          ),
         { timeout: 30_000 },
       )
       .toBe(1);
-    await ownerPage.getByRole("button", { name: "Parar compartilhamento" }).click();
+    await ownerPage
+      .locator(".call-controls")
+      .getByRole("button", { name: "Parar compartilhamento" })
+      .click();
     await expect(
-      ownerPage.getByRole("button", { name: "Compartilhar sua tela" }),
+      ownerPage
+        .locator(".call-controls")
+        .getByRole("button", { name: "Compartilhar sua tela" }),
     ).toBeVisible();
     await expect
       .poll(() => memberPage.locator("video.remote-screen-video").count(), {
@@ -420,13 +445,12 @@ test("duas contas permanecem visíveis na mesma chamada local E2EE", async ({
       await expect
         .poll(
           () =>
-            remoteMedia(page)
-              .evaluate(
-                (video) =>
-                  (
-                    (video as HTMLVideoElement).srcObject as MediaStream | null
-                  )?.getAudioTracks().length ?? 0,
-              ),
+            remoteMedia(page).evaluate(
+              (video) =>
+                (
+                  (video as HTMLVideoElement).srcObject as MediaStream | null
+                )?.getAudioTracks().length ?? 0,
+            ),
           { timeout: 60_000 },
         )
         .toBeGreaterThan(0);
@@ -489,8 +513,14 @@ test("duas contas permanecem visíveis na mesma chamada local E2EE", async ({
       .toBe(2);
 
     await Promise.all([
-      ownerPage.getByRole("button", { name: "Desconectar da chamada" }).click(),
-      memberPage.getByRole("button", { name: "Desconectar da chamada" }).click(),
+      ownerPage
+        .locator(".call-controls")
+        .getByRole("button", { name: "Desconectar da chamada" })
+        .click(),
+      memberPage
+        .locator(".call-controls")
+        .getByRole("button", { name: "Desconectar da chamada" })
+        .click(),
     ]);
     await expect
       .poll(

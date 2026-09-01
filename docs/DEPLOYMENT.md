@@ -123,8 +123,13 @@ E no painel:
   devolve o usuário para `http://localhost:3000`, que é o padrão de fábrica do
   Supabase — o token é válido, mas o destino não existe.
   - **Site URL**: `https://lilivoicechat-five.vercel.app`
-  - **Redirect URLs**: o mesmo domínio, mais `https://*.vercel.app/**` para as
-    pré-visualizações e `lili://auth/callback` para o desktop.
+  - **Redirect URLs**: o mesmo domínio e `https://*.vercel.app/**` para as
+    pré-visualizações. **Não existe entrada para o desktop, e é de propósito**:
+    o aplicativo instalado manda o link de e-mail para o site, a confirmação e
+    a troca de senha acontecem no navegador, e só depois a pessoa entra no
+    aplicativo com a senha nova. Um `redirectTo` com esquema próprio exigiria
+    registrar o protocolo no Windows e reconstruir a sessão a partir do
+    fragmento — caminho que este código não tem.
 - **Authentication → SMTP Settings**: configure um provedor próprio (Resend,
   SendGrid, Postmark, SES). O servidor embutido do Supabase entrega poucas
   mensagens por hora, é explicitamente marcado como impróprio para produção e
@@ -213,6 +218,7 @@ VITE_LIVEKIT_URL=wss://<projeto>.livekit.cloud
 VITE_FORCE_TURN=false
 VITE_VAPID_PUBLIC_KEY=...
 VITE_TENOR_API_KEY=...
+VITE_SITE_URL=https://<seu-domínio>
 ```
 
 O build falha de propósito se faltar Supabase ou LiveKit — um site publicado
@@ -284,7 +290,58 @@ O dispatcher exige o header `x-push-secret`; `attachments-expire` aceita
 `x-cron-secret` ou uma sessão autenticada. Nenhum dos dois valores vai para o
 cliente.
 
-## 5. Assinatura e auto-update do Windows
+## 5. O aplicativo desktop
+
+O desktop não é um navegador apontado para o site: ele carrega o mesmo `dist/`
+de dentro do próprio pacote, por `file://`. Isso é o que dá janela sem barra de
+endereço, bandeja, notificação do sistema, captura de tela pelo
+`desktopCapturer` e — o que mais importa aqui — chave de dispositivo protegida
+pela DPAPI, em vez do `sessionStorage` que a web perde a cada sessão.
+
+O preço é que três coisas mudam de comportamento fora do `http://`, e nenhuma
+delas falha de forma visível:
+
+- **`/assets/...` deixa de existir.** O caminho absoluto do Vite vira
+  `file:///C:/assets/...` e a janela abre em branco, sem um erro sequer no
+  console. Por isso o build do desktop roda com `LILI_DESKTOP_BUILD=true`, que
+  troca o `base` para relativo. A web continua absoluta: o `rewrites` da Vercel
+  serve o `index.html` em qualquer profundidade, e ali um caminho relativo
+  apontaria para fora de `/assets`.
+- **`window.location.origin` vale a string `"file://"`.** Endereço montado em
+  cima disso vira `file:///#/invite/CODE`. Quem resolve é `VITE_SITE_URL`,
+  obrigatória neste build.
+- **Service worker não registra.** O push remoto se desliga sozinho no desktop;
+  quem avisa é a bandeja, pelo processo principal. O aplicativo não fecha,
+  minimiza.
+
+Para gerar o instalador apontado para produção:
+
+```powershell
+npm run desktop:dist
+```
+
+O script `scripts/build-desktop.ps1` valida a configuração em modo estrito,
+constrói, **fuma o `dist/` por `file://`**, empacota, fuma de novo o `dist/` de
+dentro do `app.asar` e só então copia o instalador e o `SHA256SUMS.txt` para
+`release/`. O teste é `scripts/test-desktop-smoke.mjs`, e roda sozinho com
+`npm run desktop:smoke`.
+
+Os valores de produção saem de `.env.production` (ignorado pelo git; o modelo
+está em `.env.example` e os valores reais em `vercel-env.local.txt`). No modo
+production do Vite ele sobrepõe o `.env.local`, e é isso que impede um
+instalador de sair da máquina falando com `127.0.0.1`.
+
+**Não existe build local do instalador, de propósito.** Um executável apontado
+para `127.0.0.1` não roda na máquina de mais ninguém, e isso só se descobre
+depois de distribuí-lo. Para ver o aplicativo nativo rodando sobre a
+infraestrutura publicada sem empacotar nada, `npm run desktop:prod` — o mesmo
+Electron, sobre um servidor Vite em modo production.
+
+`ALLOWED_ORIGIN` precisa conter `null`: o aplicativo instalado manda
+`Origin: null` nas chamadas às funções de borda, e sem essa entrada o token do
+LiveKit falha como erro de CORS — nada na interface fala em mídia.
+
+## 5b. Assinatura e auto-update do Windows
 
 Obtenha um certificado Authenticode (de preferência EV ou serviço de assinatura
 confiável) e configure em **Settings → Secrets and variables → Actions →
@@ -332,8 +389,12 @@ Uma build autoassinada não estabelece confiança para usuário final.
       localhost:3000
 - [ ] `list_inactive_accounts(90)` devolve o que você espera antes de o
       expurgo rodar pela primeira vez
+- [ ] o aplicativo instalado abre a tela de login (janela em branco significa
+      `dist/` empacotado com caminho absoluto)
 - [ ] o aplicativo instalado consegue entrar numa chamada (`null` em
       `ALLOWED_ORIGIN`)
+- [ ] o convite copiado do aplicativo instalado abre no navegador de outra
+      máquina (`VITE_SITE_URL`)
 - [ ] instalador e executáveis retornam assinatura `Valid`
 - [ ] versão N atualiza para N+1 e pode ser desinstalada
 

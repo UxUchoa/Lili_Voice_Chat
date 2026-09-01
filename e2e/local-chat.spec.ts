@@ -2,7 +2,11 @@ import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { createClient } from "@supabase/supabase-js";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
-import { openServer, openServerSettings } from "./navigation";
+import {
+  finishOnlineLogin,
+  openServer,
+  openServerSettings,
+} from "./navigation";
 
 const status = JSON.parse(
   execFileSync(
@@ -27,9 +31,9 @@ const unwrap = async <T>(
 async function login(page: Page, email: string, password: string) {
   await page.goto("/");
   await page.getByLabel("E-mail").fill(email);
-  await page.getByLabel("Senha").fill(password);
+  await page.getByLabel("Senha", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Entrar", exact: true }).click();
-  await expect(page.locator(".app-shell")).toBeVisible({ timeout: 20_000 });
+  await finishOnlineLogin(page);
 }
 
 async function waitFor(check: () => Promise<boolean>, message: string) {
@@ -248,10 +252,16 @@ test("duas sessões isoladas trocam mensagens OpenMLS no mesmo canal", async ({
       memberSettings.getByRole("button", { name: "Convites", exact: true }),
     ).toBeVisible();
     await expect(
-      memberSettings.getByRole("button", { name: "Salvar perfil", exact: true }),
+      memberSettings.getByRole("button", {
+        name: "Salvar perfil",
+        exact: true,
+      }),
     ).toHaveCount(0);
     await expect(
-      memberSettings.getByRole("button", { name: "Sair do servidor", exact: true }),
+      memberSettings.getByRole("button", {
+        name: "Sair do servidor",
+        exact: true,
+      }),
     ).toBeVisible();
     await memberSettings.locator(".close-settings").click();
     await memberPage.evaluate(() => {
@@ -309,6 +319,9 @@ test("duas sessões isoladas trocam mensagens OpenMLS no mesmo canal", async ({
         { timeout: 30_000 },
       )
       .toMatchObject({ body: firstMessage });
+    await memberPage.evaluate(() => {
+      delete window.janjaDesktop;
+    });
     await memberPage
       .getByRole("button", { name: `Chat E2E ${runId}` })
       .first()
@@ -809,6 +822,118 @@ test("duas sessões isoladas trocam mensagens OpenMLS no mesmo canal", async ({
     await expect(
       memberPage.getByText(groupMessage, { exact: true }),
     ).toBeVisible({ timeout: 30_000 });
+
+    // A mensagem do próprio remetente depende do cache local: o sender MLS
+    // não reprocessa o próprio ciphertext. Ela é a prova mais forte de que o
+    // mesmo cofre, e não apenas um Welcome novo, voltou depois do logout.
+    const memberOwnedMessage = `mensagem-member-persistida-${runId}`;
+    await memberGroupComposer.fill(memberOwnedMessage);
+    await memberGroupComposer.press("Enter");
+    await expect(
+      ownerPage.getByText(memberOwnedMessage, { exact: true }),
+    ).toBeVisible({ timeout: 30_000 });
+
+    const devicesBeforeLogout = await unwrap(
+      memberApi
+        .from("devices")
+        .select("id,fingerprint,revoked_at")
+        .eq("user_id", userIds[1])
+        .is("revoked_at", null),
+      "listar dispositivo antes do logout",
+    );
+    expect(devicesBeforeLogout).toHaveLength(1);
+
+    await memberPage
+      .getByRole("button", { name: "Configurações", exact: true })
+      .click();
+    const accountPanel = memberPage.locator(".account-panel");
+    await expect(accountPanel).toBeVisible();
+    await accountPanel
+      .getByRole("button", { name: "Sair da conta neste dispositivo" })
+      .click();
+    await expect(
+      memberPage.getByRole("heading", { name: "Entrar", exact: true }),
+    ).toBeVisible({ timeout: 20_000 });
+
+    await login(memberPage, memberEmail, password);
+    await openServer(memberPage, serverId);
+    await expect(
+      memberPage.getByText(firstMessage, { exact: true }),
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(
+      memberPage.getByText(attachmentName, { exact: true }),
+    ).toBeVisible({ timeout: 30_000 });
+
+    await memberPage.getByRole("button", { name: /^Início/ }).click();
+    await memberPage.getByText(renamedGroup, { exact: true }).click();
+    await expect(
+      memberPage.getByText(groupMessage, { exact: true }),
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(
+      memberPage.getByText(memberOwnedMessage, { exact: true }),
+    ).toBeVisible({ timeout: 30_000 });
+
+    const devicesAfterLogin = await unwrap(
+      memberApi
+        .from("devices")
+        .select("id,fingerprint,revoked_at")
+        .eq("user_id", userIds[1])
+        .is("revoked_at", null),
+      "listar dispositivo depois do login",
+    );
+    expect(devicesAfterLogin).toEqual(devicesBeforeLogout);
+
+    await memberPage.reload();
+    await expect(
+      memberPage.getByText(memberOwnedMessage, { exact: true }),
+    ).toBeVisible({ timeout: 30_000 });
+
+    // Uma página nova no mesmo contexto preserva IndexedDB/localStorage, mas
+    // nasce sem o sessionStorage da página anterior — exatamente o caso que
+    // derrubava o histórico antes da chave durável.
+    await memberPage.close();
+    const reopenedMemberPage = await memberContext.newPage();
+    await reopenedMemberPage.goto("/");
+    await expect(reopenedMemberPage.locator(".app-shell")).toBeVisible({
+      timeout: 20_000,
+    });
+    await reopenedMemberPage.getByRole("button", { name: /^Início/ }).click();
+    await reopenedMemberPage.getByText(renamedGroup, { exact: true }).click();
+    await expect(
+      reopenedMemberPage.getByText(memberOwnedMessage, { exact: true }),
+    ).toBeVisible({ timeout: 30_000 });
+
+    await reopenedMemberPage
+      .getByRole("button", { name: "Configurações", exact: true })
+      .click();
+    await reopenedMemberPage
+      .locator(".account-panel")
+      .getByRole("button", { name: "Sair e remover este dispositivo" })
+      .click();
+    const removeDialog = reopenedMemberPage.getByRole("alertdialog", {
+      name: "Sair e remover este dispositivo",
+    });
+    await expect(removeDialog).toBeVisible();
+    await removeDialog
+      .getByRole("button", { name: "Remover dispositivo" })
+      .click();
+    await expect(
+      reopenedMemberPage.getByRole("heading", { name: "Entrar", exact: true }),
+    ).toBeVisible({ timeout: 20_000 });
+    await expect
+      .poll(async () => {
+        const rows = await unwrap(
+          memberApi
+            .from("devices")
+            .select("id,revoked_at")
+            .eq("user_id", userIds[1])
+            .eq("id", devicesBeforeLogout[0].id),
+          "confirmar revogação do dispositivo removido",
+        );
+        return Boolean(rows[0]?.revoked_at);
+      })
+      .toBe(true);
+    await expect(ownerPage.locator(".app-shell")).toBeVisible();
   } finally {
     await Promise.allSettled([ownerContext?.close(), memberContext?.close()]);
     if (serverId)

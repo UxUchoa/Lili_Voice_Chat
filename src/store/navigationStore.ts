@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { onlineConfig } from "../services/online/config";
 
 /**
  * Navegação da aplicação.
@@ -161,9 +162,16 @@ export function inviteCodeFromHash(hash: string): string {
   return parts[0] === "invite" && parts[1] ? parts[1] : "";
 }
 
-/** O endereço que se manda para alguém entrar no servidor. */
+/**
+ * O endereço que se manda para alguém entrar no servidor.
+ *
+ * Sai do site, nunca da origem atual: no desktop empacotado a origem é
+ * `file://`, e o convite copiado de lá viraria `file:///#/invite/CODE` — um
+ * endereço que só abriria no computador de quem copiou, se abrisse.
+ */
 export function inviteUrl(code: string): string {
-  return `${window.location.origin}/#/invite/${code}`;
+  const base = onlineConfig.siteUrl || window.location.origin;
+  return `${base}/#/invite/${code}`;
 }
 
 /** Estado → endereço. */

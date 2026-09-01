@@ -1,7 +1,11 @@
 import { execFileSync } from "node:child_process";
 import { createClient } from "@supabase/supabase-js";
 import { expect, test } from "@playwright/test";
-import { openServer, openServerSettings } from "./navigation";
+import {
+  finishOnlineLogin,
+  openServer,
+  openServerSettings,
+} from "./navigation";
 
 const status = JSON.parse(
   execFileSync(
@@ -61,9 +65,9 @@ test("categorias podem ser editadas, ocultadas e excluídas pela UI", async ({
 
     await page.goto("/");
     await page.getByLabel("E-mail").fill(email);
-    await page.getByLabel("Senha").fill(password);
+    await page.getByLabel("Senha", { exact: true }).fill(password);
     await page.getByRole("button", { name: "Entrar", exact: true }).click();
-    await expect(page.locator(".app-shell")).toBeVisible({ timeout: 20_000 });
+    await finishOnlineLogin(page);
 
     await openServer(page, serverId);
     await openServerSettings(page, "Canais");

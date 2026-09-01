@@ -2,7 +2,12 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { createClient } from "@supabase/supabase-js";
 import { expect, test } from "@playwright/test";
-import { applyCrop, openServer, openServerSettings } from "./navigation";
+import {
+  applyCrop,
+  finishOnlineLogin,
+  openServer,
+  openServerSettings,
+} from "./navigation";
 
 const status = JSON.parse(
   execFileSync(
@@ -55,9 +60,9 @@ test("perfil P0 e mídia privada persistem no Supabase local", async ({
 
     await page.goto("/");
     await page.getByLabel("E-mail").fill(email);
-    await page.getByLabel("Senha").fill(password);
+    await page.getByLabel("Senha", { exact: true }).fill(password);
     await page.getByRole("button", { name: "Entrar", exact: true }).click();
-    await expect(page.locator(".app-shell")).toBeVisible({ timeout: 20_000 });
+    await finishOnlineLogin(page);
     await page.locator(".user-panel").click();
     await expect(page.locator(".profile-panel")).toBeVisible();
     await page.getByText("Segurança, senha e dispositivos").click();
@@ -127,9 +132,9 @@ test("perfil P0 e mídia privada persistem no Supabase local", async ({
       timeout: 20_000,
     });
     await expect(page.locator(".quota-card")).toHaveCount(2);
-    await expect(page.getByRole("progressbar", { name: /Uso de/ })).toHaveCount(
-      2,
-    );
+    await expect(
+      page.locator(".quota-card").getByRole("progressbar", { name: /Uso de/ }),
+    ).toHaveCount(2);
   } finally {
     if (avatarPath) await api.storage.from("avatars").remove([avatarPath]);
     if (bannerPath) await api.storage.from("banners").remove([bannerPath]);

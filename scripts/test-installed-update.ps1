@@ -45,6 +45,10 @@ New-Item -ItemType Directory -Path $oldOutput, $feedOutput -Force | Out-Null
 
 try {
   Push-Location $workspace
+  # Mesmo build do instalador de verdade: sem isto os assets saem com caminho
+  # absoluto e as duas versões do teste sobem com a janela em branco. O ciclo
+  # de atualização passaria assim mesmo, medindo um aplicativo que não abre.
+  $env:LILI_DESKTOP_BUILD = 'true'
   & npm.cmd run build
   if ($LASTEXITCODE -ne 0) { throw 'Vite build falhou.' }
 
@@ -162,6 +166,7 @@ try {
   if ($server -and -not $server.HasExited) {
     Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
   }
+  Remove-Item Env:LILI_DESKTOP_BUILD -ErrorAction SilentlyContinue
   Remove-Item Env:LILI_UPDATE_TEST_MODE -ErrorAction SilentlyContinue
   Remove-Item Env:LILI_UPDATE_FEED_URL -ErrorAction SilentlyContinue
   Remove-Item Env:LILI_UPDATE_TEST_RESULT -ErrorAction SilentlyContinue

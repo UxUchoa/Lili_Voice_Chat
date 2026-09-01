@@ -1,6 +1,28 @@
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "./client";
+import { onlineConfig } from "./config";
 import { humanizeAuthError } from "./authErrors";
+import {
+  generateRecoveryKey,
+  hashRecoveryKey,
+  isRecoveryKeyShaped,
+} from "./recoveryKey";
+
+/**
+ * Para onde o link do e-mail devolve a pessoa.
+ *
+ * No desktop empacotado não existe endereço local para voltar: a página vive
+ * em `file://`, que nenhum provedor de e-mail sabe abrir e que o Supabase
+ * recusa como `redirectTo`. O destino é sempre o site, e é lá que a
+ * confirmação e a troca de senha se completam — o aplicativo instalado depois
+ * entra com a senha nova.
+ *
+ * `undefined` faz o Supabase usar a Site URL do projeto, que é o mesmo
+ * endereço: melhor cair nesse padrão do que mandar um destino inválido.
+ */
+function emailReturnAddress(): string | undefined {
+  return onlineConfig.siteUrl ? `${onlineConfig.siteUrl}/` : undefined;
+}
 
 export interface OnlineAccount {
   id: string;
@@ -54,7 +76,7 @@ export async function getCurrentOnlineAccount() {
  * errado exatamente quando deu certo.
  */
 export type RegistrationResult =
-  | { status: "active"; account: OnlineAccount }
+  | { status: "active"; account: OnlineAccount; recoveryKey: string }
   | { status: "pending"; email: string };
 
 export async function registerOnlineAccount(input: {
@@ -75,8 +97,95 @@ export async function registerOnlineAccount(input: {
     },
   });
   if (error) throw humanizeAuthError(error);
+  // Sem sessão o cadastro depende de confirmação por e-mail e a chave não pode
+  // ser registrada ainda; quem entrar depois recebe a dele no primeiro login.
   if (!data.session) return { status: "pending", email };
-  return { status: "active", account: await accountFromUser(data.user!) };
+  return {
+    status: "active",
+    account: await accountFromUser(data.user!),
+    recoveryKey: await issueRecoveryKey(),
+  };
+}
+
+/**
+ * Sorteia uma chave, grava só o hash dela e devolve a chave em claro.
+ *
+ * O valor devolvido é a única cópia que existirá: o servidor guarda o SHA-256
+ * e mais nada. Quem chama precisa mostrá-la antes de deixar o usuário seguir.
+ */
+async function issueRecoveryKey() {
+  const recoveryKey = generateRecoveryKey();
+  const { error } = await supabase.rpc("set_recovery_key", {
+    p_key_hash: await hashRecoveryKey(recoveryKey),
+  });
+  if (error) throw error;
+  return recoveryKey;
+}
+
+/** Estado da chave do usuário logado. O hash nunca volta do servidor. */
+export async function getRecoveryKeyStatus() {
+  const { data, error } = await supabase.rpc("recovery_key_status");
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  return {
+    hasKey: Boolean(row?.has_key),
+    createdAt: (row?.created_at as string | null) ?? null,
+    lastUsedAt: (row?.last_used_at as string | null) ?? null,
+  };
+}
+
+/**
+ * Sorteia uma chave nova e invalida a anterior na mesma operação.
+ *
+ * Serve para quem acha que a chave vazou, para quem nunca chegou a guardá-la e
+ * para as contas criadas antes de a chave existir — nesse caso é o primeiro
+ * login que a emite.
+ */
+export async function rotateOnlineRecoveryKey() {
+  return issueRecoveryKey();
+}
+
+/**
+ * Troca a senha provando posse da chave, sem sessão e sem e-mail.
+ *
+ * A função de borda responde a mesma coisa para chave errada e para conta
+ * inexistente: distinguir as duas entregaria a lista de quem tem conta. Ao
+ * final a chave é substituída — uma chave usada já esteve no meio do caminho.
+ */
+export async function recoverOnlineAccountWithKey(input: {
+  email: string;
+  recoveryKey: string;
+  newPassword: string;
+}) {
+  if (!isRecoveryKeyShaped(input.recoveryKey))
+    throw new Error("A chave de recuperação tem 32 caracteres.");
+  if (input.newPassword.length < 8)
+    throw new Error("A senha nova precisa ter pelo menos 8 caracteres.");
+
+  const nextKey = generateRecoveryKey();
+  const { data, error } = await supabase.functions.invoke<{ ok?: boolean }>(
+    "account-recover",
+    {
+      body: {
+        email: input.email.trim().toLowerCase(),
+        keyHash: await hashRecoveryKey(input.recoveryKey),
+        nextKeyHash: await hashRecoveryKey(nextKey),
+        newPassword: input.newPassword,
+      },
+    },
+  );
+
+  if (error) {
+    const status = (error as { context?: { status?: number } }).context?.status;
+    if (status === 429)
+      throw new Error(
+        "Muitas tentativas com chave errada. Espere quinze minutos.",
+      );
+    throw new Error("E-mail ou chave de recuperação não conferem.");
+  }
+  if (!data?.ok)
+    throw new Error("E-mail ou chave de recuperação não conferem.");
+  return nextKey;
 }
 
 /**
@@ -94,7 +203,7 @@ export async function resendOnlineConfirmationEmail(email: string) {
   const { error } = await supabase.auth.resend({
     type: "signup",
     email: email.trim().toLowerCase(),
-    options: { emailRedirectTo: `${window.location.origin}/` },
+    options: { emailRedirectTo: emailReturnAddress() },
   });
   // Limite de envio é informação útil e não revela nada sobre quem tem conta:
   // dizer "reenviamos" quando nada foi enviado deixaria a pessoa esperando um
@@ -127,7 +236,7 @@ export async function loginOnlineAccount(email: string, password: string) {
 export async function requestOnlinePasswordReset(email: string) {
   const { error } = await supabase.auth.resetPasswordForEmail(
     email.trim().toLowerCase(),
-    { redirectTo: `${window.location.origin}/` },
+    { redirectTo: emailReturnAddress() },
   );
   if (error) throw humanizeAuthError(error);
 }

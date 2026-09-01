@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { createClient } from "@supabase/supabase-js";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
-import { openServer } from "./navigation";
+import { finishOnlineLogin, openServer } from "./navigation";
 
 const status = JSON.parse(
   execFileSync(
@@ -26,15 +26,47 @@ const unwrap = async <T>(
 async function login(page: Page, email: string, password: string) {
   await page.goto("/");
   await page.getByLabel("E-mail").fill(email);
-  await page.getByLabel("Senha").fill(password);
+  await page.getByLabel("Senha", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Entrar", exact: true }).click();
-  await expect(page.locator(".app-shell")).toBeVisible({ timeout: 20_000 });
+  await finishOnlineLogin(page);
+}
+
+async function joinOwnerVoiceWithRetry(page: Page) {
+  const connected = page.locator('[data-rtc-state="connected"]');
+  const failed = page.locator('[data-rtc-state="error"]');
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await page.getByRole("button", { name: /Lounge/ }).click();
+    const join = page.getByRole("button", { name: "Entrar no canal" });
+    if (await join.isVisible()) await join.click();
+
+    await expect
+      .poll(
+        async () => {
+          if (await connected.isVisible()) return "connected";
+          if (await failed.isVisible()) return "failed";
+          return "pending";
+        },
+        { timeout: 45_000 },
+      )
+      .not.toBe("pending");
+    const result = (await connected.isVisible()) ? "connected" : "failed";
+    if (result === "connected") return;
+
+    await page
+      .locator(".call-controls")
+      .getByRole("button", { name: "Desconectar da chamada" })
+      .click();
+    await expect(join).toBeVisible();
+  }
+
+  throw new Error("O owner não conseguiu conectar ao LiveKit após 2 tentativas.");
 }
 
 test("limite de usuário do canal de voz é imposto no backend", async ({
   browser,
 }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   const admin = createClient(apiUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
@@ -124,13 +156,9 @@ test("limite de usuário do canal de voz é imposto no backend", async ({
     await login(memberPage, emails[1], password);
     await openServer(memberPage, serverId);
 
-    await ownerPage.getByRole("button", { name: /Lounge/ }).click();
-    await expect(ownerPage.locator('[data-rtc-state="connected"]')).toBeVisible(
-      {
-        timeout: 45_000,
-      },
-    );
+    await joinOwnerVoiceWithRetry(ownerPage);
     await memberPage.getByRole("button", { name: /Lounge/ }).click();
+    await memberPage.getByRole("button", { name: "Entrar no canal" }).click();
     await expect(memberPage.locator('[data-rtc-state="error"]')).toBeVisible({
       timeout: 60_000,
     });
@@ -154,7 +182,10 @@ test("limite de usuário do canal de voz é imposto no backend", async ({
           .length;
       })
       .toBe(1);
-    await ownerPage.getByRole("button", { name: "Desconectar da chamada" }).click();
+    await ownerPage
+      .locator(".call-controls")
+      .getByRole("button", { name: "Desconectar da chamada" })
+      .click();
   } finally {
     await Promise.allSettled([ownerContext?.close(), memberContext?.close()]);
     if (serverId)

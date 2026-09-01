@@ -1,7 +1,7 @@
 {
   "name": "lili-voice-chat",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Cliente local-first de mensagens cifradas, voz, vídeo e compartilhamento de tela.",
   "author": "Lili contributors",
   "engines": {
@@ -32,6 +32,8 @@
     "test:watch": "vitest src supabase/functions",
     "electron": "wait-on http://127.0.0.1:5173 && electron .",
     "desktop:dev": "concurrently -k \"npm:dev\" \"npm:electron\"",
+    "desktop:smoke": "electron scripts/test-desktop-smoke.mjs",
+    "desktop:prod": "concurrently -k -n vite,electron \"vite --mode production --host 127.0.0.1\" \"npm:electron\"",
     "desktop:dist": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-desktop.ps1",
     "vendor:openmls": "node scripts/setup-openmls-vendor.mjs",
     "deploy:supabase": "node scripts/deploy-supabase.mjs"

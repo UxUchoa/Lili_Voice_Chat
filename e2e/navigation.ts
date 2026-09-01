@@ -21,6 +21,25 @@ export async function openHome(page: Page) {
   await expect(page.locator(".dm-sidebar")).toBeVisible({ timeout: 20_000 });
 }
 
+/**
+ * Contas criadas pela API de teste ainda não possuem chave de recuperação.
+ * No primeiro login a aplicação emite uma; o teste confirma que a guardou e
+ * só então continua para a área autenticada.
+ */
+export async function finishOnlineLogin(page: Page) {
+  await expect(page.locator(".app-shell, .recovery-card")).toBeVisible({
+    timeout: 20_000,
+  });
+  if (await page.locator(".recovery-card").isVisible()) {
+    await page.locator(".recovery-ack input").check();
+    await page
+      .locator(".recovery-card")
+      .getByRole("button", { name: "Entrar", exact: true })
+      .click();
+  }
+  await expect(page.locator(".app-shell")).toBeVisible({ timeout: 20_000 });
+}
+
 /** Recorta e confirma a imagem escolhida para avatar, banner ou ícone. */
 export async function applyCrop(page: Page) {
   const modal = page.locator(".crop-modal");
@@ -32,9 +51,7 @@ export async function applyCrop(page: Page) {
 /** Abre as configurações do servidor numa aba específica. */
 export async function openServerSettings(page: Page, tab: string) {
   await page.getByLabel("Opções do servidor").click();
-  await page
-    .getByRole("menuitem", { name: "Config. do servidor" })
-    .click();
+  await page.getByRole("menuitem", { name: "Config. do servidor" }).click();
   await expect(page.locator(".settings-panel")).toBeVisible({
     timeout: 20_000,
   });

@@ -108,3 +108,8 @@ Revisão local de 29/08/2026, baseada no documento de requisitos anexado e em te
 - Workspace: duas contas independentes, um servidor, dois canais e associação Realtime aprovados.
 - Mídia: troca de dispositivos virtuais, deafen local, câmera, tela, reconnect, move seguro, moderação de voz, dois participantes, áudio E2EE e candidato TURN relay aprovados.
 - OpenMLS nativo: 3 testes Rust aprovados.
+- Desktop empacotado: o `dist/` carrega por `file://` — o esquema do aplicativo
+  instalado — com o renderer montado, o wasm do OpenMLS acessível, IndexedDB e
+  `localStorage` disponíveis e nenhum erro no console; verificado tanto na
+  pasta recém-construída quanto no bundle de dentro do `app.asar`
+  (`npm run desktop:smoke`).

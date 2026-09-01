@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { createClient } from "@supabase/supabase-js";
 import { expect, test } from "@playwright/test";
+import { finishOnlineLogin } from "./navigation";
 
 const status = JSON.parse(
   execFileSync(
@@ -50,9 +51,9 @@ test("navegação mobile percorre início, servidor, texto e voz", async ({
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/");
     await page.getByLabel("E-mail").fill(email);
-    await page.getByLabel("Senha").fill(password);
+    await page.getByLabel("Senha", { exact: true }).fill(password);
     await page.getByRole("button", { name: "Entrar", exact: true }).click();
-    await expect(page.locator(".app-shell")).toBeVisible({ timeout: 20_000 });
+    await finishOnlineLogin(page);
     await expect(page.locator(".server-rail")).toBeHidden();
     await expect(page.locator(".channel-sidebar")).toBeHidden();
 
@@ -71,6 +72,7 @@ test("navegação mobile percorre início, servidor, texto e voz", async ({
 
     await page.getByRole("button", { name: "Abrir navegação" }).click();
     await page.getByRole("button", { name: /Lounge/ }).click();
+    await page.getByRole("button", { name: "Entrar no canal" }).click();
     await expect(page.locator(".call-view h1")).toHaveText("Lounge");
     await expect(page.locator(".channel-sidebar")).toBeHidden();
     await page.getByRole("button", { name: "Desconectar da chamada" }).click();

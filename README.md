@@ -135,12 +135,26 @@ Resultados locais mais recentes:
 ## Desktop
 
 ```powershell
-npm run desktop:dev
-npm run desktop:dist
+npm run desktop:dev     # aplicativo sobre a pilha local de desenvolvimento
+npm run desktop:prod    # aplicativo sobre a infraestrutura de produção
+npm run desktop:dist    # instalador apontado para produção
+npm run desktop:smoke   # carrega o dist/ por file://, como o app instalado
 ```
 
-Os artefatos ficam em `release/`. Builds locais sem assinatura servem para
-validação interna e não devem ser distribuídos como release oficial.
+Não existe build local do instalador: `desktop:dist` só empacota contra
+produção. Um executável que fala com `127.0.0.1` não roda na máquina de mais
+ninguém.
+
+O aplicativo instalado carrega o mesmo `dist/` da web, mas por `file://`, e é
+esse esquema que quebra o que um teste de navegador nunca vê: caminho absoluto
+de asset, `window.location.origin` e registro de service worker. `desktop:dist`
+valida a configuração, constrói, fuma o bundle por `file://`, empacota e fuma
+de novo o bundle de dentro do `app.asar`. Detalhes em
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md), seção 5.
+
+Os artefatos ficam em `release/`, com `SHA256SUMS.txt`. Builds locais sem
+assinatura servem para validação interna e não devem ser distribuídos como
+release oficial.
 
 Builds locais não apontam para um servidor fictício de atualização. O canal de
 auto-update só é incluído pelo workflow de release (GitHub) ou pelo harness local

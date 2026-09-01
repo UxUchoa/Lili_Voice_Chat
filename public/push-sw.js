@@ -1,6 +1,6 @@
 self.addEventListener("push", (event) => {
   let payload = {
-    title: "Janja — Voice Chat",
+    title: "Lili — Voice Chat",
     body: "Você recebeu uma nova atividade cifrada.",
     data: {},
   };

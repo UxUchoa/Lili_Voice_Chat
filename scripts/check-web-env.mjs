@@ -17,6 +17,9 @@ const warnings = [];
 
 const isVercelProduction = env.VERCEL_ENV === "production";
 const strict = isVercelProduction || env.LILI_STRICT_ENV === "true";
+// O alvo muda o que é obrigatório: o instalador carrega o `dist/` por
+// `file://`, onde não existe origem de onde deduzir o endereço do site.
+const forDesktop = env.LILI_DESKTOP_BUILD === "true";
 
 // ------------------------------------------------------------------
 // 1. Nenhum segredo pode viajar num VITE_ — tudo com esse prefixo é servido
@@ -92,6 +95,30 @@ else if (strict && !livekitUrl.startsWith("wss://"))
   errors.push(`Em produção VITE_LIVEKIT_URL precisa ser wss://: ${livekitUrl}`);
 
 // ------------------------------------------------------------------
+// 3b. Endereço do site — obrigatório só no desktop.
+//
+// Na web `window.location.origin` já é o site. No aplicativo instalado a
+// origem é `file://`: sem `VITE_SITE_URL` o convite copiado vira
+// `file:///#/invite/CODE` e o link de recuperação de senha não tem para onde
+// voltar. Nenhum dos dois falha de forma visível, e é por isso que o build
+// para antes.
+// ------------------------------------------------------------------
+const siteUrl = env.VITE_SITE_URL?.trim() ?? "";
+if (!siteUrl) {
+  const message =
+    "VITE_SITE_URL está vazia: o endereço público do site (ex.: " +
+    "https://lilivoicechat-five.vercel.app).";
+  if (forDesktop)
+    errors.push(
+      `${message} No desktop ela não é opcional — o aplicativo instalado ` +
+        "carrega o dist por file:// e não tem origem para deduzir.",
+    );
+} else if (!/^https?:\/\//.test(siteUrl))
+  errors.push(`VITE_SITE_URL precisa ser uma URL http(s): ${siteUrl}`);
+else if (strict && !siteUrl.startsWith("https://"))
+  errors.push(`Em produção VITE_SITE_URL precisa ser HTTPS, e não ${siteUrl}.`);
+
+// ------------------------------------------------------------------
 // 4. Opcionais — degradam a experiência, não impedem o deploy.
 // ------------------------------------------------------------------
 if (!env.VITE_VAPID_PUBLIC_KEY?.trim())
@@ -115,5 +142,6 @@ if (errors.length) {
 }
 console.log(
   `Configuração pública validada (${new URL(supabaseUrl).host}` +
-    `${livekitUrl ? `, ${new URL(livekitUrl).host}` : ""}).`,
+    `${livekitUrl ? `, ${new URL(livekitUrl).host}` : ""}` +
+    `${forDesktop ? `, site ${new URL(siteUrl).host}` : ""}).`,
 );

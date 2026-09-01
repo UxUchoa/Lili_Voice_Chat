@@ -11,7 +11,12 @@ export async function registerRemotePush(userId: string, deviceId?: string) {
   if (
     !onlineConfig.vapidPublicKey ||
     !("serviceWorker" in navigator) ||
-    !("PushManager" in window)
+    !("PushManager" in window) ||
+    // O desktop empacotado abre o `dist/` por `file://`, e o Chromium recusa
+    // registrar service worker fora de http(s): a chamada rejeitaria com um
+    // erro que não diz nada ao usuário. Ali quem avisa é a bandeja do sistema,
+    // pelo `notify` do processo principal — o aplicativo não fecha, minimiza.
+    !/^https?:$/.test(window.location.protocol)
   )
     return {
       registered: false,

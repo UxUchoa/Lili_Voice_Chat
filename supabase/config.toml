@@ -52,13 +52,12 @@ minimum_password_length = 8
 [auth.email]
 enable_signup = true
 double_confirm_changes = true
-# Ligada para espelhar o projeto hospedado. Ficou desligada por um tempo, e a
-# divergência escondeu o caminho em que o cadastro fica pendente de confirmação
-# — que é o único caminho que existe em produção. Os testes não são afetados:
-# eles criam conta pela API de admin com `email_confirm: true`.
-# Para criar conta pela interface no ambiente local, o e-mail cai no Mailpit,
-# em http://127.0.0.1:54324.
-enable_confirmations = true
+# Desligada, espelhando o projeto hospedado. O servidor de e-mail embutido do
+# Supabase entrega poucas mensagens por hora, e cadastro novo passou a esbarrar
+# em "email rate limit exceeded" — a confirmação virou um portão que ninguém
+# atravessava. Quem recupera a conta agora é a chave entregue no cadastro.
+# Religar isto exige SMTP próprio antes.
+enable_confirmations = false
 
 [edge_runtime]
 enabled = true
@@ -84,4 +83,10 @@ verify_jwt = false
 # Expurgo das contas paradas há 90 dias. Sem JWT porque só o agendador chama,
 # com `x-cron-secret`; sem o segredo a função responde 401 e nada acontece.
 [functions.accounts-prune]
+verify_jwt = false
+
+# Recuperação por chave. Sem JWT de propósito: quem chega aqui perdeu a senha e
+# não tem sessão nenhuma. A autorização é a posse da chave, conferida dentro da
+# função, com bloqueio após cinco erros.
+[functions.account-recover]
 verify_jwt = false

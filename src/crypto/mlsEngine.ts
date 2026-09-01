@@ -12,6 +12,17 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "../services/online/client";
 import { assertOnlineStorageUploadAllowed } from "../services/online/quota";
 import { collectBatches, selectOlderPage } from "./messagePagination";
+import {
+  INDEXED_DB_MASTER_KEY,
+  MissingLocalMlsKeyError,
+  MlsLocalStateError,
+  mlsMessageCacheId,
+  persistWithSessionFallback,
+  shouldReplaceMissingMlsDevice,
+  type MlsPersistenceMode,
+} from "./mlsPersistence";
+
+export type { MlsPersistenceMode } from "./mlsPersistence";
 
 interface DeviceStateRow {
   userId: string;
@@ -22,6 +33,12 @@ interface DeviceStateRow {
   stateNonce: Uint8Array;
   encryptedProviderState: Uint8Array;
   updatedAt: string;
+}
+
+interface DeviceKeyRow {
+  userId: string;
+  key: CryptoKey;
+  createdAt: string;
 }
 
 interface ChannelStateRow {
@@ -44,6 +61,12 @@ interface MessageCacheRow {
   nonce: Uint8Array;
   ciphertext: Uint8Array;
   editedAt?: string;
+}
+
+interface AccountMessageCacheRow extends MessageCacheRow {
+  cacheId: string;
+  userId: string;
+  messageId: string;
 }
 
 interface RecipientDeviceRow {
@@ -84,8 +107,10 @@ interface EditMessageInput {
 
 class MlsStateDatabase extends Dexie {
   devices!: EntityTable<DeviceStateRow, "userId">;
+  deviceKeys!: EntityTable<DeviceKeyRow, "userId">;
   channels!: EntityTable<ChannelStateRow, "id">;
   messages!: EntityTable<MessageCacheRow, "id">;
+  messagePayloads!: EntityTable<AccountMessageCacheRow, "cacheId">;
 
   constructor() {
     // O nome do banco local **não** acompanha o rename do produto. Renomeá-lo
@@ -99,6 +124,17 @@ class MlsStateDatabase extends Dexie {
       devices: "&userId, deviceId",
       channels: "&id, userId, channelId",
       messages: "&id, channelId",
+    });
+    this.version(2).stores({
+      devices: "&userId, deviceId",
+      deviceKeys: "&userId",
+      channels: "&id, userId, channelId",
+      // `messages` continua intacta como cache legado. As linhas antigas não
+      // dizem a qual conta pertencem, então são migradas somente depois que a
+      // chave correta consegue decifrá-las.
+      messages: "&id, channelId",
+      messagePayloads:
+        "&cacheId, userId, messageId, channelId, [userId+channelId]",
     });
   }
 }
@@ -193,18 +229,52 @@ async function createMasterKey(userId: string) {
   const raw = crypto.getRandomValues(new Uint8Array(32));
   if (window.janjaDesktop) {
     const wrapped = await window.janjaDesktop.wrapSecret(toBase64(raw));
-    return { key: await importAesKey(raw), wrapped: `desktop:${wrapped}` };
+    return {
+      key: await importAesKey(raw),
+      wrapped: `desktop:${wrapped}`,
+      persistenceMode: "durable" as const,
+    };
   }
-  const reference = crypto.randomUUID();
+  const key = await importAesKey(raw);
+  let reference = "";
+  const persistence = await persistWithSessionFallback(
+    async () => {
+      // CryptoKey usa structured clone no IndexedDB. `extractable=false`
+      // impede que o material bruto seja exportado pela aplicação.
+      await database.deviceKeys.put({
+        userId,
+        key,
+        createdAt: new Date().toISOString(),
+      });
+    },
+    () => {
+      reference = crypto.randomUUID();
+      sessionStorage.setItem(
+        `janja.mls.master.${userId}.${reference}`,
+        toBase64(raw),
+      );
+    },
+  );
+  if (persistence.mode === "durable") {
+    return {
+      key,
+      wrapped: INDEXED_DB_MASTER_KEY,
+      persistenceMode: "durable" as const,
+    };
+  }
+  console.warn(
+    "[mls] Navegador não persistiu a CryptoKey; usando sessão temporária",
+    persistence.error,
+  );
   // O nome desta chave também não acompanha o rename: mudá-la faz todo
   // dispositivo existente perder a master key e ser recriado, e um dispositivo
   // recriado precisa de um Welcome novo para voltar a ler o canal. Ganho zero,
   // custo alto.
-  sessionStorage.setItem(
-    `janja.mls.master.${userId}.${reference}`,
-    toBase64(raw),
-  );
-  return { key: await importAesKey(raw), wrapped: `session:${reference}` };
+  return {
+    key,
+    wrapped: `session:${reference}`,
+    persistenceMode: "session" as const,
+  };
 }
 
 async function openMasterKey(userId: string, wrapped: string) {
@@ -214,15 +284,60 @@ async function openMasterKey(userId: string, wrapped: string) {
         "O cofre E2EE foi criado no app desktop e não pode ser aberto neste navegador.",
       );
     const raw = await window.janjaDesktop.unwrapSecret(wrapped.slice(8));
-    return importAesKey(fromBase64(raw));
+    return {
+      key: await importAesKey(fromBase64(raw)),
+      wrapped,
+      persistenceMode: "durable" as const,
+    };
+  }
+  if (wrapped === INDEXED_DB_MASTER_KEY) {
+    const saved = await database.deviceKeys.get(userId);
+    if (!saved?.key) throw new MissingLocalMlsKeyError();
+    return {
+      key: saved.key,
+      wrapped,
+      persistenceMode: "durable" as const,
+    };
   }
   const reference = wrapped.slice("session:".length);
   const raw = sessionStorage.getItem(`janja.mls.master.${userId}.${reference}`);
-  if (!raw)
-    throw new Error(
-      "A chave E2EE desta sessão web expirou. Use o app desktop para persistência segura entre reinicializações.",
-    );
-  return importAesKey(fromBase64(raw));
+  if (!raw) throw new MissingLocalMlsKeyError();
+  const key = await importAesKey(fromBase64(raw));
+  const persistence = await persistWithSessionFallback(
+    async () => {
+      // Migração atômica das sessões web ainda abertas. Se o navegador não
+      // aceitar CryptoKey no IndexedDB, a linha antiga permanece válida.
+      await database.transaction(
+        "rw",
+        database.deviceKeys,
+        database.devices,
+        async () => {
+          await database.deviceKeys.put({
+            userId,
+            key,
+            createdAt: new Date().toISOString(),
+          });
+          await database.devices.update(userId, {
+            wrappedMasterKey: INDEXED_DB_MASTER_KEY,
+          });
+        },
+      );
+    },
+    () => undefined,
+  );
+  if (persistence.mode === "durable") {
+    return {
+      key,
+      wrapped: INDEXED_DB_MASTER_KEY,
+      persistenceMode: "durable" as const,
+    };
+  }
+  console.warn("[mls] Migração da master key foi adiada", persistence.error);
+  return {
+    key,
+    wrapped,
+    persistenceMode: "session" as const,
+  };
 }
 
 const channelStateId = (userId: string, channelId: string) =>
@@ -244,15 +359,6 @@ export class MlsWelcomePendingError extends Error {
 const traceE2ee = (step: string, detail: Record<string, unknown>) =>
   console.debug(`[e2ee] ${step}`, detail);
 
-function canRecoverDeviceState(wrappedMasterKey: string, caught: unknown) {
-  if (wrappedMasterKey.startsWith("session:")) return true;
-  // Um cofre criado no desktop só é recuperável dentro do próprio desktop; na
-  // web o erro explícito preserva o estado do outro dispositivo.
-  if (wrappedMasterKey.startsWith("desktop:"))
-    return Boolean(window.janjaDesktop);
-  return caught instanceof DOMException || caught instanceof Error;
-}
-
 export class MlsEngine {
   private readonly groups = new Map<string, Group>();
   /** Desde quando este canal está esperando um Welcome que não chega. */
@@ -260,6 +366,8 @@ export class MlsEngine {
   private readonly groupLoads = new Map<string, Promise<Group>>();
   private operationTail: Promise<void> = Promise.resolve();
   private heartbeatTimer: ReturnType<typeof setInterval> | undefined;
+  private heartbeatBeat: (() => void) | undefined;
+  private disposed = false;
 
   private constructor(
     readonly userId: string,
@@ -270,6 +378,7 @@ export class MlsEngine {
     private masterKey: CryptoKey,
     private publicKey: Uint8Array,
     private wrappedMasterKey: string,
+    readonly persistenceMode: MlsPersistenceMode,
     private readonly client: SupabaseClient,
   ) {}
 
@@ -291,52 +400,70 @@ export class MlsEngine {
     await ensureWasm();
     const saved = await database.devices.get(userId);
     if (saved) {
+      let opened: Awaited<ReturnType<typeof openMasterKey>> | undefined;
       try {
-        const masterKey = await openMasterKey(userId, saved.wrappedMasterKey);
-        const serialized = await decryptAtRest(
-          masterKey,
-          saved.stateNonce,
-          saved.encryptedProviderState,
+        opened = await openMasterKey(userId, saved.wrappedMasterKey);
+      } catch (caught) {
+        if (!shouldReplaceMissingMlsDevice(caught)) throw caught;
+        // A chave realmente sumiu: o estado cifrado não tem caminho de volta.
+        // A revogação precisa concluir antes de qualquer limpeza local; uma
+        // queda do Supabase jamais pode destruir o que ainda está no disco.
+        const { error } = await client
+          .from("devices")
+          .update({ revoked_at: new Date().toISOString() })
+          .eq("id", saved.deviceId)
+          .is("revoked_at", null);
+        if (error) throw error;
+        await database.transaction(
+          "rw",
+          database.devices,
+          database.deviceKeys,
+          database.channels,
+          database.messagePayloads,
+          async () => {
+            await database.devices.delete(userId);
+            await database.deviceKeys.delete(userId);
+            await database.channels.where("userId").equals(userId).delete();
+            await database.messagePayloads
+              .where("userId")
+              .equals(userId)
+              .delete();
+          },
         );
-        const provider = Provider.from_state(serialized);
-        const publicKey = fromBase64(saved.publicKey);
+      }
+      if (opened) {
+        let provider: Provider;
+        let identity: Identity;
+        let publicKey: Uint8Array;
         const identityName = saved.identityName ?? userId;
-        const identity = Identity.load(provider, identityName, publicKey);
+        try {
+          const serialized = await decryptAtRest(
+            opened.key,
+            saved.stateNonce,
+            saved.encryptedProviderState,
+          );
+          provider = Provider.from_state(serialized);
+          publicKey = fromBase64(saved.publicKey);
+          identity = Identity.load(provider, identityName, publicKey);
+        } catch (caught) {
+          throw new MlsLocalStateError(caught);
+        }
         const engine = new MlsEngine(
           userId,
           saved.deviceId,
           identityName,
           provider,
           identity,
-          masterKey,
+          opened.key,
           publicKey,
-          saved.wrappedMasterKey,
+          opened.wrapped,
+          opened.persistenceMode,
           client,
         );
+        // Rede e registro ficam deliberadamente fora do bloco que abre o
+        // cofre. Se falharem, o estado local permanece intocado.
         await engine.registerDeviceAndReplenishPackages();
         return engine;
-      } catch (caught) {
-        // A master key de uma sessão web vive em sessionStorage e some quando a
-        // aba fecha. Sem recuperação o estado local fica ilegível para sempre e
-        // a conta para de receber mensagens. Revogamos o dispositivo antigo e
-        // recriamos um novo; o histórico anterior permanece indisponível por
-        // design E2EE, mas as próximas mensagens voltam a fluir.
-        if (!canRecoverDeviceState(saved.wrappedMasterKey, caught))
-          throw caught;
-        console.warn(
-          "[mls] Estado E2EE local ilegível; recriando dispositivo",
-          caught instanceof Error ? caught.message : caught,
-        );
-        await client
-          .from("devices")
-          .update({ revoked_at: new Date().toISOString() })
-          .eq("id", saved.deviceId)
-          .is("revoked_at", null);
-        await database.devices.delete(userId);
-        await database.channels.where("userId").equals(userId).delete();
-        // O cache de mensagens também é cifrado com a master key perdida.
-        // Mantê-lo só produziria linhas indecifráveis para o novo dispositivo.
-        await database.messages.clear();
       }
     }
     const provider = new Provider();
@@ -344,7 +471,7 @@ export class MlsEngine {
     const identityName = `${userId}:${deviceId}`;
     const identity = new Identity(provider, identityName);
     const publicKey = identity.public_key();
-    const { key, wrapped } = await createMasterKey(userId);
+    const { key, wrapped, persistenceMode } = await createMasterKey(userId);
     const engine = new MlsEngine(
       userId,
       deviceId,
@@ -354,10 +481,14 @@ export class MlsEngine {
       key,
       publicKey,
       wrapped,
+      persistenceMode,
       client,
     );
-    await engine.registerDeviceAndReplenishPackages();
+    // A identidade nasce no disco antes de tocar a rede. Se o Supabase cair,
+    // a próxima tentativa reutiliza o mesmo device em vez de abandonar uma
+    // identidade que talvez já tenha sido registrada remotamente.
     await engine.persistProvider();
+    await engine.registerDeviceAndReplenishPackages();
     return engine;
   }
 
@@ -400,10 +531,13 @@ export class MlsEngine {
       .is("consumed_at", null)
       .gt("expires_at", new Date().toISOString());
     if (packageQueryError) throw packageQueryError;
-    this.startHeartbeat();
     const missing = Math.max(0, 5 - (packages?.length ?? 0));
     for (let index = 0; index < missing; index += 1) {
       const keyPackage = this.identity.key_package(this.provider);
+      // O segredo correspondente ao KeyPackage precisa estar durável antes de
+      // publicar a parte pública. Assim, uma falha no meio do lote não deixa
+      // no servidor um convite que este dispositivo não consegue consumir.
+      await this.persistProvider();
       const { error } = await this.client.from("e2ee_key_packages").insert({
         user_id: this.userId,
         device_id: this.deviceId,
@@ -414,7 +548,7 @@ export class MlsEngine {
       keyPackage.free();
       if (error) throw error;
     }
-    if (missing) await this.persistProvider();
+    this.startHeartbeat();
   }
 
   /**
@@ -431,9 +565,18 @@ export class MlsEngine {
           if (error)
             console.warn("[mls] batimento do dispositivo falhou", error);
         });
+    this.heartbeatBeat = beat;
     beat();
     this.heartbeatTimer = setInterval(beat, 45_000);
     if (typeof window !== "undefined") window.addEventListener("focus", beat);
+  }
+
+  private stopHeartbeat() {
+    if (this.heartbeatTimer !== undefined) clearInterval(this.heartbeatTimer);
+    this.heartbeatTimer = undefined;
+    if (this.heartbeatBeat)
+      window.removeEventListener("focus", this.heartbeatBeat);
+    this.heartbeatBeat = undefined;
   }
 
   private async persistProvider() {
@@ -892,7 +1035,10 @@ export class MlsEngine {
       this.masterKey,
       encoder.encode(JSON.stringify(payload)),
     );
-    await database.messages.put({
+    await database.messagePayloads.put({
+      cacheId: mlsMessageCacheId(this.userId, messageId),
+      userId: this.userId,
+      messageId,
       id: messageId,
       channelId,
       nonce: encrypted.nonce,
@@ -902,7 +1048,12 @@ export class MlsEngine {
   }
 
   private async readCachedPayload(messageId: string, editedAt?: string) {
-    const row = await database.messages.get(messageId);
+    const cacheId = mlsMessageCacheId(this.userId, messageId);
+    const accountRow = await database.messagePayloads.get(cacheId);
+    const legacyRow = accountRow
+      ? undefined
+      : await database.messages.get(messageId);
+    const row = accountRow ?? legacyRow;
     if (!row) return undefined;
     const sameRevision =
       row.editedAt === editedAt ||
@@ -916,14 +1067,37 @@ export class MlsEngine {
         row.nonce,
         row.ciphertext,
       );
-      return JSON.parse(decoder.decode(plaintext)) as MessagePayload;
+      const payload = JSON.parse(decoder.decode(plaintext)) as MessagePayload;
+      if (legacyRow) {
+        // Só quem possui a chave correta consegue chegar aqui. A linha antiga
+        // pode então ser movida com segurança para o cache isolado da conta.
+        await database.transaction(
+          "rw",
+          database.messages,
+          database.messagePayloads,
+          async () => {
+            await database.messagePayloads.put({
+              ...legacyRow,
+              cacheId,
+              userId: this.userId,
+              messageId,
+            });
+            await database.messages.delete(messageId);
+          },
+        );
+      }
+      return payload;
     } catch {
       // O cache local é cifrado com a master key do dispositivo. Depois de
       // recriar o dispositivo, as linhas antigas são indecifráveis — e a
       // exceção do WebCrypto vem sem mensagem, o que derrubava a lista
       // inteira com um erro em branco. Trata-se de cache inválido: descarta
       // e deixa o caminho normal decifrar de novo pelo grupo.
-      await database.messages.delete(messageId).catch(() => undefined);
+      // Uma linha já atribuída a esta conta pode ser descartada. Uma linha
+      // legada que não abriu talvez pertença a outra conta no mesmo navegador
+      // e deve permanecer para que ela faça sua própria migração.
+      if (accountRow)
+        await database.messagePayloads.delete(cacheId).catch(() => undefined);
       return undefined;
     }
   }
@@ -1216,7 +1390,7 @@ export class MlsEngine {
       }
       payload ??= {
         version: 1,
-        text: "🔒 Mensagem indisponível para a época deste dispositivo.",
+        text: "🔒 A chave desta época não existe mais neste dispositivo.",
         mentions: [],
         reactions: {},
         attachments: [],
@@ -1254,6 +1428,78 @@ export class MlsEngine {
     return output;
   }
 
+  private async decryptableLegacyMessageIds() {
+    const ids: string[] = [];
+    for (const row of await database.messages.toArray()) {
+      try {
+        await decryptAtRest(this.masterKey, row.nonce, row.ciphertext);
+        ids.push(row.id);
+      } catch {
+        // Cache legado de outra conta: não tocar.
+      }
+    }
+    return ids;
+  }
+
+  private releaseLocalResources() {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.stopHeartbeat();
+    for (const group of this.groups.values()) group.free();
+    this.groups.clear();
+    this.identity.free();
+    this.provider.free();
+  }
+
+  /** Fecha a sessão sem apagar a identidade nem o histórico deste dispositivo. */
+  async close() {
+    return this.serializeOperation(async () => {
+      if (this.disposed) return;
+      await this.persistProvider();
+      this.releaseLocalResources();
+    });
+  }
+
+  /** Revoga o dispositivo atual e remove apenas o cofre desta conta. */
+  async forgetDevice() {
+    return this.serializeOperation(async () => {
+      if (this.disposed) return;
+      const { error } = await this.client
+        .from("devices")
+        .update({ revoked_at: new Date().toISOString() })
+        .eq("id", this.deviceId)
+        .is("revoked_at", null);
+      if (error) throw error;
+
+      const legacyIds = await this.decryptableLegacyMessageIds();
+      await database.transaction(
+        "rw",
+        database.devices,
+        database.deviceKeys,
+        database.channels,
+        database.messages,
+        database.messagePayloads,
+        async () => {
+          await database.devices.delete(this.userId);
+          await database.deviceKeys.delete(this.userId);
+          await database.channels.where("userId").equals(this.userId).delete();
+          await database.messagePayloads
+            .where("userId")
+            .equals(this.userId)
+            .delete();
+          if (legacyIds.length) await database.messages.bulkDelete(legacyIds);
+        },
+      );
+      if (this.wrappedMasterKey.startsWith("session:")) {
+        const reference = this.wrappedMasterKey.slice("session:".length);
+        sessionStorage.removeItem(
+          `janja.mls.master.${this.userId}.${reference}`,
+        );
+      }
+      this.releaseLocalResources();
+    });
+  }
+
   async listMessagesPage(
     channelId: string,
     before?: string,
@@ -1289,6 +1535,20 @@ export const getMlsEngine = (userId: string) => {
   }
   return engine;
 };
+
+export async function closeMlsEngine(userId: string) {
+  const pending = engines.get(userId);
+  if (!pending) return;
+  const engine = await pending;
+  await engine.close();
+  engines.delete(userId);
+}
+
+export async function forgetMlsDevice(userId: string) {
+  const engine = await getMlsEngine(userId);
+  await engine.forgetDevice();
+  engines.delete(userId);
+}
 
 export async function downloadOnlineAttachment(
   userId: string,

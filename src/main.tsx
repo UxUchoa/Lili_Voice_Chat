@@ -34,7 +34,13 @@ import type { CameraResolution } from "./hooks/cameraModes";
 import { useOnlinePresence } from "./hooks/useOnlinePresence";
 import { useTyping } from "./hooks/useTyping";
 import { useForegroundNotifications } from "./hooks/useForegroundNotifications";
-import { downloadOnlineAttachment, getMlsEngine } from "./crypto/mlsEngine";
+import {
+  closeMlsEngine,
+  downloadOnlineAttachment,
+  forgetMlsDevice,
+  getMlsEngine,
+  type MlsPersistenceMode,
+} from "./crypto/mlsEngine";
 import {
   getCurrentOnlineAccount,
   listOnlineAccountSessions,
@@ -43,8 +49,10 @@ import {
   clearPasswordRecoveryLink,
   isPasswordRecoveryLink,
   registerOnlineAccount,
-  requestOnlinePasswordReset,
+  getRecoveryKeyStatus,
+  recoverOnlineAccountWithKey,
   resendOnlineConfirmationEmail,
+  rotateOnlineRecoveryKey,
   revokeOnlineAccountSession,
   revokeOtherOnlineAccountSessions,
   updateOnlinePassword,
@@ -234,6 +242,26 @@ import "./styles.discord.css";
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 2_000, retry: 1 } },
 });
+
+/**
+ * Supabase/PostgREST rejeita algumas chamadas com um objeto simples em vez de
+ * `Error`. Sem ler `message` desses objetos a interface escondia a causa real
+ * atrás de "Não foi possível continuar" — inclusive quando faltava uma
+ * migration no servidor.
+ */
+function readableError(reason: unknown, fallback: string): string {
+  if (reason instanceof Error && reason.message) return reason.message;
+  if (
+    typeof reason === "object" &&
+    reason !== null &&
+    "message" in reason &&
+    typeof reason.message === "string" &&
+    reason.message.trim()
+  )
+    return reason.message;
+  return fallback;
+}
+
 type AppAccount = OnlineAccount;
 const serverPermissionMask = (
   server: Server | undefined,
@@ -349,7 +377,7 @@ function Avatar({
 function Logo({ compact = false }: { compact?: boolean }) {
   return (
     <div className={`brand ${compact ? "brand-compact" : ""}`}>
-      <img src="/logo-vetorizada.svg" alt="" />
+      <img src={`${import.meta.env.BASE_URL}logo-vetorizada.svg`} alt="" />
       <span>Lili</span>
     </div>
   );
@@ -8114,11 +8142,14 @@ function ProfilePanel({
   account,
   onClose,
   onLogout,
+  onRemoveDevice,
 }: {
   account: AppAccount;
   onClose: () => void;
-  onLogout: () => void;
+  onLogout: () => Promise<void>;
+  onRemoveDevice: () => Promise<void>;
 }) {
+  const confirm = useConfirm();
   const profiles = useAppStore((state) => state.profiles),
     currentUserId = useAppStore((state) => state.currentUserId),
     notificationSettings = useAppStore((state) => state.notificationSettings),
@@ -8168,6 +8199,9 @@ function ProfilePanel({
     [devices, setDevices] = useState<OnlineDevice[]>([]),
     [authSessions, setAuthSessions] = useState<OnlineAuthSession[]>([]),
     [currentDeviceId, setCurrentDeviceId] = useState(""),
+    [persistenceMode, setPersistenceMode] =
+      useState<MlsPersistenceMode>("durable"),
+    [logoutBusy, setLogoutBusy] = useState(false),
     [newPassword, setNewPassword] = useState(""),
     [securityNotice, setSecurityNotice] = useState(""),
     [updateState, setUpdateState] = useState<LiliUpdateState | null>(null);
@@ -8175,6 +8209,7 @@ function ProfilePanel({
     void (async () => {
       try {
         const engine = await getMlsEngine(account.profileId);
+        setPersistenceMode(engine.persistenceMode);
         const [nextDevices, nextSessions] = await Promise.all([
           listOnlineDevices(account.profileId),
           listOnlineAccountSessions(),
@@ -8231,6 +8266,44 @@ function ProfilePanel({
       );
     }
   };
+  const finishSession = async (removeDevice: boolean) => {
+    setLogoutBusy(true);
+    setSecurityNotice("");
+    try {
+      if (removeDevice) await onRemoveDevice();
+      else await onLogout();
+    } catch (caught) {
+      setSecurityNotice(
+        caught instanceof Error
+          ? caught.message
+          : "Não foi possível encerrar a sessão.",
+      );
+      setLogoutBusy(false);
+    }
+  };
+  const requestLogout = () => {
+    if (persistenceMode === "durable") {
+      void finishSession(false);
+      return;
+    }
+    confirm.ask({
+      title: "Sair com cofre temporário",
+      message:
+        "Este navegador não conseguiu persistir a chave E2EE. Ao sair, o histórico cifrado deste dispositivo ficará indisponível.",
+      confirmLabel: "Sair mesmo assim",
+      danger: true,
+      onConfirm: () => void finishSession(false),
+    });
+  };
+  const requestRemoveDevice = () =>
+    confirm.ask({
+      title: "Sair e remover este dispositivo",
+      message:
+        "A identidade E2EE será revogada e a chave, o estado dos canais e o cache desta conta serão apagados deste navegador. Esta ação não pode ser desfeita.",
+      confirmLabel: "Remover dispositivo",
+      danger: true,
+      onConfirm: () => void finishSession(true),
+    });
   const revokeSession = async (sessionId: string) => {
     try {
       await revokeOnlineAccountSession(sessionId);
@@ -8828,9 +8901,21 @@ function ProfilePanel({
             ))}
           </div>
         </details>
-        <button className="outline-button logout-button" onClick={onLogout}>
+        <button
+          className="outline-button logout-button"
+          disabled={logoutBusy}
+          onClick={requestLogout}
+        >
           Sair da conta neste dispositivo
         </button>
+        <button
+          className="danger-button logout-button"
+          disabled={logoutBusy}
+          onClick={requestRemoveDevice}
+        >
+          Sair e remover este dispositivo
+        </button>
+        {confirm.confirmDialog}
       </section>
     </div>
   );
@@ -9155,9 +9240,11 @@ function MessageRequestsView({
 function App({
   account,
   onLogout,
+  onRemoveDevice,
 }: {
   account: AppAccount;
-  onLogout: () => void;
+  onLogout: () => Promise<void>;
+  onRemoveDevice: () => Promise<void>;
 }) {
   const channels = useAppStore((state) => state.channels),
     servers = useAppStore((state) => state.servers),
@@ -9195,7 +9282,9 @@ function App({
     [directUnreads, setDirectUnreads] = useState<DirectChannelUnread[]>([]),
     [voiceMembers, setVoiceMembers] = useState<OnlineVoiceMembers>({}),
     [workspaceError, setWorkspaceError] = useState(""),
-    [runtimeError, setRuntimeError] = useState("");
+    [runtimeError, setRuntimeError] = useState(""),
+    [e2eePersistenceMode, setE2eePersistenceMode] =
+      useState<MlsPersistenceMode | null>(null);
 
   // A navegação persistida pertence a uma conta; entrar com outra começa do
   // zero em vez de herdar canais que talvez nem existam para ela.
@@ -9204,6 +9293,24 @@ function App({
     [account.profileId, claimNavigation],
   );
   useEffect(primeAudioOnUserGesture, []);
+  useEffect(() => {
+    let active = true;
+    void getMlsEngine(account.profileId)
+      .then((engine) => {
+        if (active) setE2eePersistenceMode(engine.persistenceMode);
+      })
+      .catch((caught) => {
+        if (active)
+          setRuntimeError(
+            caught instanceof Error
+              ? caught.message
+              : "Não foi possível abrir o cofre E2EE.",
+          );
+      });
+    return () => {
+      active = false;
+    };
+  }, [account.profileId]);
 
   useEffect(() => {
     return subscribeOnlineWorkspace(
@@ -9702,6 +9809,15 @@ function App({
         onInbox={() => setInboxOpen(true)}
         onHelp={() => setHelpOpen(true)}
       />
+      {e2eePersistenceMode === "session" && (
+        <div className="e2ee-storage-warning" role="alert">
+          <Icon>!</Icon>
+          <span>
+            Cofre E2EE temporário: este navegador não conseguiu persistir a
+            chave. Fechar ou sair da conta pode tornar o histórico indisponível.
+          </span>
+        </div>
+      )}
       <div className="app-body">
         <button
           className="mobile-nav-backdrop"
@@ -9898,6 +10014,7 @@ function App({
           account={account}
           onClose={() => setProfileOpen(false)}
           onLogout={onLogout}
+          onRemoveDevice={onRemoveDevice}
         />
       )}
       {previewUserId && (
@@ -9975,6 +10092,104 @@ function PasswordField({
         </button>
       </span>
     </label>
+  );
+}
+
+/**
+ * A chave de recuperação, mostrada uma vez só.
+ *
+ * O botão de seguir fica travado até a pessoa confirmar que guardou. É atrito
+ * de propósito: sem a chave a conta não tem caminho de volta — não há e-mail
+ * de recuperação — e este é o único momento em que dá para avisar.
+ */
+function RecoveryKeyCard({
+  recoveryKey,
+  reason,
+  onContinue,
+}: {
+  recoveryKey: string;
+  reason: "register" | "recover" | "reissued";
+  onContinue: () => void;
+}) {
+  const [acknowledged, setAcknowledged] = useState(false),
+    [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(recoveryKey);
+      setCopied(true);
+    } catch {
+      // Área de transferência negada: a chave está na tela e pode ser copiada
+      // à mão, então não vale interromper nada por isso.
+    }
+  };
+
+  return (
+    <main className="auth-screen">
+      <section className="recovery-card">
+        <h2>
+          {reason === "recover"
+            ? "Senha trocada — guarde a chave nova"
+            : "Guarde sua chave de recuperação"}
+        </h2>
+        <p>
+          {reason === "recover"
+            ? "A chave anterior deixou de valer e todas as sessões foram encerradas. Entre de novo com a senha que você acabou de definir."
+            : reason === "reissued"
+              ? "Sua conta ainda não tinha uma chave. Esta é ela: guarde agora, porque não há como mostrá-la de novo."
+              : "É com ela que você recupera o acesso se esquecer a senha. Não há e-mail de recuperação: sem esta chave, a conta é perdida."}
+        </p>
+        <code>{recoveryKey}</code>
+        <div className="recovery-actions">
+          <button onClick={() => void copy()}>
+            {copied ? "Copiada" : "Copiar"}
+          </button>
+          <button
+            onClick={() => {
+              const arquivo = new Blob(
+                [
+                  [
+                    "Chave de recuperacao do Lili",
+                    "",
+                    recoveryKey,
+                    "",
+                    "Quem tem esta chave troca a senha da conta.",
+                    "Guarde offline, fora do computador onde voce usa o app.",
+                  ].join(String.fromCharCode(10)),
+                ],
+                { type: "text/plain" },
+              );
+              const url = URL.createObjectURL(arquivo);
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = "lili-chave-de-recuperacao.txt";
+              link.click();
+              URL.revokeObjectURL(url);
+            }}
+          >
+            Baixar
+          </button>
+        </div>
+        <label className="recovery-ack">
+          <input
+            type="checkbox"
+            checked={acknowledged}
+            onChange={(event) => setAcknowledged(event.target.checked)}
+          />
+          <span>
+            Guardei a chave em lugar seguro e entendi que ela não pode ser
+            recuperada.
+          </span>
+        </label>
+        <button
+          className="primary-button"
+          disabled={!acknowledged}
+          onClick={onContinue}
+        >
+          {reason === "recover" ? "Voltar ao login" : "Entrar"}
+        </button>
+      </section>
+    </main>
   );
 }
 
@@ -10062,6 +10277,13 @@ function OnlineAuthGate() {
     // para onde mandar sem obrigar a pessoa a digitar o e-mail de novo.
     [awaitingConfirmation, setAwaitingConfirmation] = useState(""),
     [resending, setResending] = useState(false),
+    // Chave a ser mostrada uma única vez, com a conta que espera o "guardei".
+    [issuedKey, setIssuedKey] = useState<{
+      key: string;
+      reason: "register" | "recover" | "reissued";
+      account: OnlineAccount | null;
+    } | null>(null),
+    [recoveryKeyInput, setRecoveryKeyInput] = useState(""),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false);
@@ -10074,9 +10296,7 @@ function OnlineAuthGate() {
   useEffect(() => {
     void getCurrentOnlineAccount()
       .then((current) => (current ? activate(current) : undefined))
-      .catch((caught) =>
-        setError(caught instanceof Error ? caught.message : "Falha na sessão."),
-      )
+      .catch((caught) => setError(readableError(caught, "Falha na sessão.")))
       .finally(() => setLoading(false));
   }, []);
 
@@ -10107,13 +10327,14 @@ function OnlineAuthGate() {
     setNotice("");
     try {
       if (mode === "recover") {
-        await requestOnlinePasswordReset(email);
-        // A mesma frase para e-mail cadastrado e desconhecido: dizer "não
-        // existe conta com esse e-mail" entregaria a lista de quem tem conta.
-        setMode("login");
-        setNotice(
-          "Se existir uma conta com esse e-mail, o link para trocar a senha já está a caminho.",
-        );
+        const nextKey = await recoverOnlineAccountWithKey({
+          email,
+          recoveryKey: recoveryKeyInput,
+          newPassword: password,
+        });
+        setRecoveryKeyInput("");
+        setPassword("");
+        setIssuedKey({ key: nextKey, reason: "recover", account: null });
       } else if (mode === "register") {
         const result = await registerOnlineAccount({
           email,
@@ -10131,22 +10352,46 @@ function OnlineAuthGate() {
           setNotice(
             `Conta criada. Abra o link que enviamos para ${result.email} e depois entre por aqui.`,
           );
-        } else await activate(result.account);
+        } else {
+          // A conta fica em espera: entrar antes de a pessoa guardar a chave é
+          // a forma mais fácil de ela nunca guardar.
+          setIssuedKey({
+            key: result.recoveryKey,
+            reason: "register",
+            account: result.account,
+          });
+        }
       } else {
-        await activate(await loginOnlineAccount(email, password));
+        const account = await loginOnlineAccount(email, password);
+        // Conta criada antes de a chave existir, ou cujo registro falhou:
+        // entregar agora é melhor que deixá-la sem caminho de volta.
+        const status = await getRecoveryKeyStatus();
+        if (status.hasKey) await activate(account);
+        else
+          setIssuedKey({
+            key: await rotateOnlineRecoveryKey(),
+            reason: "reissued",
+            account,
+          });
       }
     } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "Não foi possível continuar.",
-      );
+      setError(readableError(caught, "Não foi possível continuar."));
     } finally {
       setBusy(false);
     }
   };
 
   const logout = async () => {
+    if (account) await closeMlsEngine(account.profileId);
+    await logoutOnlineAccount();
+    queryClient.clear();
+    setAccount(null);
+    setPassword("");
+  };
+
+  const removeDeviceAndLogout = async () => {
+    if (!account) return;
+    await forgetMlsDevice(account.profileId);
     await logoutOnlineAccount();
     queryClient.clear();
     setAccount(null);
@@ -10164,7 +10409,30 @@ function OnlineAuthGate() {
   // este desvio o aplicativo abriria normalmente e a senha nunca seria trocada.
   if (account && recovering)
     return <NewPasswordCard onDone={() => setRecovering(false)} />;
-  if (account) return <App account={account} onLogout={() => void logout()} />;
+  if (issuedKey)
+    return (
+      <RecoveryKeyCard
+        recoveryKey={issuedKey.key}
+        reason={issuedKey.reason}
+        onContinue={() => {
+          const pendente = issuedKey.account;
+          setIssuedKey(null);
+          if (pendente) void activate(pendente);
+          else {
+            setMode("login");
+            setNotice("Entre com a senha nova.");
+          }
+        }}
+      />
+    );
+  if (account)
+    return (
+      <App
+        account={account}
+        onLogout={logout}
+        onRemoveDevice={removeDeviceAndLogout}
+      />
+    );
   return (
     <main className="auth-screen">
       <section className="auth-card">
@@ -10179,7 +10447,7 @@ function OnlineAuthGate() {
         </h1>
         <p>
           {mode === "recover"
-            ? "Informe o e-mail da conta. Mandamos um link para você definir uma senha nova."
+            ? "Informe o e-mail da conta e a chave de recuperação que você guardou no cadastro. Não há link por e-mail: a chave é a única prova aceita."
             : "Conta protegida pelo Supabase Auth; o conteúdo das mensagens permanece cifrado no servidor."}
         </p>
         {mode === "register" && (
@@ -10211,14 +10479,25 @@ function OnlineAuthGate() {
             autoCapitalize="none"
           />
         </label>
-        {mode !== "recover" && (
-          <PasswordField
-            label="Senha"
-            value={password}
-            onChange={setPassword}
-            onEnter={() => void submit()}
-          />
+        {mode === "recover" && (
+          <label>
+            Chave de recuperação
+            <input
+              value={recoveryKeyInput}
+              onChange={(event) => setRecoveryKeyInput(event.target.value)}
+              placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX"
+              autoCapitalize="characters"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </label>
         )}
+        <PasswordField
+          label={mode === "recover" ? "Senha nova" : "Senha"}
+          value={password}
+          onChange={setPassword}
+          onEnter={() => void submit()}
+        />
         {error && (
           <div className="auth-error" role="alert">
             {error}
@@ -10266,7 +10545,7 @@ function OnlineAuthGate() {
             : mode === "register"
               ? "Criar conta"
               : mode === "recover"
-                ? "Enviar o link"
+                ? "Trocar a senha"
                 : "Entrar"}
         </button>
         <div className="auth-links">
@@ -10284,7 +10563,7 @@ function OnlineAuthGate() {
               setError("");
             }}
           >
-            {mode === "recover" ? "Voltar ao login" : "Esqueci a senha"}
+            {mode === "recover" ? "Voltar ao login" : "Perdi o acesso"}
           </button>
         </div>
       </section>

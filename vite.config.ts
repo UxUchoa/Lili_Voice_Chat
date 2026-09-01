@@ -100,7 +100,9 @@ function cspPlugin(policy: string): Plugin {
         const meta =
           /(<meta http-equiv="Content-Security-Policy" content=")[^"]*(")/;
         if (!meta.test(html))
-          throw new Error("index.html perdeu a meta de Content-Security-Policy.");
+          throw new Error(
+            "index.html perdeu a meta de Content-Security-Policy.",
+          );
         return html.replace(meta, `$1${policy}$2`);
       },
     },
@@ -110,12 +112,19 @@ function cspPlugin(policy: string): Plugin {
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const configured = Boolean(env.VITE_SUPABASE_URL?.trim());
+  const forDesktop = env.LILI_DESKTOP_BUILD === "true";
   const policy =
     command === "build" && configured
       ? productionCsp(env.VITE_SUPABASE_URL ?? "", env.VITE_LIVEKIT_URL ?? "")
       : PERMISSIVE_CSP;
 
   return {
+    // O desktop empacotado abre o `dist/` por `file://`, onde o `/assets/...`
+    // do padrão vira `file:///C:/assets/...` e não existe: a janela abre em
+    // branco, sem erro visível. A web precisa do caminho absoluto porque o
+    // `rewrites` da Vercel serve o index.html em qualquer profundidade, e ali
+    // um caminho relativo apontaria para fora de `/assets`.
+    base: forDesktop ? "./" : "/",
     plugins: [react(), cspPlugin(policy)],
     server: {
       host: "127.0.0.1",
@@ -123,8 +132,8 @@ export default defineConfig(({ command, mode }) => {
     },
     build: {
       // Publicar o sourcemap entrega o código-fonte inteiro a quem abrir o
-      // site. Ligue com JANJA_SOURCEMAP=true quando precisar depurar um build.
-      sourcemap: env.JANJA_SOURCEMAP === "true",
+      // site. Ligue com LILI_SOURCEMAP=true quando precisar depurar um build.
+      sourcemap: env.LILI_SOURCEMAP === "true",
     },
   };
 });

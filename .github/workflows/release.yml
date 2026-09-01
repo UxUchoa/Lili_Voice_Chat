@@ -1,4 +1,4 @@
-name: Signed Windows release
+name: Windows release
 
 on:
   push:
@@ -22,44 +22,88 @@ jobs:
       VITE_FORCE_TURN: ${{ vars.VITE_FORCE_TURN }}
       VITE_VAPID_PUBLIC_KEY: ${{ vars.VITE_VAPID_PUBLIC_KEY }}
       VITE_TENOR_API_KEY: ${{ vars.VITE_TENOR_API_KEY }}
+      # Endereço público do site. No instalador ele não é opcional: a página
+      # vive em file://, e sem isto o convite copiado e o link de recuperação
+      # de senha não apontam para lugar nenhum.
+      VITE_SITE_URL: ${{ vars.VITE_SITE_URL }}
       # Recusa URL local, chave de service role e qualquer segredo com prefixo
       # VITE_. É o mesmo validador que roda na Vercel e no CI.
       LILI_STRICT_ENV: "true"
+      # Caminho relativo nos assets e VITE_SITE_URL obrigatória. Sem isto o
+      # `/assets/...` do Vite vira `file:///C:/assets/...` e o aplicativo
+      # instalado abre uma janela em branco, sem erro no console.
+      LILI_DESKTOP_BUILD: "true"
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
-      - name: Validate signing secrets
+      - name: Resolve signing mode
         shell: pwsh
         run: |
-          if (-not $env:CSC_LINK) { throw "CSC_LINK is required for signed releases." }
-          if (-not $env:CSC_KEY_PASSWORD) { throw "CSC_KEY_PASSWORD is required." }
+          $hasCertificate = -not [string]::IsNullOrWhiteSpace($env:CSC_LINK)
+          $hasPassword = -not [string]::IsNullOrWhiteSpace($env:CSC_KEY_PASSWORD)
+          if ($hasCertificate -ne $hasPassword) {
+            throw "Configure CSC_LINK e CSC_KEY_PASSWORD juntos, ou deixe ambos vazios."
+          }
+          "RELEASE_SIGNED=$($hasCertificate.ToString().ToLowerInvariant())" |
+            Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          if (-not $hasCertificate) {
+            Write-Warning "Publicando instalador sem Authenticode; o Windows SmartScreen exibirá um aviso."
+          }
       - run: npm ci
       - run: npm test
       - run: npm run typecheck
       # Falha antes de empacotar se a configuração pública estiver ausente ou
       # errada: um instalador assinado sem backend é pior que nenhum.
       - run: npm run build:web
-      - name: Build signed NSIS release and update metadata
+      # O bundle é carregado por file:// no aplicativo instalado, e quase tudo
+      # que quebra por causa disso passa em branco no navegador.
+      - run: npx electron scripts/test-desktop-smoke.mjs
+      - name: Build and publish NSIS release
         shell: pwsh
         run: |
           $repository = $env:GITHUB_REPOSITORY.Split('/')[1]
-          npx electron-builder --win nsis --publish always `
-            --config.forceCodeSigning=true `
-            --config.publish.provider=github `
-            "--config.publish.owner=$env:GITHUB_REPOSITORY_OWNER" `
-            "--config.publish.repo=$repository"
-      - name: Verify signed installer and update metadata
+          $arguments = @(
+            'electron-builder', '--win', 'nsis', '--publish', 'always',
+            '--config.publish.provider=github',
+            "--config.publish.owner=$env:GITHUB_REPOSITORY_OWNER",
+            "--config.publish.repo=$repository",
+            '--config.publish.releaseType=release'
+          )
+          if ($env:RELEASE_SIGNED -eq 'true') {
+            $arguments += '--config.forceCodeSigning=true'
+          }
+          & npx.cmd @arguments
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify installer and update metadata
         shell: pwsh
         run: |
           $installer = Get-ChildItem release -File -Filter '*.exe' | Select-Object -First 1
           if (-not $installer) { throw "NSIS installer was not generated." }
           $signature = Get-AuthenticodeSignature -LiteralPath $installer.FullName
-          if ($signature.Status -ne 'Valid') {
+          if ($env:RELEASE_SIGNED -eq 'true' -and $signature.Status -ne 'Valid') {
             throw "Installer signature is not valid: $($signature.Status)"
+          }
+          if ($env:RELEASE_SIGNED -ne 'true' -and $signature.Status -eq 'Valid') {
+            Write-Warning "O instalador saiu assinado mesmo sem o modo de assinatura explícito."
+          } elseif ($env:RELEASE_SIGNED -ne 'true') {
+            Write-Warning "Instalador sem Authenticode ($($signature.Status))."
           }
           if (-not (Test-Path -LiteralPath 'release/latest.yml')) {
             throw "electron-updater metadata release/latest.yml is missing."
           }
+          $stream = [IO.File]::OpenRead($installer.FullName)
+          try {
+            $algorithm = [Security.Cryptography.SHA256]::Create()
+            try {
+              $hash = ([BitConverter]::ToString($algorithm.ComputeHash($stream))).Replace('-', '').ToLowerInvariant()
+            } finally { $algorithm.Dispose() }
+          } finally { $stream.Dispose() }
+          [IO.File]::WriteAllText(
+            (Join-Path $PWD 'release\SHA256SUMS.txt'),
+            "$hash *$($installer.Name)`n",
+            (New-Object Text.UTF8Encoding $false)
+          )
+          gh release upload $env:GITHUB_REF_NAME release/SHA256SUMS.txt --clobber
