@@ -18,6 +18,10 @@ import type {
   ServerMember,
 } from "../domain/types";
 import {
+  DEFAULT_NOISE_SUPPRESSION,
+  type NoiseSuppressionMode,
+} from "../services/noiseSuppression";
+import {
   deleteOnlineNotificationSetting,
   saveOnlineNotificationSetting,
 } from "../services/online/settings";
@@ -56,6 +60,17 @@ interface AppState extends WorkspaceProjection {
     zoom: number;
     reducedMotion: boolean;
   };
+  /**
+   * Preferências de captura da chamada. Ficam no cliente porque descrevem
+   * este computador — o microfone, a CPU e a placa de som são dele, não da
+   * conta — e precisam valer já no primeiro `getUserMedia`, antes de qualquer
+   * ida ao servidor.
+   */
+  voice: {
+    noiseSuppression: NoiseSuppressionMode;
+    /** Levar o áudio do sistema junto ao compartilhar a tela. */
+    shareSystemAudio: boolean;
+  };
   hydrateOnline: (state: Partial<WorkspaceProjection>) => void;
   updateProfile: (profileId: string, changes: Partial<Profile>) => void;
   markChannelRead: (channelId: string, messageId?: string) => void;
@@ -67,6 +82,7 @@ interface AppState extends WorkspaceProjection {
     scopeId: string,
   ) => void;
   setAccessibility: (changes: Partial<AppState["accessibility"]>) => void;
+  setVoice: (changes: Partial<AppState["voice"]>) => void;
 }
 
 const emptyWorkspace: WorkspaceProjection = {
@@ -96,6 +112,10 @@ export const useAppStore = create<AppState>()(
     (set, get) => ({
       ...emptyWorkspace,
       accessibility: { textScale: 1, zoom: 1, reducedMotion: false },
+      voice: {
+        noiseSuppression: DEFAULT_NOISE_SUPPRESSION,
+        shareSystemAudio: true,
+      },
       hydrateOnline: (onlineState) => set(onlineState),
       updateProfile: (profileId, changes) =>
         set((state) => ({
@@ -177,10 +197,29 @@ export const useAppStore = create<AppState>()(
         set((state) => ({
           accessibility: { ...state.accessibility, ...changes },
         })),
+      setVoice: (changes) =>
+        set((state) => ({ voice: { ...state.voice, ...changes } })),
     }),
     {
       name: "janja-ui-preferences-v2",
-      partialize: (state) => ({ accessibility: state.accessibility }),
+      partialize: (state) => ({
+        accessibility: state.accessibility,
+        voice: state.voice,
+      }),
+      // Quem já tinha preferências salvas não tem a chave `voice`: sem esta
+      // fusão o estado voltava `undefined` e a primeira leitura quebrava.
+      merge: (persisted, current) => ({
+        ...current,
+        ...(persisted as Partial<AppState>),
+        accessibility: {
+          ...current.accessibility,
+          ...(persisted as Partial<AppState>)?.accessibility,
+        },
+        voice: {
+          ...current.voice,
+          ...(persisted as Partial<AppState>)?.voice,
+        },
+      }),
     },
   ),
 );

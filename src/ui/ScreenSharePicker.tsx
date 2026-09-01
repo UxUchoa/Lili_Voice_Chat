@@ -21,11 +21,16 @@ const FRAME_RATES: ShareFrameRate[] = [15, 30, 60];
 export function ScreenSharePicker({
   quality,
   onQualityChange,
+  systemAudio,
+  onSystemAudioChange,
   onCancel,
   onShare,
 }: {
   quality: ShareQuality;
   onQualityChange: (quality: ShareQuality) => void;
+  /** Levar o som do computador junto com a imagem. */
+  systemAudio: boolean;
+  onSystemAudioChange: (enabled: boolean) => void;
   onCancel: () => void;
   onShare: (selection: ShareSelection) => void;
 }) {
@@ -150,7 +155,8 @@ export function ScreenSharePicker({
           <div className="share-quality">
             <b>Personalizada</b>
             <span>
-              {quality.resolution}p · {quality.frameRate} fps
+              {quality.resolution}p · {quality.frameRate} fps ·{" "}
+              {systemAudio ? "com áudio" : "sem áudio"}
             </span>
           </div>
           <button
@@ -190,6 +196,30 @@ export function ScreenSharePicker({
                   </button>
                 ))}
               </div>
+              <span className="device-menu-label">ÁUDIO DO COMPUTADOR</span>
+              <div className="share-segmented" role="group">
+                <button
+                  aria-pressed={systemAudio}
+                  className={systemAudio ? "active" : ""}
+                  onClick={() => onSystemAudioChange(true)}
+                >
+                  Incluir
+                </button>
+                <button
+                  aria-pressed={!systemAudio}
+                  className={!systemAudio ? "active" : ""}
+                  onClick={() => onSystemAudioChange(false)}
+                >
+                  Só a imagem
+                </button>
+              </div>
+              {/* Em Windows o loopback pega a saída inteira, não a janela
+                  escolhida: quem for compartilhar precisa saber que uma
+                  notificação sonora também vai junto. */}
+              <p className="share-quality-hint">
+                O som capturado é o da saída de áudio inteira, não só o da
+                janela escolhida.
+              </p>
             </div>
           )}
         </footer>

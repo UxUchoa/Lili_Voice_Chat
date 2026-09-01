@@ -22,9 +22,33 @@ import {
   resolvePermissions,
 } from "./domain/permissions";
 import { partitionBySize } from "./domain/attachments";
+import {
+  composeRail,
+  flattenRail,
+  moveEntry,
+  type RailEntry,
+  type ServerFolder,
+  type ServerPlacement,
+} from "./domain/serverLayout";
+import {
+  createServerFolder,
+  deleteServerFolder,
+  fetchServerLayout,
+  saveServerLayout,
+  updateServerFolder,
+} from "./services/online/serverLayout";
 import { CategoryDeleteModal } from "./ui/CategoryDeleteModal";
+import { FolderModal } from "./ui/FolderModal";
 import { ReactionComposer } from "./ui/ReactionComposer";
-import { Select } from "./ui/Select";
+import { VoiceRecorder } from "./ui/VoiceRecorder";
+import { Select, type SelectOption } from "./ui/Select";
+import {
+  captureConstraints,
+  createMicPipeline,
+  NOISE_SUPPRESSION_MODES,
+  type MicPipeline,
+  type NoiseSuppressionMode,
+} from "./services/noiseSuppression";
 import {
   REACTION_MAX_GRAPHEMES,
   countGraphemes,
@@ -371,7 +395,7 @@ function Avatar({
   online = true,
 }: {
   person: Pick<Person, "avatar" | "avatarUrl" | "color" | "status">;
-  size?: "sm" | "md" | "lg" | "xl";
+  size?: "xs" | "sm" | "md" | "lg" | "xl";
   online?: boolean;
 }) {
   return (
@@ -386,6 +410,74 @@ function Avatar({
       )}
       {online && <i className={`presence ${person.status}`} />}
     </span>
+  );
+}
+
+/**
+ * Edição no lugar da mensagem.
+ *
+ * O caminho anterior era `window.prompt`, que o Chromium do Electron não
+ * implementa: no desktop o botão de editar abria nada e não reclamava de
+ * nada. Aqui a caixa nasce focada, com o cursor no fim do texto; Enter salva,
+ * Shift+Enter quebra linha e Esc cancela.
+ */
+function MessageEditor({
+  value,
+  onChange,
+  onSave,
+  onCancel,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  const ref = useRef<HTMLTextAreaElement | null>(null);
+  useEffect(() => {
+    const field = ref.current;
+    if (!field) return;
+    field.focus();
+    field.setSelectionRange(field.value.length, field.value.length);
+  }, []);
+  // A caixa cresce com o texto: uma mensagem de dez linhas editada numa caixa
+  // de duas obriga a rolar dentro dela para reler o que se está mudando.
+  useEffect(() => {
+    const field = ref.current;
+    if (!field) return;
+    field.style.height = "auto";
+    field.style.height = `${Math.min(field.scrollHeight, 320)}px`;
+  }, [value]);
+  return (
+    <div className="message-editor">
+      <textarea
+        ref={ref}
+        value={value}
+        maxLength={8_000}
+        aria-label="Editar mensagem"
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            onCancel();
+            return;
+          }
+          if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault();
+            onSave();
+          }
+        }}
+      />
+      <div className="message-editor-hint">
+        <button className="link-button" onClick={onCancel}>
+          cancelar
+        </button>
+        <span>·</span>
+        <button className="link-button" onClick={onSave}>
+          salvar
+        </button>
+        <span>Esc cancela · Enter salva</span>
+      </div>
+    </div>
   );
 }
 
@@ -498,8 +590,225 @@ function ServerRail({
   const servers = useAppStore((state) => state.servers);
   const home = view === "home";
   const homeBadge = unreadDirectCount + pendingRequestCount;
+
+  const [folders, setFolders] = useState<ServerFolder[]>([]);
+  const [placements, setPlacements] = useState<ServerPlacement[]>([]);
+  const [openFolders, setOpenFolders] = useState<Set<string>>(new Set());
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [overServer, setOverServer] = useState<string | null>(null);
+  const [editingFolder, setEditingFolder] = useState<ServerFolder | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void fetchServerLayout()
+      .then((layout) => {
+        if (!active) return;
+        setFolders(layout.folders);
+        setPlacements(layout.placements);
+      })
+      .catch((caught: unknown) =>
+        reportRuntimeError("Falha ao carregar a ordem dos servidores", caught),
+      );
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const rail = composeRail(servers, folders, placements);
+
+  /**
+   * Grava o arranjo inteiro e adianta o estado local.
+   *
+   * O otimismo é local de propósito: esperar a rede a cada arrasto tornaria o
+   * gesto inutilizável. Se a gravação falhar, o erro aparece e o próximo
+   * carregamento devolve o que o banco tem.
+   */
+  const persist = (next: Array<RailEntry<(typeof servers)[number]>>) => {
+    const flat = flattenRail(next);
+    setFolders((current) =>
+      current.map((folder) => ({
+        ...folder,
+        position:
+          flat.folders.find((entry) => entry.id === folder.id)?.position ??
+          folder.position,
+      })),
+    );
+    setPlacements(
+      flat.servers.map((entry) => ({
+        serverId: entry.id,
+        folderId: entry.folder_id ?? undefined,
+        position: entry.position,
+      })),
+    );
+    void saveServerLayout(flat).catch((caught: unknown) =>
+      reportRuntimeError("Falha ao salvar a ordem dos servidores", caught),
+    );
+  };
+
+  const topIndexOf = (serverId: string) =>
+    rail.findIndex(
+      (entry) => entry.kind === "server" && entry.server.id === serverId,
+    );
+
+  const withoutDragged = () =>
+    rail
+      .map((entry) =>
+        entry.kind === "folder"
+          ? {
+              ...entry,
+              servers: entry.servers.filter((item) => item.id !== dragging),
+            }
+          : entry,
+      )
+      .filter(
+        (entry) => entry.kind !== "server" || entry.server.id !== dragging,
+      );
+
+  /** Reposiciona no topo, tirando de dentro da pasta se estava numa. */
+  const dropOnTop = (targetIndex: number) => {
+    if (!dragging) return;
+    const moved = servers.find((item) => item.id === dragging);
+    if (!moved) return;
+    const from = topIndexOf(dragging);
+    if (from >= 0) {
+      persist(moveEntry(rail, from, targetIndex));
+      return;
+    }
+    const next = withoutDragged();
+    next.splice(Math.min(targetIndex, next.length), 0, {
+      kind: "server",
+      server: moved,
+    });
+    persist(next);
+  };
+
+  /** Soltar um servidor sobre outro cria uma pasta com os dois. */
+  const dropOnServer = async (targetId: string) => {
+    if (!dragging || dragging === targetId) return;
+    const dragged = servers.find((item) => item.id === dragging);
+    const target = servers.find((item) => item.id === targetId);
+    if (!dragged || !target) return;
+    const at = Math.max(0, topIndexOf(targetId));
+    try {
+      const folderId = await createServerFolder("Nova pasta");
+      const folder: ServerFolder = {
+        id: folderId,
+        name: "Nova pasta",
+        position: at,
+      };
+      const next = withoutDragged().filter(
+        (entry) => entry.kind !== "server" || entry.server.id !== targetId,
+      );
+      next.splice(Math.min(at, next.length), 0, {
+        kind: "folder",
+        folder,
+        servers: [target, dragged],
+      });
+      setFolders((current) => [...current, folder]);
+      setOpenFolders((current) => new Set(current).add(folderId));
+      persist(next);
+    } catch (caught) {
+      reportRuntimeError("Falha ao criar a pasta", caught);
+    }
+  };
+
+  /** Soltar dentro de uma pasta que já existe. */
+  const dropIntoFolder = (folderId: string) => {
+    if (!dragging) return;
+    const moved = servers.find((item) => item.id === dragging);
+    if (!moved) return;
+    persist(
+      withoutDragged().map((entry) =>
+        entry.kind === "folder" && entry.folder.id === folderId
+          ? { ...entry, servers: [...entry.servers, moved] }
+          : entry,
+      ),
+    );
+  };
+
+  const dissolveFolder = (folder: ServerFolder) => {
+    void deleteServerFolder(folder.id)
+      .then(() => {
+        setFolders((current) => current.filter((item) => item.id !== folder.id));
+        setPlacements((current) =>
+          current.map((item) =>
+            item.folderId === folder.id
+              ? { ...item, folderId: undefined }
+              : item,
+          ),
+        );
+      })
+      .catch((caught: unknown) =>
+        reportRuntimeError("Falha ao dissolver a pasta", caught),
+      );
+  };
+
+  const serverButton = (
+    server: (typeof servers)[number],
+    inFolder: boolean,
+  ) => (
+    <button
+      key={server.id}
+      className={[
+        "server-avatar",
+        !home && selectedServerId === server.id ? "selected" : "",
+        dragging === server.id ? "dragging" : "",
+        overServer === server.id ? "drop-onto" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      draggable
+      onDragStart={() => setDragging(server.id)}
+      onDragEnd={() => {
+        setDragging(null);
+        setOverServer(null);
+      }}
+      onDragOver={(event) => {
+        if (!dragging || dragging === server.id || inFolder) return;
+        event.preventDefault();
+        setOverServer(server.id);
+      }}
+      onDragLeave={() => setOverServer(null)}
+      onDrop={(event) => {
+        if (inFolder) return;
+        event.preventDefault();
+        event.stopPropagation();
+        setOverServer(null);
+        void dropOnServer(server.id);
+      }}
+      onClick={() => onServer(server.id)}
+      aria-label={server.name}
+      aria-current={!home && selectedServerId === server.id ? "page" : undefined}
+      title={server.name}
+    >
+      <ServerIcon server={server} size={inFolder ? 34 : 44} />
+    </button>
+  );
+
   return (
     <aside className="server-rail">
+      {editingFolder && (
+        <FolderModal
+          folder={editingFolder}
+          onClose={() => setEditingFolder(null)}
+          onSave={(name, color) =>
+            void updateServerFolder(editingFolder.id, { name, color })
+              .then(() =>
+                setFolders((current) =>
+                  current.map((item) =>
+                    item.id === editingFolder.id
+                      ? { ...item, name, color: color ?? undefined }
+                      : item,
+                  ),
+                ),
+              )
+              .catch((caught: unknown) =>
+                reportRuntimeError("Falha ao renomear a pasta", caught),
+              )
+          }
+          onDissolve={() => dissolveFolder(editingFolder)}
+        />
+      )}
       <button
         className={`rail-home ${home ? "active" : ""}`}
         onClick={onHome}
@@ -515,22 +824,86 @@ function ServerRail({
         )}
       </button>
       <div className="rail-divider" />
-      {servers.map((server) => (
-        <button
-          key={server.id}
-          className={`server-avatar ${
-            !home && selectedServerId === server.id ? "selected" : ""
-          }`}
-          onClick={() => onServer(server.id)}
-          aria-label={server.name}
-          aria-current={
-            !home && selectedServerId === server.id ? "page" : undefined
-          }
-          title={server.name}
+      {rail.map((entry, index) => (
+        <div
+          key={entry.kind === "server" ? entry.server.id : entry.folder.id}
+          className="rail-slot"
+          onDragOver={(event) => {
+            if (dragging) event.preventDefault();
+          }}
+          onDrop={(event) => {
+            event.preventDefault();
+            dropOnTop(index);
+          }}
         >
-          <ServerIcon server={server} size={44} />
-        </button>
+          {entry.kind === "server" ? (
+            serverButton(entry.server, false)
+          ) : (
+            <div
+              className={`rail-folder ${
+                openFolders.has(entry.folder.id) ? "open" : ""
+              }`}
+            >
+              <button
+                className="rail-folder-head"
+                style={
+                  entry.folder.color
+                    ? { background: `${entry.folder.color}33` }
+                    : undefined
+                }
+                aria-expanded={openFolders.has(entry.folder.id)}
+                aria-label={`Pasta ${entry.folder.name}, ${entry.servers.length} servidores`}
+                title={`${entry.folder.name} — clique com o botão direito para renomear`}
+                onClick={() =>
+                  setOpenFolders((current) => {
+                    const next = new Set(current);
+                    if (next.has(entry.folder.id)) next.delete(entry.folder.id);
+                    else next.add(entry.folder.id);
+                    return next;
+                  })
+                }
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  setEditingFolder(entry.folder);
+                }}
+                onDragOver={(event) => {
+                  if (dragging) event.preventDefault();
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  dropIntoFolder(entry.folder.id);
+                }}
+              >
+                <span className="rail-folder-preview">
+                  {entry.servers.slice(0, 4).map((server) => (
+                    <ServerIcon key={server.id} server={server} size={14} />
+                  ))}
+                  {entry.servers.length === 0 && (
+                    <em className="rail-folder-empty">vazia</em>
+                  )}
+                </span>
+              </button>
+              {openFolders.has(entry.folder.id) && (
+                <div className="rail-folder-body">
+                  {entry.servers.map((server) => serverButton(server, true))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       ))}
+      {/* Soltar abaixo do último item leva para o fim da barra. */}
+      <div
+        className="rail-drop-end"
+        onDragOver={(event) => {
+          if (dragging) event.preventDefault();
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          dropOnTop(rail.length);
+        }}
+      />
       <button
         className="server-avatar server-add"
         aria-label="Adicionar servidor"
@@ -2645,6 +3018,15 @@ function Composer({
           placeholder={disabledReason || `Mensagem em ${channelName}`}
         />
         <div className="composer-actions">
+          {!blocked && (
+            <VoiceRecorder
+              onReady={(file) => {
+                // Voz vai sozinha, sem legenda: e a mensagem inteira.
+                onSend("", [file], new Set());
+              }}
+              onCancel={() => undefined}
+            />
+          )}
           <button
             disabled={blocked}
             aria-label="GIFs e emoji"
@@ -2870,7 +3252,12 @@ function ChatView({
   const setNotificationSetting = useAppStore(
     (state) => state.setNotificationSetting,
   );
+  const { ask: askConfirm, confirmDialog } = useConfirm();
   const [replyToId, setReplyToId] = useState<string | undefined>(),
+    // Edição acontece no lugar da mensagem. Antes era um `window.prompt`, que
+    // o Chromium do Electron simplesmente não implementa: no desktop o botão
+    // de editar não abria nada e não dava erro nenhum.
+    [editing, setEditing] = useState<{ id: string; text: string } | null>(null),
     [pinsOpen, setPinsOpen] = useState(false),
     [groupSettingsOpen, setGroupSettingsOpen] = useState(false),
     [sendError, setSendError] = useState(""),
@@ -3086,7 +3473,13 @@ function ChatView({
    */
   const listRef = useRef<HTMLDivElement | null>(null);
   const pinnedToBottom = useRef(true);
-  const scrollToEnd = useCallback((behavior: ScrollBehavior = "smooth") => {
+  /**
+   * A descida e instantanea de proposito. Com rolagem suave a lista continua
+   * se movendo depois do envio, e um clique logo em seguida — "Editar",
+   * "Responder", uma reacao — cai na linha errada porque ela saiu do lugar
+   * embaixo do ponteiro.
+   */
+  const scrollToEnd = useCallback((behavior: ScrollBehavior = "auto") => {
     const node = listRef.current;
     if (!node) return;
     node.scrollTo({ top: node.scrollHeight, behavior });
@@ -3116,6 +3509,7 @@ function ChatView({
   };
   return (
     <main className="conversation">
+      {confirmDialog}
       {reactingTo && (
         <ReactionComposer
           onSubmit={(emoji) => submitReaction(reactingTo, emoji)}
@@ -3290,7 +3684,9 @@ function ChatView({
           const author = personFor(message.authorId),
             reply = message.replyToId
               ? messages.find((item) => item.id === message.replyToId)
-              : undefined;
+              : undefined,
+            deleted = Boolean(message.deletedAt),
+            isEditing = editing?.id === message.id;
           return (
             <Fragment key={message.id}>
               {message.id === firstUnreadMessageId && (
@@ -3298,7 +3694,10 @@ function ChatView({
                   <span>Novas mensagens</span>
                 </div>
               )}
-              <article className="message" id={`message-${message.id}`}>
+              <article
+                className={`message ${deleted ? "deleted" : ""}`}
+                id={`message-${message.id}`}
+              >
                 {reply && (
                   <button
                     className="reply-reference"
@@ -3311,8 +3710,19 @@ function ChatView({
                         })
                     }
                   >
-                    ↳ {personFor(reply.authorId).displayName}:{" "}
-                    {reply.text.slice(0, 70)}
+                    <Avatar
+                      person={personFor(reply.authorId)}
+                      size="xs"
+                      online={false}
+                    />
+                    <b>{personFor(reply.authorId).displayName}</b>
+                    <span>
+                      {reply.deletedAt
+                        ? "Mensagem apagada"
+                        : reply.text
+                          ? reply.text.slice(0, 90)
+                          : `${reply.attachments.length} anexo(s)`}
+                    </span>
                   </button>
                 )}
                 <Avatar person={author} size="lg" />
@@ -3321,14 +3731,42 @@ function ChatView({
                     <b>{author.displayName}</b>
                     <span>
                       {new Date(message.createdAt).toLocaleString("pt-BR")}
-                      {message.editedAt ? " · editada" : ""}
+                      {message.editedAt && !deleted ? " · editada" : ""}
                       {message.pinned ? " · fixada" : ""}
                     </span>
                   </div>
-                  {message.text && (
-                    <div className="message-markdown">
-                      <MessageText text={message.text} />
-                    </div>
+                  {deleted && (
+                    <p className="message-tombstone">
+                      <IconTrash size={13} /> Mensagem apagada
+                    </p>
+                  )}
+                  {isEditing ? (
+                    <MessageEditor
+                      value={editing.text}
+                      onChange={(text) => setEditing({ id: message.id, text })}
+                      onCancel={() => setEditing(null)}
+                      onSave={() => {
+                        const text = editing.text.trim();
+                        // Salvar vazio apagaria a mensagem por um caminho que
+                        // não é o de apagar: sem texto e sem anexo o corpo
+                        // ficaria em branco e a linha continuaria viva.
+                        if (!text && message.attachments.length === 0) return;
+                        setEditing(null);
+                        if (text === message.text) return;
+                        edit.mutate(
+                          { messageId: message.id, text },
+                          {
+                            onError: (error) => setSendError(error.message),
+                          },
+                        );
+                      }}
+                    />
+                  ) : (
+                    message.text && (
+                      <div className="message-markdown">
+                        <MessageText text={message.text} />
+                      </div>
+                    )
                   )}
                   {message.attachments.length > 0 && (
                     <div className="message-attachments">
@@ -3383,70 +3821,77 @@ function ChatView({
                     </div>
                   )}
                 </div>
-                <div className="message-actions">
-                  <button
-                    title="Responder"
-                    aria-label="Responder"
-                    onClick={() => setReplyToId(message.id)}
-                  >
-                    <IconReply size={18} />
-                  </button>
-                  <button
-                    title="Reagir"
-                    aria-label="Reagir"
-                    onClick={() => chooseReaction(message.id)}
-                  >
-                    <IconSmile size={18} />
-                  </button>
-                  <button
-                    title={message.pinned ? "Desafixar" : "Fixar"}
-                    aria-label={message.pinned ? "Desafixar" : "Fixar"}
-                    onClick={() =>
-                      pin.mutate(message.id, {
-                        onError: (error) => setSendError(error.message),
-                      })
-                    }
-                  >
-                    <IconPin size={18} />
-                  </button>
-                  {message.authorId === currentUserId && (
-                    <>
-                      <button
-                        title="Editar"
-                        aria-label="Editar"
-                        onClick={() => {
-                          const text = window.prompt(
-                            "Editar mensagem",
-                            message.text,
-                          );
-                          if (text?.trim())
-                            edit.mutate(
-                              {
-                                messageId: message.id,
-                                text: text.trim(),
+                {/* Uma lápide não responde, não reage e não se fixa: só o
+                    que existe ali é o aviso de que a mensagem sumiu. */}
+                {!deleted && (
+                  <div className="message-actions">
+                    <button
+                      title="Responder"
+                      aria-label="Responder"
+                      onClick={() => setReplyToId(message.id)}
+                    >
+                      <IconReply size={18} />
+                    </button>
+                    <button
+                      title="Reagir"
+                      aria-label="Reagir"
+                      onClick={() => chooseReaction(message.id)}
+                    >
+                      <IconSmile size={18} />
+                    </button>
+                    <button
+                      title={message.pinned ? "Desafixar" : "Fixar"}
+                      aria-label={message.pinned ? "Desafixar" : "Fixar"}
+                      onClick={() =>
+                        pin.mutate(message.id, {
+                          onError: (error) => setSendError(error.message),
+                        })
+                      }
+                    >
+                      <IconPin size={18} />
+                    </button>
+                    {message.authorId === currentUserId && (
+                      <>
+                        <button
+                          title="Editar"
+                          aria-label="Editar"
+                          className={isEditing ? "active" : ""}
+                          onClick={() =>
+                            setEditing(
+                              isEditing
+                                ? null
+                                : { id: message.id, text: message.text },
+                            )
+                          }
+                        >
+                          <IconPencil size={18} />
+                        </button>
+                        <button
+                          title="Apagar"
+                          aria-label="Apagar"
+                          onClick={() =>
+                            askConfirm({
+                              title: "Apagar mensagem",
+                              message:
+                                "A mensagem some para todo mundo e fica no lugar como “Mensagem apagada”. Não dá para desfazer.",
+                              confirmLabel: "Apagar",
+                              danger: true,
+                              onConfirm: () => {
+                                if (isEditing) setEditing(null);
+                                remove.mutate(message.id, {
+                                  onError: (error) =>
+                                    setSendError(error.message),
+                                });
                               },
-                              {
-                                onError: (error) => setSendError(error.message),
-                              },
-                            );
-                        }}
-                      >
-                        <IconPencil size={18} />
-                      </button>
-                      <button
-                        title="Apagar"
-                        aria-label="Apagar"
-                        onClick={() =>
-                          remove.mutate(message.id, {
-                            onError: (error) => setSendError(error.message),
-                          })
-                        }
-                      >
-                        <IconTrash size={18} />
-                      </button>
-                    </>
-                  )}
-                </div>
+                            })
+                          }
+                        >
+                          <IconTrash size={18} />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
               </article>
             </Fragment>
           );
@@ -3878,6 +4323,19 @@ function CallView({
     localVideoRef = useRef<HTMLVideoElement | null>(null),
     displayVideoRef = useRef<HTMLVideoElement | null>(null),
     callViewRef = useRef<HTMLElement | null>(null);
+  // A track publicada quando o supressor está ligado é a saída do worklet, não
+  // a do microfone. Sem guardar as duas pontas, parar a publicada deixaria o
+  // microfone aberto — luz acesa na webcam do notebook e o dispositivo preso.
+  const micSourceRef = useRef<{
+    raw: MediaStreamTrack;
+    pipeline: MicPipeline | null;
+  } | null>(null);
+  const voice = useAppStore((state) => state.voice);
+  const setVoice = useAppStore((state) => state.setVoice);
+  // `startSharing` e `getMediaDevice` rodam fora do render — a preferência
+  // precisa ser lida no momento da captura, não a de quando a tela montou.
+  const voiceRef = useRef(voice);
+  voiceRef.current = voice;
   const profiles = useAppStore((state) => state.profiles),
     currentUserId = useAppStore((state) => state.currentUserId),
     currentProfile =
@@ -3895,6 +4353,14 @@ function CallView({
   } = useRtc(channel.id);
   const stopStream = (stream: MediaStream | null) =>
     stream?.getTracks().forEach((track) => track.stop());
+  /** Fecha o worklet e libera o microfone físico. */
+  const stopMicSource = async () => {
+    const current = micSourceRef.current;
+    if (!current) return;
+    micSourceRef.current = null;
+    await current.pipeline?.stop();
+    current.raw.stop();
+  };
   const errorName = (error: unknown) =>
     error instanceof DOMException ? error.name : "";
   const getMediaDevice = async (
@@ -3917,13 +4383,12 @@ function CallView({
       );
       const deviceId =
         requestedDeviceId || (kind === "audio" ? audioInputId : videoInputId);
+      const noiseMode = voiceRef.current.noiseSuppression;
       const audio =
         kind === "audio"
           ? {
               deviceId: deviceId ? { exact: deviceId } : undefined,
-              echoCancellation: true,
-              noiseSuppression: true,
-              autoGainControl: true,
+              ...captureConstraints(noiseMode),
             }
           : false;
       const capture = async (enforceMinimum: boolean) =>
@@ -3959,10 +4424,21 @@ function CallView({
         if (errorName(caught) !== "OverconstrainedError") throw caught;
         requestedStream = await capture(false);
       }
+      // O microfone passa pelo supressor antes de virar track publicada. Se o
+      // worklet não subir, `createMicPipeline` devolve `null` e a track crua
+      // segue adiante — sem supressão, mas com a pessoa audível.
+      let published = requestedStream.getTracks();
+      if (kind === "audio") {
+        const raw = requestedStream.getAudioTracks()[0];
+        if (raw) {
+          await stopMicSource();
+          const pipeline = await createMicPipeline(raw, noiseMode);
+          micSourceRef.current = { raw, pipeline };
+          published = [pipeline?.track ?? raw];
+        }
+      }
       if (!localStreamRef.current) localStreamRef.current = new MediaStream();
-      requestedStream
-        .getTracks()
-        .forEach((track) => localStreamRef.current?.addTrack(track));
+      published.forEach((track) => localStreamRef.current?.addTrack(track));
       setMediaRevision((revision) => revision + 1);
       const videoSettings =
         kind === "video"
@@ -3975,7 +4451,7 @@ function CallView({
             ? `Câmera conectada em ${videoSettings.width}×${videoSettings.height}.`
             : "Câmera conectada.",
       );
-      return requestedStream.getTracks()[0] ?? null;
+      return published[0] ?? null;
     } catch (error) {
       const name = errorName(error);
       // Negar a câmera não pode derrubar a chamada: o áudio continua e a
@@ -4008,6 +4484,7 @@ function CallView({
       localStreamRef.current?.removeTrack(track);
       track.stop();
     });
+    if (kind === "audio") await stopMicSource();
     if (kind === "audio") setAudioInputId(deviceId);
     else setVideoInputId(deviceId);
     // A câmera desligada não deve ser reacendida só por trocar o dispositivo
@@ -4125,6 +4602,7 @@ function CallView({
     // pela página — é justamente o que impede um site de falsificar o seletor.
     // Estas dicas são o que ele aceita: abrir já na aba de janelas, esconder a
     // própria aba do Lili e permitir trocar de fonte sem reiniciar.
+    const withSystemAudio = voiceRef.current.shareSystemAudio;
     const captureViaBrowserPicker = () =>
       navigator.mediaDevices.getDisplayMedia({
         video: {
@@ -4133,34 +4611,68 @@ function CallView({
           height: { ideal: height },
           frameRate: { ideal: selection.frameRate },
         },
-        audio: {
+        // O tratamento de voz **precisa** ficar fora do áudio do sistema: um
+        // jogo ou um vídeo passando por cancelamento de eco e ganho
+        // automático chega do outro lado abafado e com o volume oscilando.
+        audio: withSystemAudio && {
           echoCancellation: false,
           noiseSuppression: false,
           autoGainControl: false,
         },
         selfBrowserSurface: "exclude",
         surfaceSwitching: "include",
-        systemAudio: "include",
+        systemAudio: withSystemAudio ? "include" : "exclude",
       } as DisplayMediaStreamOptions);
+    /**
+     * Captura pelo id do desktopCapturer, com o áudio do sistema junto.
+     *
+     * No Chromium o loopback de áudio só existe como `chromeMediaSource:
+     * "desktop"` **na mesma chamada** que pede o vídeo: pedir só o áudio é
+     * recusado. Por isso a tentativa é feita duas vezes — com e sem áudio — em
+     * vez de capturar as duas coisas em separado. Em Windows o loopback é do
+     * dispositivo de saída inteiro, não da janela escolhida.
+     */
+    const captureViaSourceId = async (sourceId: string, withAudio: boolean) =>
+      navigator.mediaDevices.getUserMedia({
+        audio: withAudio
+          ? // Restrição específica do Chromium/Electron: não existe no tipo
+            // padrão de MediaTrackConstraints.
+            ({
+              mandatory: { chromeMediaSource: "desktop" },
+            } as unknown as MediaTrackConstraints)
+          : false,
+        video: {
+          // @ts-expect-error restrições específicas do Chromium/Electron
+          mandatory: {
+            chromeMediaSource: "desktop",
+            chromeMediaSourceId: sourceId,
+            maxWidth: width,
+            maxHeight: height,
+            maxFrameRate: selection.frameRate,
+          },
+        },
+      });
     try {
       let stream: MediaStream;
       if (selection.sourceId) {
         // No desktop a fonte já foi escolhida no nosso seletor e capturamos
         // direto pelo id do desktopCapturer.
         try {
-          stream = await navigator.mediaDevices.getUserMedia({
-            audio: false,
-            video: {
-              // @ts-expect-error restrições específicas do Chromium/Electron
-              mandatory: {
-                chromeMediaSource: "desktop",
-                chromeMediaSourceId: selection.sourceId,
-                maxWidth: width,
-                maxHeight: height,
-                maxFrameRate: selection.frameRate,
-              },
-            },
-          });
+          try {
+            stream = await captureViaSourceId(
+              selection.sourceId,
+              withSystemAudio,
+            );
+          } catch (audioFailure) {
+            // Placa sem loopback, saída exclusiva, driver que recusa: o vídeo
+            // não pode cair junto. Repete sem o áudio e avisa depois.
+            if (!withSystemAudio) throw audioFailure;
+            console.warn(
+              "Áudio do sistema indisponível; compartilhando só o vídeo",
+              audioFailure,
+            );
+            stream = await captureViaSourceId(selection.sourceId, false);
+          }
         } catch (caught) {
           // Se o Chromium embutido recusar a captura por id, é melhor cair no
           // seletor nativo do que deixar o usuário sem compartilhamento.
@@ -4179,8 +4691,14 @@ function CallView({
         // Cobre também o "parar de compartilhar" do próprio navegador.
         ?.addEventListener("ended", stopSharing, { once: true });
       setSharing(true);
+      const audioShared = stream.getAudioTracks().length > 0;
       setMediaNotice(
-        `Compartilhando ${selection.sourceName ?? "sua tela"} em ${selection.resolution}p · ${selection.frameRate} fps.`,
+        `Compartilhando ${selection.sourceName ?? "sua tela"} em ${selection.resolution}p · ${selection.frameRate} fps` +
+          (audioShared
+            ? " · com áudio do sistema."
+            : withSystemAudio
+              ? " · sem áudio (a fonte escolhida não entrega o som do sistema)."
+              : " · sem áudio."),
       );
     } catch (error) {
       setMediaNotice(
@@ -4195,6 +4713,7 @@ function CallView({
       await leaveRoom();
       stopStream(localStreamRef.current);
       stopStream(displayStreamRef.current);
+      await stopMicSource();
       onLeave();
     } catch (caught) {
       setMediaNotice(
@@ -4261,6 +4780,25 @@ function CallView({
       void displayVideoRef.current.play().catch(() => {});
     }
   }, [sharing, focused]);
+  // Trocar o supressor no meio da chamada precisa recapturar: o filtro é
+  // montado no momento em que a track nasce, e a publicada é a saída dele.
+  const appliedNoiseMode = useRef(voice.noiseSuppression);
+  useEffect(() => {
+    if (appliedNoiseMode.current === voice.noiseSuppression) return;
+    appliedNoiseMode.current = voice.noiseSuppression;
+    if (!localStreamRef.current?.getAudioTracks().length) return;
+    void replaceMediaDevice("audio", audioInputId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voice.noiseSuppression]);
+  // Sair da tela sem passar por "encerrar chamada" (fechar o app, trocar de
+  // canal) também precisa devolver o microfone ao sistema.
+  useEffect(
+    () => () => {
+      void stopMicSource();
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
   useEffect(() => {
     publishStreams(
       [
@@ -5038,6 +5576,10 @@ function CallView({
         <ScreenSharePicker
           quality={shareQuality}
           onQualityChange={setShareQuality}
+          systemAudio={voice.shareSystemAudio}
+          onSystemAudioChange={(shareSystemAudio) =>
+            setVoice({ shareSystemAudio })
+          }
           onCancel={() => setSharePickerOpen(false)}
           onShare={(selection) => void startSharing(selection)}
         />
@@ -7875,6 +8417,32 @@ function MembersSettingsView({ serverId }: { serverId: string }) {
   );
 }
 
+/**
+ * Expiração do convite. O teto é o do banco: `create_invite` corta qualquer
+ * pedido em 10.080 minutos (sete dias), então oferecer "30 dias" aqui daria
+ * um convite que expira em uma semana sem avisar ninguém. "Nunca" é o `null`,
+ * que não passa pelo corte.
+ */
+const INVITE_EXPIRY_OPTIONS: SelectOption[] = [
+  { value: "30", label: "Expira em 30 minutos" },
+  { value: "60", label: "Expira em 1 hora" },
+  { value: "360", label: "Expira em 6 horas" },
+  { value: "720", label: "Expira em 12 horas" },
+  { value: "1440", label: "Expira em 1 dia" },
+  { value: "10080", label: "Expira em 7 dias" },
+  { value: "0", label: "Nunca expira" },
+];
+
+const INVITE_USE_OPTIONS: SelectOption[] = [
+  { value: "1", label: "1 uso" },
+  { value: "5", label: "5 usos" },
+  { value: "10", label: "10 usos" },
+  { value: "25", label: "25 usos" },
+  { value: "50", label: "50 usos" },
+  { value: "100", label: "100 usos" },
+  { value: "0", label: "Usos ilimitados" },
+];
+
 function InvitesSettingsView({ serverId }: { serverId: string }) {
   const invites = useAppStore((state) => state.invites).filter(
       (item) => item.serverId === serverId,
@@ -7922,8 +8490,12 @@ function InvitesSettingsView({ serverId }: { serverId: string }) {
         channels[0]?.id ??
         "",
     ),
-    [minutes, setMinutes] = useState(60),
-    [maxUses, setMaxUses] = useState(10),
+    // "0" é o convite permanente / sem limite de usos. O banco já aceitava
+    // `null` nos dois campos desde sempre; o que faltava era como pedir isso
+    // — os campos numéricos tinham mínimo 1 e nenhum valor significava
+    // "nunca". Zero vira `undefined` na chamada, e `undefined` vira `null`.
+    [minutes, setMinutes] = useState("1440"),
+    [maxUses, setMaxUses] = useState("0"),
     [copiedCode, setCopiedCode] = useState("");
 
   const copyInvite = async (code: string) => {
@@ -7943,14 +8515,20 @@ function InvitesSettingsView({ serverId }: { serverId: string }) {
           <span className="eyebrow">ACESSO AO SERVIDOR</span>
           <h3>Convites</h3>
           <p>
-            Expiração, limite de usos e revogação sincronizados pelo servidor
-            local.
+            Escolha a expiração e o limite de usos. Um convite permanente e
+            sem limite continua valendo até alguém revogá-lo.
           </p>
         </div>
         <button
           className="primary-button"
           disabled={busy || !channelId}
-          onClick={() => void createInvite(channelId, minutes, maxUses)}
+          onClick={() =>
+            void createInvite(
+              channelId,
+              Number(minutes) || undefined,
+              Number(maxUses) || undefined,
+            )
+          }
         >
           Criar convite
         </button>
@@ -7970,25 +8548,18 @@ function InvitesSettingsView({ serverId }: { serverId: string }) {
             label: `#${channel.name}`,
           }))}
         />
-        <label>
-          Expira em
-          <input
-            type="number"
-            min="1"
-            value={minutes}
-            onChange={(event) => setMinutes(Number(event.target.value))}
-          />{" "}
-          min
-        </label>
-        <label>
-          Máx. usos
-          <input
-            type="number"
-            min="1"
-            value={maxUses}
-            onChange={(event) => setMaxUses(Number(event.target.value))}
-          />
-        </label>
+        <Select
+          ariaLabel="Expiração do convite"
+          value={minutes}
+          onChange={setMinutes}
+          options={INVITE_EXPIRY_OPTIONS}
+        />
+        <Select
+          ariaLabel="Limite de usos do convite"
+          value={maxUses}
+          onChange={setMaxUses}
+          options={INVITE_USE_OPTIONS}
+        />
       </div>
       {invites.map((invite) => (
         <div
@@ -8365,6 +8936,8 @@ function ProfilePanel({
     privacySettings = useAppStore((state) => state.privacySettings),
     accessibility = useAppStore((state) => state.accessibility),
     setAccessibility = useAppStore((state) => state.setAccessibility),
+    voice = useAppStore((state) => state.voice),
+    setVoice = useAppStore((state) => state.setVoice),
     setNotificationSetting = useAppStore(
       (state) => state.setNotificationSetting,
     ),
@@ -8921,6 +9494,49 @@ function ProfilePanel({
                 </>
               )}
             </div>
+          </div>
+        </details>
+        <details className="security-details">
+          <summary>Voz e vídeo</summary>
+          <div>
+            <label className="stacked-setting">
+              Supressão de ruído do microfone
+              <Select
+                ariaLabel="Supressão de ruído do microfone"
+                value={voice.noiseSuppression}
+                onChange={(value) =>
+                  setVoice({
+                    noiseSuppression: value as NoiseSuppressionMode,
+                  })
+                }
+                options={NOISE_SUPPRESSION_MODES.map((mode) => ({
+                  value: mode.value,
+                  label: mode.label,
+                }))}
+              />
+              <small>
+                {
+                  NOISE_SUPPRESSION_MODES.find(
+                    (mode) => mode.value === voice.noiseSuppression,
+                  )?.hint
+                }
+              </small>
+            </label>
+            <label className="check-setting">
+              <input
+                type="checkbox"
+                checked={voice.shareSystemAudio}
+                onChange={(event) =>
+                  setVoice({ shareSystemAudio: event.target.checked })
+                }
+              />
+              Compartilhar o áudio do computador junto com a tela
+            </label>
+            <small>
+              O filtro roda nesta máquina, em WebAssembly: nenhum áudio é
+              enviado a serviço nenhum para ser processado. Trocar o modo
+              durante uma chamada recaptura o microfone.
+            </small>
           </div>
         </details>
         <details className="security-details">

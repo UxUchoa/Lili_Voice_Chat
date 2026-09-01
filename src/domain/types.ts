@@ -216,4 +216,10 @@ export interface MessageView extends MessagePayload {
   pinned: boolean;
   createdAt: string;
   editedAt?: string;
+  /**
+   * Quando a mensagem foi apagada. A linha continua na lista como lápide
+   * ("Mensagem apagada") em vez de sumir: sem ela, uma resposta passava a
+   * apontar para o nada e quem estava lendo não entendia o buraco.
+   */
+  deletedAt?: string;
 }

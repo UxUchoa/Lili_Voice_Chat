@@ -137,18 +137,39 @@ interface MessageRow {
   mention_recipient_ids: string[] | null;
   created_at: string;
   edited_at: string | null;
+  deleted_at: string | null;
   message_reactions?: Array<{ user_id: string; emoji: string }>;
   message_pins?: Array<{ pinned_at: string }> | { pinned_at: string } | null;
   message_attachments?: AttachmentRow[];
 }
 
 function toMessageView(row: MessageRow): MessageView {
+  const deletedAt = row.deleted_at ?? undefined;
   const reactions: Record<string, string[]> = {};
   for (const reaction of row.message_reactions ?? [])
     reactions[reaction.emoji] = [
       ...(reactions[reaction.emoji] ?? []),
       reaction.user_id,
     ];
+  // Uma lápide não carrega conteúdo: o corpo já sai vazio do banco, mas
+  // reação, anexo e menção continuariam ali e apareceriam pendurados numa
+  // mensagem que não existe mais.
+  if (deletedAt)
+    return {
+      version: 1,
+      text: "",
+      mentions: [],
+      reactions: {},
+      attachments: [],
+      id: row.id,
+      channelId: row.channel_id,
+      authorId: row.author_id,
+      senderDeviceId: row.sender_device_id ?? undefined,
+      replyToId: row.reply_to_id ?? undefined,
+      pinned: false,
+      createdAt: row.created_at,
+      deletedAt,
+    };
   return {
     version: 1,
     text: row.body,
@@ -181,7 +202,8 @@ export async function listMessages(channelId: string): Promise<MessageView[]> {
       .from("messages")
       .select(MESSAGE_SELECT)
       .eq("channel_id", channelId)
-      .is("deleted_at", null)
+      // As apagadas vêm junto de propósito: viram lápide na lista. O corpo já
+      // foi zerado no momento da exclusão, então nada do conteúdo trafega.
       .order("created_at", { ascending: true })
       .order("id", { ascending: true })
       .range(from, to);

@@ -181,9 +181,17 @@ a:focus-visible,
   letter-spacing: -0.04em;
   min-width: 160px;
 }
+/*
+ * A marca some quando é desenhada pequena: o círculo é um traço fino sobre
+ * fundo transparente, e a 26px num cabeçalho escuro ele vira um borrão. Aqui
+ * ela ocupa quase toda a altura da barra de título e ganha um fundo próprio,
+ * que é o que dá contorno ao traço.
+ */
 .brand img {
-  width: 26px;
-  height: 26px;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  border-radius: 10px;
   object-fit: contain;
 }
 .brand-compact {
@@ -793,6 +801,11 @@ a:focus-visible,
   border-radius: inherit;
   object-fit: cover;
 }
+.avatar-xs {
+  width: 16px;
+  height: 16px;
+  font-size: 7px;
+}
 .avatar-sm {
   width: 28px;
   height: 28px;
@@ -989,10 +1002,20 @@ a:focus-visible,
   color: var(--muted);
   font-size: 12px;
 }
+/*
+ * Grade de duas colunas — avatar e corpo — porque a citação da resposta
+ * precisa ocupar a linha inteira **acima** das duas. Enquanto isto era um
+ * `display: flex`, o `grid-column: 2` de .reply-reference não valia nada e a
+ * citação virava um terceiro item na mesma linha, espremida à esquerda do
+ * avatar. É o "reply esquisito" que se via na tela.
+ */
 .message {
   min-height: 70px;
-  display: flex;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 12px;
+  row-gap: 2px;
+  align-items: start;
   padding: 12px 10px;
   margin: 0 -10px;
   border-radius: 9px;
@@ -1089,6 +1112,17 @@ a:focus-visible,
   height: 22px;
   background: transparent;
   color: var(--muted);
+}
+.message-actions button:hover {
+  color: white;
+}
+.message-actions button.active {
+  color: var(--yellow);
+}
+/* A barra some no hover, e some junto com ele; enquanto a mensagem está sendo
+   editada ela precisa continuar visível para o lápis marcado fazer sentido. */
+.message:has(.message-editor) .message-actions {
+  display: flex;
 }
 .attachment {
   max-width: 300px;
@@ -3008,13 +3042,107 @@ a:focus-visible,
   border-color: rgba(251, 198, 5, 0.4);
   background: rgba(251, 198, 5, 0.1);
 }
+/*
+ * Citação da mensagem respondida: linha inteira, acima do avatar e do corpo.
+ * O recuo à esquerda e o traço curvo repetem a leitura do Discord — a original
+ * em cima, a resposta logo abaixo.
+ */
 .reply-reference {
-  grid-column: 2;
-  justify-self: start;
-  margin-bottom: 3px;
+  grid-column: 1 / -1;
+  justify-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 2px 20px;
+  padding: 0;
   color: var(--muted);
   background: transparent;
+  font-size: 11px;
+  text-align: left;
+}
+.reply-reference::before {
+  content: "";
+  width: 26px;
+  height: 9px;
+  flex: 0 0 auto;
+  margin-top: 7px;
+  border-left: 2px solid var(--line);
+  border-top: 2px solid var(--line);
+  border-top-left-radius: 7px;
+}
+.reply-reference b {
+  color: var(--primary);
+  font-weight: 600;
+}
+.reply-reference span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reply-reference:hover b,
+.reply-reference:hover span {
+  color: white;
+}
+/* Lápide: a mensagem sumiu, mas o lugar dela continua legível na conversa. */
+.message.deleted {
+  min-height: 0;
+}
+.message-tombstone {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+}
+.message-tombstone svg {
+  flex: 0 0 auto;
+  opacity: 0.7;
+}
+.message-editor {
+  margin-top: 6px;
+}
+.message-editor textarea {
+  width: 100%;
+  min-height: 38px;
+  max-height: 320px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: #d9d5d7;
+  background: var(--surface-2);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.55;
+  resize: none;
+}
+.message-editor textarea:focus-visible {
+  outline: none;
+  border-color: var(--brand);
+}
+.message-editor-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  color: var(--muted);
   font-size: 10px;
+}
+.message-editor-hint span:last-child {
+  margin-left: auto;
+}
+.link-button {
+  padding: 0;
+  border: 0;
+  color: var(--yellow);
+  background: transparent;
+  font-size: 10px;
+  cursor: pointer;
+}
+.link-button:hover {
+  text-decoration: underline;
 }
 .replying-bar,
 .composer-error,
@@ -3122,8 +3250,9 @@ a:focus-visible,
 .role-toolbar,
 .override-selectors,
 .invite-controls {
-  display: flex;
-  align-items: end;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  align-items: center;
   gap: 10px;
 }
 .role-toolbar label {
@@ -3282,19 +3411,9 @@ a:focus-visible,
   border-radius: 8px;
   background: var(--surface-2);
 }
-.invite-controls label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--muted);
-  font-size: 10px;
-}
-.invite-controls input {
-  width: 75px;
-}
 .invite-row {
   display: grid;
-  grid-template-columns: minmax(150px, 1fr) 2fr auto;
+  grid-template-columns: minmax(150px, 1fr) 2fr auto auto;
   align-items: center;
   gap: 12px;
   padding: 10px 0;
@@ -3906,6 +4025,20 @@ a:focus-visible,
   color: white;
   background: var(--surface-2);
 }
+.stacked-setting {
+  display: grid;
+  gap: 6px;
+  color: var(--secondary);
+  font-size: 10px;
+  font-weight: 600;
+}
+.stacked-setting small,
+.security-details > div > small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.45;
+}
 .check-setting {
   display: flex !important;
   grid-template-columns: auto 1fr;
@@ -4487,6 +4620,12 @@ a:focus-visible,
 .share-quality-panel .share-segmented {
   width: 100%;
   justify-content: space-between;
+}
+.share-quality-hint {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
 }
 .share-quality-panel .share-segmented button {
   flex: 1;
@@ -5413,4 +5552,308 @@ button svg,
 }
 .category-delete-target {
   padding: 0 10px 10px 34px;
+}
+
+/* Barra de servidores: ordem e pastas — itens 6 e 7. */
+.rail-slot,
+.rail-drop-end {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: none;
+}
+/* A area de soltura no fim precisa de altura para existir como alvo, mas nao
+   pode empurrar os botoes de baixo quando ninguem esta arrastando. */
+.rail-drop-end {
+  width: 48px;
+  height: 8px;
+}
+.server-avatar.dragging {
+  opacity: 0.4;
+}
+/* O anel diz "solta aqui e vira pasta", que e diferente de "solta nesta
+   posicao" — por isso o destaque e no proprio icone, nao entre eles. */
+.server-avatar.drop-onto {
+  outline: 2px dashed var(--brand);
+  outline-offset: 3px;
+}
+.rail-folder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.rail-folder-head {
+  width: 48px;
+  height: 48px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: var(--surface-2);
+  color: var(--secondary);
+  cursor: pointer;
+  transition: 0.18s ease;
+}
+.rail-folder-head:hover,
+.rail-folder.open .rail-folder-head {
+  border-radius: 12px;
+  color: var(--primary);
+}
+.rail-folder-preview {
+  display: grid;
+  grid-template-columns: repeat(2, 14px);
+  gap: 3px;
+  place-content: center;
+}
+.rail-folder-empty {
+  grid-column: span 2;
+  color: var(--muted);
+  font-size: 9px;
+  font-style: normal;
+}
+.rail-folder-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+}
+.rail-folder-body .server-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+}
+
+/* Modal da pasta. */
+.folder-modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.folder-modal-field span {
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.folder-modal-field input {
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--primary);
+  font-size: 14px;
+}
+.folder-modal-field input:focus {
+  border-color: var(--brand);
+  outline: none;
+}
+.folder-modal-colors {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  padding: 0;
+  border: 0;
+}
+.folder-modal-colors legend {
+  padding: 0 0 8px;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.folder-modal-colors label {
+  cursor: pointer;
+}
+.folder-modal-colors input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.folder-swatch {
+  display: block;
+  width: 24px;
+  height: 24px;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  background: var(--surface-3);
+}
+.folder-modal-colors input:checked + .folder-swatch {
+  border-color: var(--primary);
+}
+.folder-modal-colors input:focus-visible + .folder-swatch {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+.folder-modal-actions {
+  flex-wrap: wrap;
+}
+.folder-modal-spacer {
+  flex: 1;
+}
+.folder-modal-note {
+  display: block;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* Mensagem de voz — item 22.
+   O <audio controls> nativo e desenhado pelo navegador e nao aceita CSS: no
+   Chromium ele aparece como uma barra clara dentro desta interface escura. */
+.voice-record-start {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  font-size: 16px;
+  cursor: pointer;
+}
+.voice-record-start:hover {
+  background: var(--surface-3);
+  color: var(--primary);
+}
+.voice-recorder {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+  font-size: 12px;
+}
+.voice-recorder-dot {
+  width: 9px;
+  height: 9px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--brand);
+  animation: voice-pulse 1s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .voice-recorder-dot {
+    animation: none;
+  }
+}
+@keyframes voice-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+.voice-recorder-clock {
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+}
+.voice-recorder-bar {
+  flex: 1;
+  min-width: 60px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.voice-recorder-bar i {
+  display: block;
+  height: 100%;
+  background: var(--brand);
+}
+.voice-recorder-error {
+  flex: 1;
+  color: var(--brand);
+}
+
+.voice-player {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 420px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.voice-player-toggle {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--brand);
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+.voice-player-toggle:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.voice-player-track {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 20px;
+  display: grid;
+  place-items: center;
+}
+/* O range fica por cima e invisivel: ele continua sendo o controle real, com
+   teclado e leitor de tela, e a barra desenhada abaixo e so a aparencia. */
+.voice-player-track input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.voice-player-track input:focus-visible + .voice-player-fill {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+}
+.voice-player-fill {
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.voice-player-fill i {
+  display: block;
+  height: 100%;
+  background: var(--brand);
+}
+.voice-player-time {
+  flex: none;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.voice-player-speed {
+  flex: none;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: var(--surface-3);
+  color: var(--secondary);
+  font-size: 10px;
+  cursor: pointer;
+}
+.voice-player-speed:hover {
+  color: var(--primary);
+}
+.voice-player-error {
+  flex-basis: 100%;
+  color: var(--brand);
+  font-size: 11px;
 }

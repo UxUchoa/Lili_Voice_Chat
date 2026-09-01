@@ -35,9 +35,11 @@
     "desktop:smoke": "electron scripts/test-desktop-smoke.mjs",
     "desktop:prod": "concurrently -k -n vite,electron \"vite --mode production --host 127.0.0.1\" \"npm:electron\"",
     "desktop:dist": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-desktop.ps1",
-    "deploy:supabase": "node scripts/deploy-supabase.mjs"
+    "deploy:supabase": "node scripts/deploy-supabase.mjs",
+    "logo": "electron scripts/build-logo.mjs"
   },
   "dependencies": {
+    "@sapphi-red/web-noise-suppressor": "^0.4.0",
     "@supabase/supabase-js": "^2.112.4",
     "@tanstack/react-query": "^5.102.3",
     "@vitejs/plugin-react": "latest",

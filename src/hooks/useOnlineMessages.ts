@@ -240,9 +240,20 @@ export function useOnlineMessages(channelId: string, enabled = true) {
           .eq("message_id", messageId);
         if (metadataError) throw metadataError;
       }
+      // O corpo vai junto. A linha continua existindo para virar lápide na
+      // conversa, e guardar o texto de uma mensagem que a pessoa apagou seria
+      // manter exatamente o que ela pediu para sumir.
       const { error } = await supabase
         .from("messages")
-        .update({ deleted_at: new Date().toISOString() })
+        .update({
+          deleted_at: new Date().toISOString(),
+          body: "",
+          mention_user_ids: [],
+          mention_role_ids: [],
+          mention_here_recipient_ids: [],
+          mentions_everyone: false,
+          mentions_here: false,
+        })
         .eq("id", messageId);
       if (error) throw error;
     },

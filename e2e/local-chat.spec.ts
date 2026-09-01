@@ -1,7 +1,13 @@
 import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { createClient } from "@supabase/supabase-js";
-import { expect, test, type BrowserContext, type Page } from "@playwright/test";
+import {
+  expect,
+  test,
+  type BrowserContext,
+  type Locator,
+  type Page,
+} from "@playwright/test";
 import {
   chooseInSelect,
   finishOnlineLogin,
@@ -28,6 +34,26 @@ const unwrap = async <T>(
   if (result.error) throw new Error(`${label}: ${result.error.message}`);
   return result.data;
 };
+
+/**
+ * Edita uma mensagem pela caixa que abre no lugar dela.
+ *
+ * Antes isto era um `window.prompt` aceito por `page.once("dialog")`. O
+ * Chromium do Playwright implementa `prompt`; o do Electron não — o teste
+ * passava e o desktop ficava com um botão de editar que não abria nada.
+ */
+async function editMessage(page: Page, row: Locator, text: string) {
+  await row.hover();
+  await row.getByTitle("Editar").click();
+  // A caixa é procurada na página, e não dentro de `row`: enquanto se edita, o
+  // texto sai do corpo e vai para o `value` do textarea, então um localizador
+  // filtrado por texto deixa de casar com a própria linha.
+  const field = page.getByLabel("Editar mensagem");
+  await expect(field).toBeVisible();
+  await field.fill(text);
+  await field.press("Enter");
+  await expect(field).toHaveCount(0);
+}
 
 async function login(page: Page, email: string, password: string) {
   await page.goto("/");
@@ -422,11 +448,7 @@ test("duas sessões isoladas trocam mensagens no mesmo canal", async ({
     const ownerAttachmentRow = ownerPage
       .locator(".message")
       .filter({ hasText: attachmentMessage });
-    await ownerAttachmentRow.hover();
-    ownerPage.once("dialog", (dialog) =>
-      dialog.accept(editedAttachmentMessage),
-    );
-    await ownerAttachmentRow.getByTitle("Editar").click();
+    await editMessage(ownerPage, ownerAttachmentRow, editedAttachmentMessage);
     const editedAttachmentRow = memberPage
       .locator(".message")
       .filter({ hasText: editedAttachmentMessage });
@@ -437,11 +459,11 @@ test("duas sessões isoladas trocam mensagens no mesmo canal", async ({
     const ownerEditedAttachmentRow = ownerPage
       .locator(".message")
       .filter({ hasText: editedAttachmentMessage });
-    await ownerEditedAttachmentRow.hover();
-    ownerPage.once("dialog", (dialog) =>
-      dialog.accept(twiceEditedAttachmentMessage),
+    await editMessage(
+      ownerPage,
+      ownerEditedAttachmentRow,
+      twiceEditedAttachmentMessage,
     );
-    await ownerEditedAttachmentRow.getByTitle("Editar").click();
     const twiceEditedAttachmentRow = memberPage
       .locator(".message")
       .filter({ hasText: twiceEditedAttachmentMessage });
@@ -513,9 +535,7 @@ test("duas sessões isoladas trocam mensagens no mesmo canal", async ({
       "localizar mensagem com menção editável",
     );
     const mentionRemovedMessage = `menção-removida-${runId}`;
-    await editableMentionRow.hover();
-    ownerPage.once("dialog", (dialog) => dialog.accept(mentionRemovedMessage));
-    await editableMentionRow.getByTitle("Editar").click();
+    await editMessage(ownerPage, editableMentionRow, mentionRemovedMessage);
     await expect(
       memberPage.getByText(mentionRemovedMessage, { exact: true }),
     ).toBeVisible({ timeout: 30_000 });
@@ -645,10 +665,23 @@ test("duas sessões isoladas trocam mensagens no mesmo canal", async ({
     await expect(deleteRow).toBeVisible();
     await deleteRow.hover();
     await deleteRow.getByTitle("Apagar").click();
+    const apagarDialog = ownerPage.getByRole("alertdialog", {
+      name: "Apagar mensagem",
+    });
+    await expect(apagarDialog).toBeVisible({ timeout: 20_000 });
+    await apagarDialog.getByRole("button", { name: "Apagar" }).click();
+    // O texto some dos dois lados, mas a linha continua na conversa como
+    // lápide — é isso que evita a resposta órfã apontando para um buraco.
     await expect(deleteRow).toHaveCount(0, { timeout: 20_000 });
+    await expect(
+      ownerPage.locator(".message.deleted").last(),
+    ).toContainText("Mensagem apagada", { timeout: 20_000 });
     await expect(
       memberPage.getByText(deleteMessage, { exact: true }),
     ).toHaveCount(0, { timeout: 30_000 });
+    await expect(
+      memberPage.locator(".message.deleted").last(),
+    ).toContainText("Mensagem apagada", { timeout: 30_000 });
     await expect
       .poll(async () => {
         const result = await ownerApi
@@ -923,8 +956,12 @@ test("duas sessões isoladas trocam mensagens no mesmo canal", async ({
 
     await login(memberPage, memberEmail, password);
     await openServer(memberPage, serverId);
+    // Escopado ao corpo: a citação da resposta repete o texto da mensagem
+    // original acima dela, então o mesmo texto exato existe em dois lugares.
     await expect(
-      memberPage.getByText(firstMessage, { exact: true }),
+      memberPage.locator(".message-body").getByText(firstMessage, {
+        exact: true,
+      }),
     ).toBeVisible({ timeout: 30_000 });
     await expect(
       memberPage.getByText(attachmentName, { exact: true }),
