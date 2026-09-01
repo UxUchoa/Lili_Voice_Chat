@@ -8,6 +8,8 @@ import {
   isAttachmentExpired,
 } from "../domain/attachments";
 import { MediaLightbox } from "./MediaLightbox";
+import { VoicePlayer } from "./VoicePlayer";
+import { isVoiceMessage } from "../domain/voiceMessage";
 
 type Attachment = MessagePayload["attachments"][number];
 
@@ -191,6 +193,19 @@ export function MessageAttachment({
       </div>
     ) : (
       content
+    );
+
+  // Mensagem de voz tem player proprio: a barra generica de audio nao mostra
+  // velocidade nem trata a duracao ausente que o `MediaRecorder` deixa no
+  // cabecalho. Audio que a pessoa subiu como arquivo continua no caminho comum.
+  if (isVoiceMessage(attachment))
+    return withRehide(
+      <VoicePlayer
+        name={attachment.name}
+        onResolveUrl={async () =>
+          URL.createObjectURL(await onOpen(attachment))
+        }
+      />,
     );
 
   if (kind === "image" || kind === "video" || kind === "audio") {
