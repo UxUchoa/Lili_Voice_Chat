@@ -171,10 +171,9 @@ sozinho quando o UDP direto falha, e forçar relay em todo mundo só adiciona um
 salto. O plano gratuito tem teto de minutos e de participantes simultâneos —
 confira antes de abrir para um grupo grande.
 
-A mídia **não** é cifrada ponta a ponta: o SFU recebe os pacotes decifrados e
-consegue abri-los. Quem hospeda o LiveKit tem acesso ao áudio e ao vídeo da
-chamada — leve isso em conta ao escolher entre o serviço gerenciado e o
-auto-hospedado.
+O SFU processa a mídia em claro, então quem hospeda o LiveKit é superfície de
+confiança da chamada. É o critério que costuma decidir entre o serviço
+gerenciado e o auto-hospedado.
 
 ### Alternativa: auto-hospedado
 

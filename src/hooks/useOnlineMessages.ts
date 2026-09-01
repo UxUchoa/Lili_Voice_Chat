@@ -119,7 +119,7 @@ export function useOnlineMessages(channelId: string, enabled = true) {
     retryDelay: (attempt) => Math.min(1_000 * 2 ** attempt, 8_000),
   });
 
-  // Uma falha ao decifrar o histórico é o tipo de erro que o usuário só vê
+  // Uma falha ao carregar o histórico é o tipo de erro que o usuário só vê
   // como um aviso genérico; o detalhe técnico precisa chegar ao console.
   useEffect(() => {
     if (query.error)

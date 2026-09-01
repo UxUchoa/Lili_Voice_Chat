@@ -45,16 +45,17 @@ Cliente Web + Electron para mensagens, áudio, vídeo e compartilhamento de tela
 - Conta sem login por 90 dias vira lápide: acesso e identidade destruídos,
   conversa preservada. Servidor órfão passa para o administrador mais antigo.
 - Supabase Auth, PostgreSQL, RLS, RPCs transacionais, Realtime, Storage privado e Edge Functions.
-- **Sem criptografia ponta a ponta.** Mensagens e anexos são gravados legíveis:
-  quem controla o banco lê o conteúdo. O que decide o acesso é a autenticação
-  do Supabase mais as políticas de RLS, que exigem participação no canal para
-  ler e permissão de escrita para enviar. O transporte é cifrado (HTTPS para a
-  API e DTLS-SRTP para a mídia), o que protege contra quem está no caminho da
-  rede — não contra o servidor.
-- LiveKit SFU para áudio, vídeo e tela, com TURN UDP/TLS configurável. A mídia
-  é decifrável pelo SFU.
+- Controle de acesso por autenticação do Supabase mais políticas de RLS, que
+  exigem participação no canal para ler e permissão de escrita para enviar. A
+  regra é aplicada no banco, a cada consulta. Transporte cifrado com HTTPS na
+  API e DTLS-SRTP na mídia.
+- LiveKit SFU para áudio, vídeo e tela, com TURN UDP/TLS configurável.
+- Nota para quem opera a instância: o conteúdo é armazenado e roteado em claro,
+  então banco e SFU são superfícies de confiança. Trate acesso administrativo,
+  retenção e tratamento de dados na política de privacidade e nos controles
+  operacionais — não há camada criptográfica que os substitua.
 - Push Web Push/VAPID com preferências `ALL`, `MENTIONS` e `NONE`, fila atômica, backoff e payload genérico sem conteúdo.
-- Notificação foreground nativa/Web após decisão de entrega no banco e descriptografia local; escopos GLOBAL/SERVER/CHANNEL e silêncio temporário.
+- Notificação foreground nativa/Web após decisão de entrega no banco; escopos GLOBAL/SERVER/CHANNEL e silêncio temporário.
 - GDM com escolha de membros, nome, ícone privado e gestão de acesso; sessões Auth revogáveis e dashboard de quota real DB/Storage.
 - Electron com sandbox, `contextIsolation`, IPC validado, DPAPI via `safeStorage`, NSIS, tray e `electron-updater`.
 - Workflow de release que exige certificado válido e publica instalador, blockmap e metadata no GitHub Releases.

@@ -5,7 +5,7 @@ export const ATTACHMENT_MAX_BYTES = 100 * 1024 * 1024;
 export const ATTACHMENT_TTL_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Acima disto a prévia não é carregada sozinha: decifrar exige baixar o
+ * Acima disto a prévia não é carregada sozinha: exibir exige baixar o
  * arquivo inteiro, e não vale gastar a banda de quem só está lendo o histórico.
  */
 export const ATTACHMENT_AUTOPLAY_MAX_BYTES = 8 * 1024 * 1024;

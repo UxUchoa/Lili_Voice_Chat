@@ -4,7 +4,7 @@ import { MessagePipelineError, runStage } from "./pipelineTrace";
 describe("runStage", () => {
   it("devolve o valor quando o estágio passa", async () => {
     await expect(
-      runStage("SEND", "ENCRYPTION", { channelId: "c" }, async () => "ok"),
+      runStage("SEND", "CONVERSATION_RESOLVED", { channelId: "c" }, async () => "ok"),
     ).resolves.toBe("ok");
   });
 
@@ -33,7 +33,7 @@ describe("runStage", () => {
 
     const caught = await runStage(
       "RECEIVE",
-      "DECRYPTION",
+      "ROWS_FETCHED",
       {},
       async () => {
         throw new DOMException("", "OperationError");
@@ -41,7 +41,7 @@ describe("runStage", () => {
     ).catch((error: unknown) => error);
 
     expect((caught as Error).message).toBe(
-      "RECEIVE_FAILED_AT=DECRYPTION: falha sem mensagem do provedor",
+      "RECEIVE_FAILED_AT=ROWS_FETCHED: falha sem mensagem do provedor",
     );
   });
 
@@ -49,7 +49,7 @@ describe("runStage", () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const inner = new MessagePipelineError(
       "SEND",
-      "ENCRYPTION",
+      "CONVERSATION_RESOLVED",
       {},
       new Error("raiz"),
     );
@@ -66,7 +66,7 @@ describe("runStage", () => {
 
     await runStage(
       "SEND",
-      "ENCRYPTION",
+      "ATTACHMENTS_UPLOADED",
       { channelId: "canal", deviceId: "disp" },
       async () => {
         throw new Error("chave-secreta-nao-pode-vazar");

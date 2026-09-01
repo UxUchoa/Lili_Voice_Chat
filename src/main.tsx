@@ -3062,11 +3062,10 @@ function ChatView({
               : `Bem-vindo ao #${channel.name}!`}
           </h2>
           <p>
-            As mensagens ficam no servidor e o acesso é restrito aos
-            participantes desta conversa.
+            Só quem participa desta conversa tem acesso às mensagens.
           </p>
         </div>
-        {isLoading && <p className="loading-copy">Decifrando mensagens…</p>}
+        {isLoading && <p className="loading-copy">Carregando mensagens…</p>}
         {messagesFailed && (
           <p className="composer-error" role="alert">
             Não foi possível sincronizar as mensagens
@@ -3081,7 +3080,7 @@ function ChatView({
             onClick={() => void fetchNextPage()}
           >
             {isFetchingNextPage
-              ? "Decifrando histórico…"
+              ? "Carregando histórico…"
               : "Carregar mensagens anteriores"}
           </button>
         )}
@@ -9083,10 +9082,10 @@ function HelpPanel({ onClose }: { onClose: () => void }) {
           </div>
         </div>
         <p className="help-security">
-          🔒 O acesso é controlado pela sua conta: só participantes do canal
-          leem as mensagens, e as regras valem no próprio banco. O transporte é
-          cifrado (HTTPS e DTLS-SRTP). Não há criptografia ponta a ponta — o
-          servidor consegue ler o conteúdo das mensagens e dos anexos.
+          🔒 Só participantes do canal leem as mensagens, e essa regra é
+          aplicada no próprio banco, a cada consulta. A comunicação com o
+          servidor é cifrada (HTTPS e DTLS-SRTP). O tratamento dos seus dados
+          está descrito na política de privacidade.
         </p>
       </section>
     </div>

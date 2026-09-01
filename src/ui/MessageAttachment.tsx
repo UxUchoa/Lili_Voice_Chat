@@ -89,7 +89,7 @@ export function MessageAttachment({
   };
 
   // Arquivos pequenos abrem sozinhos; os grandes esperam um clique, porque
-  // decifrar exige baixar o arquivo inteiro.
+  // exibir exige baixar o arquivo inteiro.
   const previewable = kind !== "file" && !expired;
   const autoLoad =
     previewable && attachment.size <= ATTACHMENT_AUTOPLAY_MAX_BYTES;

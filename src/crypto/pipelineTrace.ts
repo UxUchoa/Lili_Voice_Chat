@@ -1,37 +1,24 @@
 /**
  * Diagnóstico por estágio do caminho de uma mensagem.
  *
- * Uma falha de envio e uma falha de decifra são problemas diferentes, mas na
+ * Uma falha de envio e uma falha de leitura são problemas diferentes, mas na
  * interface as duas viravam a mesma mensagem genérica — e a investigação
  * começava adivinhando. Aqui cada etapa é nomeada, e o erro carrega **onde**
- * parou: `SEND_FAILED_AT=ENCRYPTION` é uma pista; "falha ao enviar" não é.
+ * parou: `SEND_FAILED_AT=DATABASE_INSERT` é uma pista; "falha ao enviar" não
+ * é.
  *
- * Nada de sensível entra nestes registros. Chave, segredo, texto em claro e
- * token não aparecem nem truncados: o que ajuda a depurar é o identificador e
- * o estágio, e é só isso que sai daqui.
+ * Nada de sensível entra nestes registros: nem o texto da mensagem, nem token
+ * de sessão. O que ajuda a depurar é o identificador e o estágio, e é só isso
+ * que sai daqui.
  */
 
 export const SEND_STAGES = [
   "CONVERSATION_RESOLVED",
-  "GROUP_RESOLVED",
-  "RECIPIENTS_RECONCILED",
-  "ATTACHMENTS_ENCRYPTED",
   "ATTACHMENTS_UPLOADED",
-  "ENCRYPTION",
-  "STATE_PERSISTED",
   "DATABASE_INSERT",
-  "ATTACHMENT_METADATA",
-  "CACHE_WRITTEN",
 ] as const;
 
-export const RECEIVE_STAGES = [
-  "GROUP_RESOLVED",
-  "EVENTS_PROCESSED",
-  "ROWS_FETCHED",
-  "CACHE_LOOKUP",
-  "DECRYPTION",
-  "RENDERED",
-] as const;
+export const RECEIVE_STAGES = ["ROWS_FETCHED", "RENDERED"] as const;
 
 export type SendStage = (typeof SEND_STAGES)[number];
 export type ReceiveStage = (typeof RECEIVE_STAGES)[number];
