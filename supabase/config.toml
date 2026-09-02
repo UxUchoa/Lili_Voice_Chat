@@ -70,6 +70,12 @@ verify_jwt = true
 [functions.livekit-moderate]
 verify_jwt = true
 
+# Busca de GIFs. Exige sessão: sem isto o endereço seria um proxy aberto para o
+# Giphy, gastando a nossa cota, para quem descobrisse a URL. A função ainda
+# confere o usuário por conta própria — o gateway só barra o que nem token tem.
+[functions.gifs]
+verify_jwt = true
+
 [functions.push-dispatch]
 verify_jwt = false
 

@@ -27,11 +27,6 @@ export const onlineConfig = Object.freeze({
   forceTurn: import.meta.env.VITE_FORCE_TURN === "true",
   vapidPublicKey: import.meta.env.VITE_VAPID_PUBLIC_KEY?.trim() ?? "",
   /**
-   * Chave da API de GIFs (Tenor v2). Sem ela o seletor abre explicando o que
-   * falta em vez de quebrar: nenhuma outra parte do app depende disto.
-   */
-  tenorApiKey: import.meta.env.VITE_TENOR_API_KEY?.trim() ?? "",
-  /**
    * Onde o aplicativo vive na web. Vazio só em build sem `VITE_SITE_URL`
    * servido por um esquema que não é http(s) — o validador de
    * `npm run build:web` recusa esse caso quando o alvo é o desktop.

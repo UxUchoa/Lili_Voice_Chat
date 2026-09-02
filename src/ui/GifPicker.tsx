@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { IconSearch } from "./icons";
 import {
+  GifNotConfiguredError,
   featuredGifs,
   gifCategories,
-  gifSearchEnabled,
   searchGifs,
   type GifCategory,
   type GifResult,
@@ -22,7 +23,12 @@ export function GifPicker({
   const [results, setResults] = useState<GifResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const enabled = useMemo(gifSearchEnabled, []);
+  /**
+   * A chave vive no servidor, então o cliente não tem como saber de antemão se
+   * a busca está configurada — ele descobre pela primeira resposta. Antes esta
+   * checagem era local, com a chave embutida no pacote.
+   */
+  const [unconfigured, setUnconfigured] = useState(false);
   const requestRef = useRef(0);
 
   useEffect(() => {
@@ -31,7 +37,6 @@ export function GifPicker({
   }, [query]);
 
   useEffect(() => {
-    if (!enabled) return;
     // Cada busca leva um número: a resposta de uma digitação antiga que chegue
     // atrasada não pode sobrescrever a atual.
     const ticket = ++requestRef.current;
@@ -52,6 +57,10 @@ export function GifPicker({
       .catch((caught) => {
         if (ticket !== requestRef.current) return;
         setResults([]);
+        if (caught instanceof GifNotConfiguredError) {
+          setUnconfigured(true);
+          return;
+        }
         setError(
           caught instanceof Error ? caught.message : "A busca de GIFs falhou.",
         );
@@ -59,20 +68,20 @@ export function GifPicker({
       .finally(() => {
         if (ticket === requestRef.current) setLoading(false);
       });
-  }, [debounced, enabled]);
+  }, [debounced]);
 
-  if (!enabled)
+  if (unconfigured)
     return (
       <div className="gif-picker gif-picker-empty">
         <h4>Busca de GIFs desativada</h4>
         <p>
-          Falta a chave da API do Tenor. Crie uma chave gratuita no console do
-          Google, coloque em <code>VITE_TENOR_API_KEY</code> no seu{" "}
-          <code>.env.local</code> e reinicie o servidor de desenvolvimento.
+          Falta a chave do Giphy no servidor. Crie uma chave gratuita no painel
+          do Giphy e publique como <code>GIF_API_KEY</code> nos secrets das
+          funções do Supabase.
         </p>
         <p className="gif-picker-note">
           Enquanto isso, dá para enviar um GIF pelo botão de anexo — ele segue
-          o mesmo caminho de anexo.
+          o mesmo caminho.
         </p>
       </div>
     );
@@ -80,7 +89,7 @@ export function GifPicker({
   return (
     <div className="gif-picker">
       <div className="picker-search">
-        <span aria-hidden="true">⌕</span>
+        <IconSearch size={15} />
         <input
           autoFocus
           value={query}
@@ -125,7 +134,7 @@ export function GifPicker({
           </button>
         ))}
       </div>
-      {busy && <p className="gif-sending">Cifrando e enviando o GIF…</p>}
+      {busy && <p className="gif-sending">Baixando e enviando o GIF…</p>}
     </div>
   );
 }
