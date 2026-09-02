@@ -52,12 +52,35 @@ minimum_password_length = 8
 [auth.email]
 enable_signup = true
 double_confirm_changes = true
-# Desligada, espelhando o projeto hospedado. O servidor de e-mail embutido do
-# Supabase entrega poucas mensagens por hora, e cadastro novo passou a esbarrar
-# em "email rate limit exceeded" — a confirmação virou um portão que ninguém
-# atravessava. Quem recupera a conta agora é a chave entregue no cadastro.
-# Religar isto exige SMTP próprio antes.
-enable_confirmations = false
+# Religada agora que existe SMTP próprio (Brevo), que era a condição que
+# faltava: o servidor embutido do Supabase entregava poucas mensagens por hora
+# e o cadastro esbarrava em "email rate limit exceeded" — a confirmação virava
+# um portão que ninguém atravessava.
+enable_confirmations = true
+# Código de 6 dígitos em vez de link. O link precisava de um endereço de
+# retorno, e o desktop empacotado vive em `file://`: nenhum provedor de e-mail
+# sabe abrir isso, então a confirmação só se completava pelo site.
+otp_length = 6
+# Dez minutos. O padrão de uma hora é generoso demais para um código de seis
+# dígitos, que é curto o bastante para ser tentado à força.
+otp_expiry = 600
+
+# Os modelos moram em arquivo para poderem ser revisados no diff — o editor do
+# painel não deixa rastro de quem mudou o quê.
+[auth.email.template.confirmation]
+subject = "Seu código de verificação"
+content_path = "./supabase/templates/confirmation.html"
+
+[auth.email.template.recovery]
+subject = "Código para redefinir sua senha"
+content_path = "./supabase/templates/recovery.html"
+
+# SMTP fica desligado no ambiente local de propósito: aqui o e-mail cai no
+# Mailpit (http://127.0.0.1:54324), que é o que permite ao teste ler o código
+# sem mandar mensagem de verdade para ninguém. Em produção o SMTP do Brevo é
+# configurado no painel do projeto — este arquivo não é enviado pelo deploy.
+[auth.email.smtp]
+enabled = false
 
 [edge_runtime]
 enabled = true

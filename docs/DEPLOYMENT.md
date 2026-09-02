@@ -119,21 +119,15 @@ Depois, no **SQL Editor** do painel (o CLI não faz):
 
 E no painel:
 
-- **Authentication → URL Configuration**: sem isto, o link de confirmação
-  devolve o usuário para `http://localhost:3000`, que é o padrão de fábrica do
-  Supabase — o token é válido, mas o destino não existe.
-  - **Site URL**: `https://lilivoicechat-five.vercel.app`
-  - **Redirect URLs**: o mesmo domínio e `https://*.vercel.app/**` para as
-    pré-visualizações. **Não existe entrada para o desktop, e é de propósito**:
-    o aplicativo instalado manda o link de e-mail para o site, a confirmação e
-    a troca de senha acontecem no navegador, e só depois a pessoa entra no
-    aplicativo com a senha nova. Um `redirectTo` com esquema próprio exigiria
-    registrar o protocolo no Windows e reconstruir a sessão a partir do
-    fragmento — caminho que este código não tem.
-- **Authentication → Providers → Email**: desligue _Confirm email_. O servidor
-  embutido do Supabase entrega poucas mensagens por hora, e com a confirmação
-  ligada o cadastro esbarra em `email rate limit exceeded`. Quem recupera a
-  conta é a chave entregue no cadastro (seção 3b), não o e-mail.
+- **Authentication → URL Configuration**: a **Site URL** continua sendo
+  `https://lilivoicechat-five.vercel.app`, e as **Redirect URLs** o mesmo
+  domínio mais `https://*.vercel.app/**` para as pré-visualizações. Nenhum
+  e-mail leva link desde a mudança para código (seção 3b), mas a Site URL ainda
+  identifica o projeto em outros lugares do painel.
+- **Authentication → Providers → Email**: ligue _Confirm email_ **depois** de
+  configurar o SMTP do Brevo — a ordem importa, porque com o servidor embutido
+  o cadastro esbarra em `email rate limit exceeded` e a confirmação vira um
+  portão que ninguém atravessa. Os passos estão na seção 3b.
 - **Settings → Storage**: limite de upload em **101 MiB**. O bucket
   `attachments` aceita 104861696 bytes (100 MiB + a folga de 4 KB da tag do
   AES-GCM); um teto global menor recusa o upload antes de a política ser
@@ -247,15 +241,51 @@ borda e o login por link não volta para o site.
 HTTPS não é opcional: Web Push e as APIs de mídia só existem em origem segura
 fora de `localhost`.
 
-## 3b. Recuperação de conta e expurgo
+## 3b. Verificação por código, recuperação e expurgo
 
-**Não há confirmação de e-mail e não há link de recuperação.** O servidor de
-e-mail embutido do Supabase entrega poucas mensagens por hora, e cadastro novo
-passou a esbarrar em `email rate limit exceeded` — a confirmação virou um
-portão que ninguém atravessava. Desligue _Confirm email_ em
-**Authentication → Providers → Email**.
+### Código de e-mail pelo Brevo
 
-No lugar entra uma **chave única**, entregue no cadastro e mostrada uma vez. O
+A confirmação de cadastro e a recuperação de senha usam um **código de seis
+dígitos**, não link. O link precisava de um endereço de retorno, e o desktop
+empacotado vive em `file://` — nenhum provedor de e-mail sabe abrir isso, então
+a confirmação só se completava pelo site, num navegador diferente do aplicativo
+onde a pessoa estava.
+
+O código é gerado, expirado e conferido pelo próprio Supabase Auth. O Brevo
+entra só como transporte, e é ele que resolve o limite de envio que mantinha a
+confirmação desligada.
+
+No painel do projeto:
+
+1. **Project Settings → Authentication → SMTP Settings** → _Enable Custom SMTP_.
+   Host `smtp-relay.brevo.com`, porta `587`, usuário e senha vindos de
+   **SMTP & API → SMTP** no painel do Brevo (a senha é a *chave SMTP*, não a
+   senha da conta). Remetente num domínio verificado no Brevo — sem isso a
+   entrega cai em spam.
+2. **Authentication → Providers → Email** → ligue _Confirm email_.
+3. **Authentication → Email Templates** → cole o conteúdo de
+   `supabase/templates/confirmation.html` e `supabase/templates/recovery.html`.
+   Os dois usam `{{ .Token }}`; um modelo que ainda tenha `{{ .ConfirmationURL }}`
+   volta a mandar link.
+4. **Authentication → Providers → Email** → _Email OTP Expiration_ em `600`
+   segundos. Uma hora é generoso demais para seis dígitos.
+
+O ambiente local não usa o Brevo: `[auth.email.smtp]` fica desligado no
+`config.toml` e o e-mail cai no Mailpit (`http://127.0.0.1:54324`). É o que
+permite ao `e2e/local-email-otp.spec.ts` ler o código e provar o fluxo inteiro
+sem mandar mensagem para ninguém.
+
+> O `config.toml` **não** é enviado pelo deploy — `npm run deploy:supabase` faz
+> `db push`, `secrets set` e `functions deploy`, e nada mais. Os quatro passos
+> acima são manuais no painel.
+
+### Chave de recuperação
+
+A chave continua existindo, e não foi substituída pelo código: o código chega
+no e-mail e resolve o caso comum, enquanto a chave é para quem também perdeu o
+acesso à caixa de entrada.
+
+Ela é **única**, entregue no cadastro e mostrada uma vez. O
 botão de entrar só destrava depois que a pessoa confirma ter guardado, porque
 é o único momento em que dá para avisar: quem perde a chave perde a conta.
 
@@ -267,10 +297,6 @@ minutos, e chave errada, conta inexistente e conta expurgada respondem a mesma
 coisa, para que ninguém descubra quem tem conta perguntando.
 
 Conta criada antes de a chave existir recebe a dela no primeiro login.
-
-Se um dia houver SMTP próprio (Resend, SendGrid, Postmark, SES), a confirmação
-e o link de recuperação podem voltar — nada no código impede. Enquanto não
-houver, ligá-los é trancar a porta.
 
 Conta sem login por 90 dias vira **lápide**: login, senha, sessões,
 dispositivos e chaves são destruídos e a identidade é anonimizada, mas

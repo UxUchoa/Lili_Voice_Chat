@@ -53,3 +53,27 @@ describe("humanizeAuthError", () => {
     expect(humanizeAuthError("texto solto").message).toBe("texto solto");
   });
 });
+
+describe("código de verificação", () => {
+  it("junta código errado e código vencido na mesma resposta", () => {
+    // Separar os dois diria a quem está adivinhando que o número existia.
+    const errado = humanizeAuthError(
+      new Error("Token has expired or is invalid"),
+    );
+    const vencido = humanizeAuthError(new Error("otp_expired"));
+    expect(errado.message).toBe(vencido.message);
+    expect(errado.message).toMatch(/não confere ou já expirou/);
+  });
+
+  it("oferece a saída em vez de só apontar o erro", () => {
+    expect(
+      humanizeAuthError(new Error("Token not found")).message,
+    ).toMatch(/Peça um novo/);
+  });
+
+  it("fala em código, e não em link, no e-mail não confirmado", () => {
+    expect(
+      humanizeAuthError(new Error("Email not confirmed")).message,
+    ).toMatch(/código/);
+  });
+});

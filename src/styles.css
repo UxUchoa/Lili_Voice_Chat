@@ -2976,6 +2976,57 @@ a:focus-visible,
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+/* Tela do código de verificação. O campo é largo e espaçado porque a pessoa
+   está transcrevendo dígitos de outra janela: caractere pequeno e junto é
+   onde o erro de digitação acontece. */
+.otp-field {
+  display: grid;
+  gap: 7px;
+}
+.otp-field span {
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.otp-field input {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--primary);
+  font-family: Consolas, Menlo, monospace;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 0.34em;
+  text-align: center;
+}
+.otp-field input:focus {
+  border-color: var(--brand);
+  outline: none;
+}
+.otp-field input::placeholder {
+  color: #3a3236;
+  letter-spacing: 0.34em;
+}
+.otp-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+.otp-actions button {
+  padding: 0;
+  color: #d8c8cf;
+  background: transparent;
+  font-size: 11px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.otp-actions button:disabled {
+  color: var(--muted);
+  text-decoration: none;
+  cursor: default;
+}
 .recovery-card code {
   padding: 14px;
   border: 1px dashed rgba(251, 198, 5, 0.35);

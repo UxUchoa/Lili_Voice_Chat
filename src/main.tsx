@@ -77,6 +77,8 @@ import {
   type MentionTarget,
 } from "./domain/mentions";
 import { MentionSuggestions } from "./ui/MentionSuggestions";
+import { OtpCard } from "./ui/OtpCard";
+import type { OtpPurpose } from "./domain/otp";
 import { useRtc } from "./hooks/useRtc";
 import type { RemotePeer } from "./hooks/useLiveKitRtc";
 import type { CameraResolution } from "./hooks/cameraModes";
@@ -95,7 +97,10 @@ import {
   logoutOnlineAccount,
   clearPasswordRecoveryLink,
   isPasswordRecoveryLink,
+  confirmOnlineRecoveryCode,
+  confirmOnlineSignupCode,
   registerOnlineAccount,
+  requestOnlinePasswordReset,
   getRecoveryKeyStatus,
   recoverOnlineAccountWithKey,
   resendOnlineConfirmationEmail,
@@ -11529,6 +11534,19 @@ function OnlineAuthGate() {
     // para onde mandar sem obrigar a pessoa a digitar o e-mail de novo.
     [awaitingConfirmation, setAwaitingConfirmation] = useState(""),
     [resending, setResending] = useState(false),
+    /**
+     * Passo do código de verificação. `sentAt` alimenta a contagem do reenvio;
+     * trocá-lo é o que reinicia a espera, então um reenvio bem-sucedido grava
+     * o instante novo aqui.
+     */
+    [otpStep, setOtpStep] = useState<{
+      purpose: OtpPurpose;
+      email: string;
+      sentAt: number;
+    } | null>(null),
+    // Recuperação confirmada pelo código: a sessão já existe e falta só a
+    // senha nova.
+    [recoveredByCode, setRecoveredByCode] = useState(false),
     // Chave a ser mostrada uma única vez, com a conta que espera o "guardei".
     [issuedKey, setIssuedKey] = useState<{
       key: string;
@@ -11595,15 +11613,16 @@ function OnlineAuthGate() {
           password,
         });
         if (result.status === "pending") {
-          // Conta criada com sucesso, faltando só a confirmação. Isto é aviso,
-          // não erro: antes aparecia em vermelho, dizendo que deu errado
-          // justamente quando deu certo.
-          setMode("login");
+          // Conta criada, faltando só o código. Antes isto mandava a pessoa de
+          // volta ao login para esperar um e-mail com link; agora o passo
+          // seguinte acontece na mesma tela, sem trocar de aplicativo.
           setPassword("");
           setAwaitingConfirmation(result.email);
-          setNotice(
-            `Conta criada. Abra o link que enviamos para ${result.email} e depois entre por aqui.`,
-          );
+          setOtpStep({
+            purpose: "signup",
+            email: result.email,
+            sentAt: Date.now(),
+          });
         } else {
           // A conta fica em espera: entrar antes de a pessoa guardar a chave é
           // a forma mais fácil de ela nunca guardar.
@@ -11633,6 +11652,71 @@ function OnlineAuthGate() {
     }
   };
 
+  /** Confere o código e leva ao passo seguinte de cada finalidade. */
+  const verifyCode = async (code: string) => {
+    if (!otpStep) return;
+    setBusy(true);
+    setError("");
+    try {
+      if (otpStep.purpose === "signup") {
+        const result = await confirmOnlineSignupCode(otpStep.email, code);
+        setOtpStep(null);
+        setAwaitingConfirmation("");
+        // A conta espera na tela da chave: entrar antes de a pessoa guardá-la
+        // é a forma mais fácil de ela nunca guardar.
+        setIssuedKey({
+          key: result.recoveryKey,
+          reason: "register",
+          account: result.account,
+        });
+      } else {
+        await confirmOnlineRecoveryCode(otpStep.email, code);
+        setOtpStep(null);
+        // A sessão já existe, mas com a senha antiga ainda valendo — a tela da
+        // senha nova precisa vir agora, e não depois de abrir o aplicativo.
+        setRecoveredByCode(true);
+      }
+    } catch (caught) {
+      setError(readableError(caught, "Não foi possível conferir o código."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Pede outro código, reiniciando a contagem só quando o envio dá certo. */
+  const resendCode = async () => {
+    if (!otpStep) return;
+    setBusy(true);
+    setError("");
+    try {
+      if (otpStep.purpose === "signup")
+        await resendOnlineConfirmationEmail(otpStep.email);
+      else await requestOnlinePasswordReset(otpStep.email);
+      setOtpStep({ ...otpStep, sentAt: Date.now() });
+    } catch (caught) {
+      setError(readableError(caught, "Não foi possível reenviar agora."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Começa a recuperação por código a partir do e-mail já digitado. */
+  const startRecoveryByCode = async () => {
+    const target = email.trim().toLowerCase();
+    if (!target) return setError("Digite o e-mail da conta primeiro.");
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await requestOnlinePasswordReset(target);
+      setOtpStep({ purpose: "recovery", email: target, sentAt: Date.now() });
+    } catch (caught) {
+      setError(readableError(caught, "Não foi possível enviar o código."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const logout = async () => {
     if (account) releaseDevice(account.profileId);
     await logoutOnlineAccount();
@@ -11657,10 +11741,38 @@ function OnlineAuthGate() {
         <p>Conectando ao Lili…</p>
       </div>
     );
-  // A ordem importa: o link de recuperação já traz sessão válida, então sem
+  // A ordem importa. O código de recuperação abre sessão válida, então sem
   // este desvio o aplicativo abriria normalmente e a senha nunca seria trocada.
-  if (account && recovering)
-    return <NewPasswordCard onDone={() => setRecovering(false)} />;
+  // `recovering` cobre os links antigos que ainda estejam em alguma caixa de
+  // entrada; nenhum novo é enviado desde a troca para código.
+  if (recoveredByCode || (account && recovering))
+    return (
+      <NewPasswordCard
+        onDone={() => {
+          setRecovering(false);
+          setRecoveredByCode(false);
+        }}
+      />
+    );
+  if (otpStep)
+    return (
+      <OtpCard
+        purpose={otpStep.purpose}
+        email={otpStep.email}
+        sentAt={otpStep.sentAt}
+        busy={busy}
+        error={error}
+        logo={<Logo />}
+        onVerify={(code) => void verifyCode(code)}
+        onResend={() => void resendCode()}
+        onBack={() => {
+          setOtpStep(null);
+          setAwaitingConfirmation("");
+          setError("");
+          setMode("login");
+        }}
+      />
+    );
   if (issuedKey)
     return (
       <RecoveryKeyCard
@@ -11817,6 +11929,14 @@ function OnlineAuthGate() {
           >
             {mode === "recover" ? "Voltar ao login" : "Perdi o acesso"}
           </button>
+          {/* Dois caminhos de volta, de propósito. O código chega no e-mail e
+              resolve o caso comum; a chave de recuperação existe para quem
+              também perdeu o acesso à caixa de entrada. */}
+          {mode === "login" && (
+            <button disabled={busy} onClick={() => void startRecoveryByCode()}>
+              Esqueci a senha
+            </button>
+          )}
         </div>
       </section>
     </main>

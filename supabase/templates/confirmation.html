@@ -1,0 +1,65 @@
+<!--
+  Confirmação de cadastro.
+
+  `{{ .Token }}` é o código de seis dígitos. Não há link: o desktop empacotado
+  vive em `file://`, que nenhum provedor de e-mail sabe abrir, então a
+  confirmação por link só se completava pelo site.
+
+  Tudo é tabela e estilo em atributo porque cliente de e-mail não é navegador:
+  Outlook ignora grande parte de CSS externo e flexbox, e uma folha de estilo
+  no `<head>` é removida por vários webmails.
+-->
+<table
+  role="presentation"
+  cellpadding="0"
+  cellspacing="0"
+  width="100%"
+  style="background:#100d0f;padding:32px 12px;font-family:Segoe UI,Roboto,Helvetica,Arial,sans-serif"
+>
+  <tr>
+    <td align="center">
+      <table
+        role="presentation"
+        cellpadding="0"
+        cellspacing="0"
+        width="100%"
+        style="max-width:460px;background:#171315;border:1px solid #2c2528;border-radius:14px;padding:32px"
+      >
+        <tr>
+          <td
+            style="color:#f00c14;font-size:12px;font-weight:700;letter-spacing:1.6px;padding-bottom:6px"
+          >
+            LILI
+          </td>
+        </tr>
+        <tr>
+          <td
+            style="color:#f7f7f8;font-size:22px;font-weight:600;padding-bottom:10px"
+          >
+            Confirme seu e-mail
+          </td>
+        </tr>
+        <tr>
+          <td style="color:#b8b2b5;font-size:15px;line-height:1.6;padding-bottom:24px">
+            Use o código abaixo para ativar sua conta.
+          </td>
+        </tr>
+        <tr>
+          <td align="center" style="padding-bottom:24px">
+            <div
+              style="display:inline-block;background:#100d0f;border:1px solid #2c2528;border-radius:10px;padding:16px 26px;color:#f7f7f8;font-family:Consolas,Menlo,monospace;font-size:32px;font-weight:700;letter-spacing:10px"
+            >
+              {{ .Token }}
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td style="color:#8a8085;font-size:13px;line-height:1.6">
+            O código vale por 10 minutos. Se você não criou esta conta, pode
+            ignorar esta mensagem — nada acontece sem o código.
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>

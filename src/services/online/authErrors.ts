@@ -33,7 +33,19 @@ export function humanizeAuthError(error: unknown): Error {
     return new Error("E-mail ou senha não conferem.");
   if (message.includes("email not confirmed"))
     return new Error(
-      "Confirme o e-mail antes de entrar. Se o link não chegou, peça o reenvio.",
+      "Confirme o e-mail antes de entrar. Se o código não chegou, peça o reenvio.",
+    );
+  // O Supabase usa a mesma resposta para código errado e código vencido, de
+  // propósito: separar os dois diria a quem está tentando adivinhar que o
+  // número existia. A mensagem mantém a ambiguidade e oferece a saída.
+  if (
+    message.includes("token has expired or is invalid") ||
+    message.includes("otp_expired") ||
+    message.includes("invalid or expired") ||
+    message.includes("token not found")
+  )
+    return new Error(
+      "O código não confere ou já expirou. Peça um novo e tente de novo.",
     );
   if (message.includes("password should be at least"))
     return new Error("A senha precisa ter pelo menos 8 caracteres.");

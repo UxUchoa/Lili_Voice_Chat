@@ -1,28 +1,11 @@
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "./client";
-import { onlineConfig } from "./config";
 import { humanizeAuthError } from "./authErrors";
 import {
   generateRecoveryKey,
   hashRecoveryKey,
   isRecoveryKeyShaped,
 } from "./recoveryKey";
-
-/**
- * Para onde o link do e-mail devolve a pessoa.
- *
- * No desktop empacotado não existe endereço local para voltar: a página vive
- * em `file://`, que nenhum provedor de e-mail sabe abrir e que o Supabase
- * recusa como `redirectTo`. O destino é sempre o site, e é lá que a
- * confirmação e a troca de senha se completam — o aplicativo instalado depois
- * entra com a senha nova.
- *
- * `undefined` faz o Supabase usar a Site URL do projeto, que é o mesmo
- * endereço: melhor cair nesse padrão do que mandar um destino inválido.
- */
-function emailReturnAddress(): string | undefined {
-  return onlineConfig.siteUrl ? `${onlineConfig.siteUrl}/` : undefined;
-}
 
 export interface OnlineAccount {
   id: string;
@@ -203,7 +186,9 @@ export async function resendOnlineConfirmationEmail(email: string) {
   const { error } = await supabase.auth.resend({
     type: "signup",
     email: email.trim().toLowerCase(),
-    options: { emailRedirectTo: emailReturnAddress() },
+    // Sem `emailRedirectTo`: o modelo de e-mail manda o código, e um link de
+    // volta ao site só existiria para não ser usado. O desktop empacotado
+    // agradece — ele vive em `file://` e não tem endereço de retorno.
   });
   // Limite de envio é informação útil e não revela nada sobre quem tem conta:
   // dizer "reenviamos" quando nada foi enviado deixaria a pessoa esperando um
@@ -223,12 +208,12 @@ export async function loginOnlineAccount(email: string, password: string) {
 }
 
 /**
- * Manda o link de redefinição de senha.
+ * Manda o código de redefinição de senha.
  *
- * O `redirectTo` aponta para a raiz do site. O Supabase acrescenta o token no
- * fragmento da URL, o cliente o consome ao carregar a página e a sessão nasce
- * já autenticada — por isso a tela de senha nova precisa aparecer sozinha,
- * antes de o aplicativo abrir. Quem percebe isso é `isPasswordRecoveryLink`.
+ * Sem `redirectTo`: o modelo de e-mail carrega `{{ .Token }}`, e o código é
+ * conferido por `confirmOnlineRecoveryCode`. O link deixou de ser usado porque
+ * o desktop empacotado vive em `file://` — nenhum provedor de e-mail sabe
+ * abrir esse endereço, então o retorno só funcionava pelo site.
  *
  * A resposta é a mesma para e-mail cadastrado e desconhecido: distinguir os
  * dois transformaria o formulário num consultor de quem tem conta aqui.
@@ -236,9 +221,50 @@ export async function loginOnlineAccount(email: string, password: string) {
 export async function requestOnlinePasswordReset(email: string) {
   const { error } = await supabase.auth.resetPasswordForEmail(
     email.trim().toLowerCase(),
-    { redirectTo: emailReturnAddress() },
   );
   if (error) throw humanizeAuthError(error);
+}
+
+/**
+ * Confirma o cadastro com o código recebido por e-mail.
+ *
+ * `verifyOtp` devolve uma sessão já autenticada, então a chave de recuperação
+ * pode ser emitida aqui — é o mesmo ponto do fluxo em que ela sairia se o
+ * cadastro não exigisse confirmação. Quem confirma recebe a dele na hora, e
+ * não "no primeiro login".
+ */
+export async function confirmOnlineSignupCode(email: string, code: string) {
+  const { data, error } = await supabase.auth.verifyOtp({
+    email: email.trim().toLowerCase(),
+    token: code,
+    type: "signup",
+  });
+  if (error) throw humanizeAuthError(error);
+  if (!data.user)
+    throw new Error("A confirmação não devolveu a conta. Tente entrar.");
+  return {
+    account: await accountFromUser(data.user),
+    recoveryKey: await issueRecoveryKey(),
+  };
+}
+
+/**
+ * Confere o código de recuperação e deixa a sessão pronta para trocar a senha.
+ *
+ * A sessão que nasce aqui é o que autoriza `updateOnlinePassword` — sem ela o
+ * Supabase recusa a troca. Quem chama precisa mostrar a tela de senha nova
+ * logo em seguida: a pessoa fica autenticada com a senha **antiga** ainda
+ * valendo até trocar.
+ */
+export async function confirmOnlineRecoveryCode(email: string, code: string) {
+  const { data, error } = await supabase.auth.verifyOtp({
+    email: email.trim().toLowerCase(),
+    token: code,
+    type: "recovery",
+  });
+  if (error) throw humanizeAuthError(error);
+  if (!data.session)
+    throw new Error("O código não abriu a sessão. Peça um novo.");
 }
 
 /**
