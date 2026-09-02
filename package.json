@@ -1,7 +1,7 @@
 {
   "name": "lili-voice-chat",
   "private": true,
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Cliente local-first de mensagens cifradas, voz, vídeo e compartilhamento de tela.",
   "author": "Lili contributors",
   "engines": {
