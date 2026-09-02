@@ -579,8 +579,19 @@ test("duas contas permanecem visíveis na mesma chamada local", async ({
       .filter({ hasText: "Lounge" });
     await expect(loungeHistory).toContainText(ownerName);
     await expect(loungeHistory).toContainText(memberName);
+    // A chamada em "Destino" é de quem foi movido para lá; o dono acionou a
+    // mudança de fora e nunca esteve nessa sala. Ele não pode encontrá-la no
+    // próprio histórico — era exatamente esse o vazamento: dividir um canal de
+    // voz entregava, com nome e horário, as chamadas dos outros.
     await expect(
       ownerPage
+        .locator(".recent-calls > button")
+        .filter({ hasText: "Destino" }),
+    ).toHaveCount(0);
+    // E o outro lado da regra: para quem esteve nela, ela está lá.
+    await memberPage.getByRole("button", { name: /^Início/ }).click();
+    await expect(
+      memberPage
         .locator(".recent-calls > button")
         .filter({ hasText: "Destino" }),
     ).toContainText(memberName);

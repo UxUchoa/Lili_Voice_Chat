@@ -13,14 +13,47 @@ export interface OnlineCallSession {
   }>;
 }
 
+/**
+ * As chamadas de que **esta pessoa** participou, da mais recente para a mais
+ * antiga.
+ *
+ * A busca começa pela participação, e não pela sessão, porque `call_sessions`
+ * é visível a quem pode entrar no canal — é o que sustenta o "ativo agora",
+ * mostrando quem está na sala neste momento. Perguntar por sessões e confiar
+ * nessa visibilidade trazia todas as chamadas já feitas em todo canal que a
+ * pessoa alcança, e o painel de amigos listava conversas de outras contas com
+ * nome e horário. Histórico é de quem esteve nele.
+ *
+ * Os participantes vêm inteiros no segundo passo, de propósito: filtrar a
+ * sessão pela participação e ao mesmo tempo pedir só as linhas de quem
+ * pergunta devolveria uma chamada sem a outra ponta, e a lista precisa dizer
+ * com quem foi.
+ */
 export async function listRecentOnlineCalls(limit = 20) {
+  const teto = Math.max(1, Math.min(limit, 50));
+  const { data: sessionData } = await supabase.auth.getSession();
+  const userId = sessionData.session?.user.id;
+  // Sem sessão não há histórico pessoal, e devolver o do canal seria o bug.
+  if (!userId) return [];
+
+  const { data: minhas, error: participationError } = await supabase
+    .from("call_session_participants")
+    .select("session_id,joined_at")
+    .eq("user_id", userId)
+    .order("joined_at", { ascending: false })
+    .limit(teto);
+  if (participationError) throw participationError;
+  const ids = [...new Set((minhas ?? []).map((row) => row.session_id))];
+  if (ids.length === 0) return [];
+
   const { data, error } = await supabase
     .from("call_sessions")
     .select(
       "id,channel_id,created_by,created_at,ended_at,call_session_participants(user_id,joined_at,left_at)",
     )
+    .in("id", ids)
     .order("created_at", { ascending: false })
-    .limit(Math.max(1, Math.min(limit, 50)));
+    .limit(teto);
   if (error) throw error;
   return (data ?? []).map((row) => ({
     id: row.id,

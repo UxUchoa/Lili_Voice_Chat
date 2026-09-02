@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(24);
+select plan(28);
 
 insert into auth.users(id, email, aud, role, raw_user_meta_data)
 values
@@ -222,6 +222,83 @@ select ok(
   (select processed_at is not null from public.voice_move_requests where id = '73000000-0000-0000-0000-000000000001'),
   'claiming the move persists its processed timestamp'
 );
+
+-- ============================================================
+-- Historico e de quem participou dele
+--
+-- `call_sessions` e visivel a quem pode entrar no canal, e isso precisa
+-- continuar valendo para a chamada em andamento: e assim que o "ativo agora"
+-- mostra quem ja esta na sala. O que nao podia continuar valendo era o mesmo
+-- acesso ao que ja terminou — dividir um canal de voz entregava, com nome e
+-- horario, toda chamada feita ali entre outras pessoas.
+-- ============================================================
+reset role;
+insert into public.call_sessions(id, channel_id, room_name, created_by, ended_at)
+values (
+  '63000000-0000-0000-0000-000000000009',
+  '43000000-0000-0000-0000-000000000001',
+  'call-so-do-dono-room',
+  '13000000-0000-0000-0000-000000000001',
+  now()
+);
+insert into public.call_session_participants(session_id, user_id, device_id, left_at)
+values (
+  '63000000-0000-0000-0000-000000000009',
+  '13000000-0000-0000-0000-000000000001',
+  '53000000-0000-0000-0000-000000000001',
+  now()
+);
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '13000000-0000-0000-0000-000000000002', true);
+select is(
+  (select count(*) from public.call_sessions
+   where id = '63000000-0000-0000-0000-000000000009'),
+  0::bigint,
+  'quem nao participou nao ve a chamada encerrada, mesmo tendo acesso ao canal'
+);
+select is(
+  (select count(*) from public.call_session_participants
+   where session_id = '63000000-0000-0000-0000-000000000009'),
+  0::bigint,
+  'e nao ve quem esteve nela'
+);
+
+select set_config('request.jwt.claim.sub', '13000000-0000-0000-0000-000000000001', true);
+select is(
+  (select count(*) from public.call_sessions
+   where id = '63000000-0000-0000-0000-000000000009'),
+  1::bigint,
+  'quem participou continua vendo a propria chamada encerrada'
+);
+
+-- A chamada de pe segue sendo um fato do canal: sem isto, ninguem descobre que
+-- ha gente na sala antes de entrar nela.
+reset role;
+-- Canal proprio: o indice `one_active_per_channel` so admite uma sessao de pe
+-- por canal, e os outros ja tem a delas.
+insert into public.channels(id, server_id, name, kind, created_by)
+values (
+  '43000000-0000-0000-0000-000000000009',
+  '23000000-0000-0000-0000-000000000001',
+  'Sala vazia', 'voice', '13000000-0000-0000-0000-000000000001'
+);
+insert into public.call_sessions(id, channel_id, room_name, created_by)
+values (
+  '63000000-0000-0000-0000-00000000000a',
+  '43000000-0000-0000-0000-000000000009',
+  'call-em-andamento-room',
+  '13000000-0000-0000-0000-000000000001'
+);
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '13000000-0000-0000-0000-000000000002', true);
+select is(
+  (select count(*) from public.call_sessions
+   where id = '63000000-0000-0000-0000-00000000000a'),
+  1::bigint,
+  'a chamada em andamento continua visivel a quem pode entrar no canal'
+);
+reset role;
 
 select * from finish();
 rollback;
