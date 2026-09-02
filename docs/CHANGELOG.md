@@ -6,6 +6,16 @@ Uma seção por versão publicada. O texto daqui é o corpo da release no GitHub
 publicação de propósito — release sem notas é release que ninguém sabe o que
 mudou.
 
+## 0.1.6
+
+- **A cota do servidor acompanha a exclusão de outro servidor.** A fatia é o
+  teto da instância dividido pelo número de servidores, então ela cresce quando
+  um servidor deixa de existir — mas a medição só acontecia ao abrir a aba e no
+  botão "Atualizar". Com a aba aberta, excluir um servidor deixava a fatia
+  antiga na tela, e parecia que a exclusão não havia liberado nada. A medição
+  agora acompanha quantos servidores existem. Um servidor criado ou excluído
+  por outra pessoa continua chegando na próxima medição.
+
 ## 0.1.5
 
 Marca nova em toda a aplicação, e a maior leva de correções de interface desde
