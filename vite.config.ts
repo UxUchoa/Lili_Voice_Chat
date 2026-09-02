@@ -51,14 +51,24 @@ function httpOnly(raw: string): string[] {
  * `connect-src` é o que importa — é por ali que dados sairiam se algum dia
  * entrasse script de terceiro. Storage entrega avatar, ícone e banner por URL
  * assinada, então a origem do Supabase precisa estar também em `img-src` e
- * `media-src`. O Tenor aparece porque o seletor de GIFs busca na API e baixa o
- * arquivo para reenviá-lo cifrado; nada do conteúdo do usuário passa por lá.
+ * `media-src`.
+ *
+ * O Giphy entra nos dois: `img-src` porque a grade do seletor desenha as
+ * prévias direto do CDN, e `connect-src` porque `downloadGifAsFile` busca o
+ * arquivo escolhido no navegador para reenviá-lo como anexo nosso. A API do
+ * Giphy não aparece aqui — quem fala com ela é a função de borda, para a chave
+ * não viajar no pacote público.
+ *
+ * Esta lista já ficou para trás uma vez: liberava o Tenor, o provedor anterior,
+ * enquanto o seletor já buscava no Giphy. Como o `dev` usa a política
+ * permissiva, tudo funcionava na máquina de quem programava e nada carregava em
+ * produção nem no desktop — os dois únicos lugares onde esta função roda.
  */
-function productionCsp(supabaseUrl: string, livekitUrl: string): string {
+export function productionCsp(supabaseUrl: string, livekitUrl: string): string {
   const supabase = bothSchemes(supabaseUrl);
   const supabaseMedia = httpOnly(supabaseUrl);
   const livekit = bothSchemes(livekitUrl);
-  const tenor = ["https://tenor.googleapis.com", "https://*.tenor.com"];
+  const giphy = ["https://*.giphy.com"];
   const join = (...parts: string[][]) => parts.flat().filter(Boolean).join(" ");
 
   return [
@@ -66,13 +76,13 @@ function productionCsp(supabaseUrl: string, livekitUrl: string): string {
     "script-src 'self' 'wasm-unsafe-eval'",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com data:",
-    `img-src ${join(["'self'", "data:", "blob:"], supabaseMedia, tenor)}`,
+    `img-src ${join(["'self'", "data:", "blob:"], supabaseMedia, giphy)}`,
     `media-src ${join(["'self'", "blob:", "data:"], supabaseMedia)}`,
     `connect-src ${join(
       ["'self'", "blob:", "data:"],
       supabase,
       livekit,
-      tenor,
+      giphy,
       ["https://fonts.googleapis.com", "https://fonts.gstatic.com"],
     )}`,
     "worker-src 'self' blob:",
