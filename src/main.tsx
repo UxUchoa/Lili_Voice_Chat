@@ -275,7 +275,6 @@ import {
   IconLock,
   IconMaximize,
   IconMenu,
-  IconMinus,
   IconMessage,
   IconMic,
   IconMicOff,
@@ -295,7 +294,6 @@ import {
   IconSend,
   IconSettings,
   IconSmile,
-  IconSquare,
   IconTrash,
   IconUpload,
   IconUserPlus,
@@ -515,11 +513,23 @@ function MessageEditor({
   );
 }
 
-function Logo({ compact = false }: { compact?: boolean }) {
+/**
+ * A marca. `full` escreve o nome inteiro, e é o que a barra de título usa —
+ * ela é a moldura do aplicativo, o lugar onde o nome se apresenta. Nas outras
+ * dez aparições o nome inteiro seria repetição: no painel de ajuda ele já está
+ * no título logo abaixo, e nas telas de entrada a marca é o desenho.
+ */
+function Logo({
+  compact = false,
+  full = false,
+}: {
+  compact?: boolean;
+  full?: boolean;
+}) {
   return (
     <div className={`brand ${compact ? "brand-compact" : ""}`}>
       <img src={`${import.meta.env.BASE_URL}logo-vetorizada.svg`} alt="" />
-      <span>Lili</span>
+      <span>{full ? "Lili — Voice Chat" : "Lili"}</span>
     </div>
   );
 }
@@ -543,7 +553,7 @@ function Titlebar({
 }) {
   return (
     <header className="titlebar">
-      <Logo />
+      <Logo full />
       <button
         className="mobile-nav-button"
         aria-label={navigationOpen ? "Fechar navegação" : "Abrir navegação"}
@@ -570,30 +580,16 @@ function Titlebar({
         <button className="icon-button" aria-label="Ajuda" onClick={onHelp}>
           <IconHelp size={20} />
         </button>
+        {/*
+          No desktop, minimizar/maximizar/fechar são os botões do próprio
+          Windows: `titleBarOverlay` os desenha por cima da página, no canto
+          direito. O app desenhava outros três no mesmo lugar — ficavam
+          escondidos embaixo dos nativos, e a faixa cobria também o "?" ao
+          lado, que parava de responder ao clique. Aqui sobra só o espaço que
+          eles ocupam, para que a barra termine antes deles.
+        */}
         {window.janjaDesktop && (
-          <>
-            <button
-              className="window-button"
-              aria-label="Minimizar"
-              onClick={() => window.janjaDesktop?.minimize()}
-            >
-              <IconMinus size={14} />
-            </button>
-            <button
-              className="window-button"
-              aria-label="Maximizar"
-              onClick={() => window.janjaDesktop?.maximize()}
-            >
-              <IconSquare size={13} />
-            </button>
-            <button
-              className="window-button close"
-              aria-label="Fechar"
-              onClick={() => window.janjaDesktop?.close()}
-            >
-              <IconX size={18} />
-            </button>
-          </>
+          <span className="window-controls-space" aria-hidden="true" />
         )}
       </div>
     </header>
@@ -1998,20 +1994,23 @@ function ChannelSidebar({
     !hideMutedChannels ||
     channel.id === activeChannelId ||
     !channelIsMuted(channel.id);
-  const textChannels = channels
+  /**
+   * Canais fora de qualquer categoria, texto e voz na mesma lista.
+   *
+   * Eles ficam soltos no topo, sem cabeçalho. Antes havia dois títulos fixos,
+   * "CANAIS DE TEXTO" e "CANAIS DE VOZ", que pareciam categorias e não eram:
+   * não dava para renomear nem excluir nenhum dos dois, porque não existiam no
+   * banco. Tudo que tem título aqui agora é uma categoria de verdade, com menu
+   * de contexto e exclusão — que é o que o CRUD sempre prometeu.
+   *
+   * A ordem é só `position`, a mesma que "Subir" e "Descer" ajustam: separar
+   * por tipo desfaria à mão a ordenação que a pessoa acabou de escolher.
+   */
+  const looseChannels = channels
     .filter(
       (channel) =>
         channel.serverId === serverId &&
-        channel.kind === "text" &&
-        !channel.category,
-    )
-    .filter(visibleChannel)
-    .sort((a, b) => a.position - b.position);
-  const voiceChannels = channels
-    .filter(
-      (channel) =>
-        channel.serverId === serverId &&
-        channel.kind === "voice" &&
+        (channel.kind === "text" || channel.kind === "voice") &&
         !channel.category,
     )
     .filter(visibleChannel)
@@ -2301,6 +2300,62 @@ function ChannelSidebar({
       },
     ]);
   };
+  /**
+   * A linha do canal, uma só para os dois lugares onde ela aparece.
+   *
+   * Antes o canal de voz dentro de uma categoria não listava quem estava
+   * conectado, e o de fora listava: eram dois trechos parecidos, e a diferença
+   * passou despercebida justamente por serem dois.
+   */
+  const renderChannelRow = (channel: Channel) => {
+    const voice = channel.kind === "voice";
+    const count = voice ? voiceCount(channel.id) : 0;
+    return (
+      <Fragment key={channel.id}>
+        <div className="channel-row-wrap">
+          <button
+            onClick={() => onChannel(channel.id)}
+            onContextMenu={(event) => openChannelMenu(event, channel)}
+            className={`channel-row ${
+              activeChannelId === channel.id
+                ? voice
+                  ? "active voice-active"
+                  : "active"
+                : ""
+            }`}
+          >
+            {voice ? <IconVolume size={18} /> : <IconHash size={18} />}
+            <span>{channel.name}</span>
+            {count > 0 && (
+              <em
+                className="people-count"
+                aria-label={`${count} participantes`}
+              >
+                {count}
+              </em>
+            )}
+          </button>
+          {/* O mesmo menu do botão direito, num botão visível: editar e
+              excluir estavam só no clique com o botão direito, que não existe
+              no toque e ninguém descobre sozinho. */}
+          <button
+            className="channel-options"
+            aria-label={`Opções de ${channel.name}`}
+            title="Opções do canal"
+            onClick={(event) => openChannelMenu(event, channel)}
+          >
+            <IconMoreHorizontal size={16} />
+          </button>
+        </div>
+        {voice && (
+          <VoiceChannelMembers
+            members={voiceMembers[channel.id] ?? []}
+            profiles={profiles}
+          />
+        )}
+      </Fragment>
+    );
+  };
   const toggleCategory = (categoryId: string) => {
     setCollapsedCategories((current) => {
       const next = new Set(current);
@@ -2365,19 +2420,9 @@ function ChannelSidebar({
         </button>
       </div>
       <div className="channel-scroll">
-        {canManageChannels && (
-          <div className="channel-group category-index">
-            <div className="group-title">
-              <span>CATEGORIAS</span>
-              <button
-                className="group-add"
-                aria-label="Criar categoria"
-                title="Criar categoria"
-                onClick={() => addChannel("category")}
-              >
-                <IconPlus size={16} />
-              </button>
-            </div>
+        {looseChannels.length > 0 && (
+          <div className="channel-group loose-channels">
+            {looseChannels.map(renderChannelRow)}
           </div>
         )}
         {categories.map((category) => {
@@ -2408,6 +2453,14 @@ function ChannelSidebar({
                 {canManageChannels && (
                   <span className="category-actions">
                     <button
+                      className="channel-options"
+                      aria-label={`Opções da categoria ${category.name}`}
+                      title="Opções da categoria"
+                      onClick={(event) => openChannelMenu(event, category)}
+                    >
+                      <IconMoreHorizontal size={16} />
+                    </button>
+                    <button
                       className="group-add"
                       aria-label={`Criar canal de texto em ${category.name}`}
                       title="Criar canal de texto"
@@ -2428,98 +2481,20 @@ function ChannelSidebar({
                   </span>
                 )}
               </div>
-              {!collapsed &&
-                children.map((channel) => (
-                  <button
-                    key={channel.id}
-                    onClick={() => onChannel(channel.id)}
-                    onContextMenu={(event) => openChannelMenu(event, channel)}
-                    className={`channel-row ${activeChannelId === channel.id ? "active" : ""}`}
-                  >
-                    {channel.kind === "voice" ? (
-                      <IconVolume size={18} />
-                    ) : (
-                      <IconHash size={18} />
-                    )}
-                    <span>{channel.name}</span>
-                    {channel.kind === "voice" && voiceCount(channel.id) > 0 && (
-                      <em
-                        className="people-count"
-                        aria-label={`${voiceCount(channel.id)} participantes`}
-                      >
-                        {voiceCount(channel.id)}
-                      </em>
-                    )}
-                  </button>
-                ))}
+              {!collapsed && children.map(renderChannelRow)}
             </div>
           );
         })}
-        <div className="channel-group">
-          <div className="group-title">
-            <span>CANAIS DE TEXTO</span>
-            {canManageChannels && (
-              <button
-                className="group-add"
-                aria-label="Criar canal de texto"
-                title="Criar canal de texto"
-                onClick={() => addChannel("text")}
-              >
-                <IconPlus size={16} />
-              </button>
-            )}
-          </div>
-          {textChannels.map((channel) => (
-            <button
-              key={channel.id}
-              onClick={() => onChannel(channel.id)}
-              onContextMenu={(event) => openChannelMenu(event, channel)}
-              className={`channel-row ${activeChannelId === channel.id ? "active" : ""}`}
-            >
-              <IconHash size={18} />
-              <span>{channel.name}</span>
+        {canManageChannels && (
+          <div className="channel-create">
+            <button onClick={() => addChannel("text")}>
+              <IconPlus size={15} /> Criar canal
             </button>
-          ))}
-        </div>
-        <div className="channel-group">
-          <div className="group-title">
-            <span>CANAIS DE VOZ</span>
-            {canManageChannels && (
-              <button
-                className="group-add"
-                aria-label="Criar canal de voz"
-                title="Criar canal de voz"
-                onClick={() => addChannel("voice")}
-              >
-                <IconPlus size={16} />
-              </button>
-            )}
+            <button onClick={() => addChannel("category")}>
+              <IconPlus size={15} /> Criar categoria
+            </button>
           </div>
-          {voiceChannels.map((channel) => (
-            <Fragment key={channel.id}>
-              <button
-                onClick={() => onChannel(channel.id)}
-                onContextMenu={(event) => openChannelMenu(event, channel)}
-                className={`channel-row ${activeChannelId === channel.id ? "active voice-active" : ""}`}
-              >
-                <IconVolume size={18} />
-                <span>{channel.name}</span>
-                {voiceCount(channel.id) > 0 && (
-                  <em
-                    className="people-count"
-                    aria-label={`${voiceCount(channel.id)} participantes`}
-                  >
-                    {voiceCount(channel.id)}
-                  </em>
-                )}
-              </button>
-              <VoiceChannelMembers
-                members={voiceMembers[channel.id] ?? []}
-                profiles={profiles}
-              />
-            </Fragment>
-          ))}
-        </div>
+        )}
         {canOpenAdministration && (
           <button className="admin-link" onClick={onSettings}>
             <IconSettings size={18} />
@@ -3248,7 +3223,7 @@ function renderMentions(
     ) : (
       <span
         key={`${keyPrefix}-m${index}`}
-        className={`mention mention-${segment.kind}`}
+        className={`mention mention-${segment.kind}${segment.self ? " mention-self" : ""}`}
         // O título traz o texto cru, para quem lê saber o que foi escrito de
         // fato quando o nome de exibição mudou depois do envio.
         title={segment.value}
@@ -3711,6 +3686,35 @@ function ChatView({
   useEffect(() => {
     if (pinnedToBottom.current) scrollToEnd("auto");
   }, [messages.length, scrollToEnd]);
+  /**
+   * O que cresce embaixo da lista não pode comer a última mensagem.
+   *
+   * O compositor ganha uma segunda linha, o aviso de "está digitando" aparece,
+   * um anexo entra na fila — e cada um deles tira altura da lista. O navegador
+   * mantém `scrollTop` como estava, então a borda de baixo passa a cair mais
+   * acima no conteúdo: quem estava no fim deixa de estar, e a última mensagem
+   * fica cortada atrás do campo até a pessoa rolar à mão.
+   *
+   * A rolagem acompanha o que a lista perdeu (ou ganhou). Quem está no fim
+   * continua no fim; quem subiu para reler mantém o conteúdo ancorado embaixo,
+   * parado no mesmo ponto — a escolha oposta, ancorar pelo topo, é justamente
+   * a que produz o corte.
+   */
+  useEffect(() => {
+    const node = listRef.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    let previous = node.clientHeight;
+    const observer = new ResizeObserver(() => {
+      const height = node.clientHeight;
+      const lost = previous - height;
+      previous = height;
+      if (!lost) return;
+      if (pinnedToBottom.current) scrollToEnd("auto");
+      else node.scrollTop += lost;
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [scrollToEnd]);
 
   const chooseReaction = (messageId: string) =>
     setReactingTo(messageId);
@@ -7255,14 +7259,16 @@ function SettingsPanel({
     await reorderOnlineRole(roleId, direction);
     await hydrateOnlineWorkspace(currentUserId);
   };
-  const ChannelPermissionsSettings = () => (
-    <ChannelPermissionsSettingsView serverId={serverId} />
-  );
-  const MembersSettings = () => <MembersSettingsView serverId={serverId} />;
-  const InvitesSettings = () => <InvitesSettingsView serverId={serverId} />;
-  const BansSettings = () => <BansSettingsView serverId={serverId} />;
-  const AuditSettings = () => <AuditSettingsView serverId={serverId} />;
-  const QuotaSettings = () => <QuotaSettingsView serverId={serverId} />;
+  /*
+   * As abas montam a `*View` direto.
+   *
+   * Antes cada uma tinha um invólucro declarado aqui dentro
+   * (`const QuotaSettings = () => <QuotaSettingsView … />`). Uma função nova
+   * a cada render é um *tipo* de componente novo para o React, que então
+   * desmonta a aba inteira e monta outra no lugar: o conteúdo pisca, o estado
+   * dela se perde e os efeitos rodam de novo — a medição da quota recomeçava
+   * sozinha a cada render do painel.
+   */
   return (
     <div className="modal-backdrop settings-backdrop">
       <section className="settings-panel">
@@ -7665,12 +7671,14 @@ function SettingsPanel({
             </div>
           </div>
         )}
-        {tab === "permissions" && <ChannelPermissionsSettings />}
-        {tab === "members" && <MembersSettings />}
-        {tab === "invites" && <InvitesSettings />}
-        {tab === "bans" && <BansSettings />}
-        {tab === "quota" && <QuotaSettings />}
-        {tab === "audit" && <AuditSettings />}
+        {tab === "permissions" && (
+          <ChannelPermissionsSettingsView serverId={serverId} />
+        )}
+        {tab === "members" && <MembersSettingsView serverId={serverId} />}
+        {tab === "invites" && <InvitesSettingsView serverId={serverId} />}
+        {tab === "bans" && <BansSettingsView serverId={serverId} />}
+        {tab === "quota" && <QuotaSettingsView serverId={serverId} />}
+        {tab === "audit" && <AuditSettingsView serverId={serverId} />}
       </section>
       {confirmDialog}
     </div>
@@ -8729,7 +8737,7 @@ function MembersSettingsView({ serverId }: { serverId: string }) {
           placeholder="Pesquisar membro"
         />
         <Select
-          className="admin-search"
+          className="admin-filter"
           ariaLabel="Filtrar por cargo"
           value={roleFilter}
           onChange={setRoleFilter}
@@ -8742,7 +8750,7 @@ function MembersSettingsView({ serverId }: { serverId: string }) {
         />
         {canModerateVoice && (
           <Select
-            className="admin-search"
+            className="admin-filter"
             ariaLabel="Canal de voz para moderação"
             value={voiceChannelId}
             onChange={setVoiceChannelId}
@@ -10368,6 +10376,16 @@ function HelpPanel({ onClose }: { onClose: () => void }) {
           servidor é cifrada (HTTPS e DTLS-SRTP). O tratamento dos seus dados
           está descrito na política de privacidade.
         </p>
+        <footer className="help-credits">
+          <p>
+            Desenvolvido carinhosamente por <b>Lucas Uchôa</b>{" "}
+            <span>/ Vulgo: Trauts</span>
+          </p>
+          <p>
+            Depurado e esculhambado pelo nosso QA <b>Gabriel P.</b>{" "}
+            <span>/ Vulgo: Enemy</span>
+          </p>
+        </footer>
       </section>
     </div>
   );

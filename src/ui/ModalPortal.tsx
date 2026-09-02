@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useLayoutEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 /**
@@ -16,7 +16,18 @@ export function ModalPortal({ children }: { children: ReactNode }) {
     typeof document === "undefined" ? null : document.createElement("div"),
   );
 
-  useEffect(() => {
+  /**
+   * `useLayoutEffect`, e não `useEffect`: quem monta aqui dentro precisa se
+   * medir.
+   *
+   * Os efeitos de layout do filho rodam antes dos do pai, e todos eles antes
+   * de qualquer efeito passivo. Com o `append` num `useEffect`, o menu de
+   * contexto media a si mesmo enquanto ainda estava neste `div` solto, fora do
+   * documento — `getBoundingClientRect()` devolvia tudo zero, a conta de
+   * "cabe à direita?" dava sempre que sim, e o menu aberto perto da borda
+   * saía pela lateral da janela e ficava cortado.
+   */
+  useLayoutEffect(() => {
     if (!host) return;
     host.className = "modal-portal";
     document.body.append(host);

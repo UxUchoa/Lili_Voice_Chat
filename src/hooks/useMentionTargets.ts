@@ -38,9 +38,13 @@ export function useMentionTargets(channel: Channel): MentionTarget[] {
             .map((member) => member.userId),
         );
 
+    // A própria pessoa entra na lista, e sempre: sem ela aqui, o `@fulano` que
+    // alguém escreveu para ela ficava sem destaque na tela — notificava e
+    // aparecia como texto cru. `suggestMentions` é quem a tira das sugestões.
     const people: MentionTarget[] = profiles
       .filter(
-        (profile) => profile.id !== currentUserId && allowedIds.has(profile.id),
+        (profile) =>
+          profile.id === currentUserId || allowedIds.has(profile.id),
       )
       .map((profile) => ({
         id: profile.id,
@@ -48,6 +52,7 @@ export function useMentionTargets(channel: Channel): MentionTarget[] {
         label: profile.displayName,
         hint: `@${profile.username}`,
         kind: "user" as const,
+        self: profile.id === currentUserId,
       }));
 
     // Cargo só existe em servidor, e o @everyone padrão tem caminho próprio.

@@ -260,8 +260,15 @@ No painel do projeto:
 1. **Project Settings → Authentication → SMTP Settings** → _Enable Custom SMTP_.
    Host `smtp-relay.brevo.com`, porta `587`, usuário e senha vindos de
    **SMTP & API → SMTP** no painel do Brevo (a senha é a *chave SMTP*, não a
-   senha da conta). Remetente num domínio verificado no Brevo — sem isso a
-   entrega cai em spam.
+   senha da conta). Gere a chave na variante **padrão, de 64 caracteres** — a
+   curta existe para sistemas antigos com limite de campo, e o Supabase não
+   tem esse limite. Remetente num domínio verificado no Brevo, senão a entrega
+   cai em spam.
+
+   > A chave "sem expiração" **morre depois de 90 dias consecutivos sem uso**.
+   > Aqui ela só é acionada por cadastro ou recuperação de senha, então um
+   > período parado a invalida em silêncio — e o sintoma aparece como cadastro
+   > que parou de funcionar sem ninguém ter mexido no código.
 2. **Authentication → Providers → Email** → ligue _Confirm email_.
 3. **Authentication → Email Templates** → cole o conteúdo de
    `supabase/templates/confirmation.html` e `supabase/templates/recovery.html`.

@@ -1146,8 +1146,10 @@
   font-size: 14px;
 }
 .notification-settings-card .check-setting {
+  /* Sem `flex-direction`: a direção vem de `label.check-setting`, que põe o
+     texto à esquerda e o controle à direita. Declarada aqui, ela invertia só
+     este cartão — a mesma linha, alinhada para o lado oposto do resto. */
   display: flex;
-  flex-direction: row;
   align-items: center;
   gap: 10px;
   color: var(--secondary);
@@ -1916,16 +1918,17 @@
    Logo: contraste no estado ativo e tamanho legível
    ============================================================ */
 
-/* O mascote é vermelho (#F20D24). Sobre a placa da marca ele sumia por
-   completo — vermelho em cima de vermelho. A placa ativa fica neutra e o
-   estado vem do anel da marca somado à barra branca à esquerda, que já é o
-   indicador usado pelos servidores. */
-.rail-home.active {
-  background: var(--surface-3);
-  box-shadow: inset 0 0 0 2px var(--brand);
+/* A arte da marca passou a trazer o próprio fundo vinho. A placa vermelha
+   embaixo dela virava um quadrado dentro de outro, então quem desenha o botão
+   agora é a própria imagem, que preenche a placa inteira. O estado ativo
+   continua sendo o anel da marca somado à barra branca à esquerda, que é o
+   indicador que os servidores já usam. */
+.rail-home {
+  background: transparent;
+  overflow: hidden;
 }
-.rail-home.active:hover {
-  background: #2a2528;
+.rail-home.active {
+  box-shadow: inset 0 0 0 2px var(--brand);
 }
 
 /* Estava pequeno demais para se reconhecer o mascote. */
@@ -1934,8 +1937,10 @@
   height: 32px;
 }
 .rail-home img {
-  width: 30px;
-  height: 30px;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
 }
 
 /* ============================================================
@@ -2036,10 +2041,14 @@ button.toggle,
    ============================================================ */
 /* `.profile-panel label` empilha rótulo sobre campo (0,1,1) e vencia
    `.check-setting` (0,1,0): a caixa de seleção ficava centralizada acima do
-   texto. Agora é uma linha: texto à esquerda, controle à direita. */
-.profile-panel .check-setting,
-.account-panel .check-setting,
-.settings-panel .check-setting {
+   texto. Agora é uma linha: texto à esquerda, controle à direita.
+
+   O seletor é `label.check-setting` — mesmo peso (0,1,1), declarado depois —
+   e não a lista dos três painéis que havia aqui. Fora deles a regra não valia,
+   e a mesma caixa de seleção aparecia à esquerda no cartão de notificações do
+   servidor e à direita nas configurações: duas linhas iguais, alinhadas para
+   lados opostos. */
+label.check-setting {
   flex-direction: row-reverse;
   align-items: center;
   justify-content: space-between;
@@ -2784,6 +2793,12 @@ button.toggle,
   background: rgba(240, 12, 20, 0.16);
   color: #ff9a9d;
   font-weight: 600;
+}
+.mention-self {
+  /* A menção a quem está lendo puxa o amarelo do alcance amplo: é o mesmo
+     recado, "isto pede sua atenção", e separa o próprio nome dos outros. */
+  background: rgba(251, 198, 5, 0.16);
+  color: #fbc605;
 }
 .mention-broadcast {
   /* Alcance amplo se destaca mais: notifica muito mais gente. */

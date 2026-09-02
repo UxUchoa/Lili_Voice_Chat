@@ -29,6 +29,15 @@ export function GifPicker({
    * checagem era local, com a chave embutida no pacote.
    */
   const [unconfigured, setUnconfigured] = useState(false);
+  /**
+   * O provedor respondeu, mas nenhum item veio com imagem.
+   *
+   * Sem isto a grade enchia de quadros quebrados — `<img>` sem `src` mostra o
+   * ícone de imagem partida e o texto alternativo, que foi como o problema
+   * apareceu. Um item sem URL não tem conserto do lado do cliente: é a função
+   * `gifs` publicada devolvendo um formato mais antigo que o do cliente.
+   */
+  const [imageless, setImageless] = useState(false);
   const requestRef = useRef(0);
 
   useEffect(() => {
@@ -52,11 +61,15 @@ export function GifPicker({
         );
     work
       .then((items) => {
-        if (ticket === requestRef.current) setResults(items);
+        if (ticket !== requestRef.current) return;
+        const usable = items.filter((gif) => gif.previewUrl && gif.url);
+        setResults(usable);
+        setImageless(items.length > 0 && usable.length === 0);
       })
       .catch((caught) => {
         if (ticket !== requestRef.current) return;
         setResults([]);
+        setImageless(false);
         if (caught instanceof GifNotConfiguredError) {
           setUnconfigured(true);
           return;
@@ -109,7 +122,11 @@ export function GifPicker({
             <button
               key={category.searchTerm}
               onClick={() => setQuery(category.searchTerm)}
-              style={{ backgroundImage: `url(${category.imageUrl})` }}
+              style={
+                category.imageUrl
+                  ? { backgroundImage: `url(${category.imageUrl})` }
+                  : undefined
+              }
             >
               <span>{category.label}</span>
             </button>
@@ -121,7 +138,11 @@ export function GifPicker({
           <p className="empty-copy">Carregando…</p>
         )}
         {!loading && results.length === 0 && !error && (
-          <p className="empty-copy">Nenhum GIF encontrado.</p>
+          <p className="empty-copy">
+            {imageless
+              ? "O provedor respondeu, mas sem endereço de imagem em nenhum item — a função `gifs` publicada está desatualizada. Publique-a de novo."
+              : "Nenhum GIF encontrado."}
+          </p>
         )}
         {results.map((gif) => (
           <button

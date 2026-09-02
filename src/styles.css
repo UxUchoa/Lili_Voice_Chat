@@ -199,6 +199,16 @@ a:focus-visible,
   border-radius: 10px;
   object-fit: contain;
 }
+/* Na barra de título a marca traz o nome inteiro: ela não pode encolher e
+   quebrar "Lili — Voice Chat" em duas linhas dentro de uma barra de 54px. */
+.titlebar .brand {
+  flex: none;
+  /* O respiro até o caminho do canal vinha do `min-width: 160px` sobrando ao
+     redor de um nome curto. Com o nome inteiro não sobra nada, então ele passa
+     a ser declarado. */
+  padding-right: 18px;
+  white-space: nowrap;
+}
 .brand-compact {
   min-width: auto;
 }
@@ -275,8 +285,7 @@ a:focus-visible,
   width: 18px;
   color: currentColor;
 }
-.icon-button,
-.window-button {
+.icon-button {
   width: 31px;
   height: 31px;
   display: grid;
@@ -287,17 +296,27 @@ a:focus-visible,
   font-size: 16px;
   position: relative;
 }
-.icon-button:hover,
-.window-button:hover {
+.icon-button:hover {
   background: var(--surface-3);
   color: var(--primary);
 }
-.window-button {
-  font-size: 14px;
-  border-radius: 0;
-}
-.window-button.close:hover {
-  background: #bd1820;
+/*
+ * Reserva a faixa dos botões nativos da janela (Windows Controls Overlay).
+ *
+ * Quem manda aqui é o `min-width`: o Electron de hoje não expõe as variáveis
+ * `env(titlebar-area-*)`, então o cálculo cai nos valores de reserva e dá
+ * zero. A faixa medida na janela real é de 137px — igual a 100% e a 150% de
+ * escala do Windows, e igual com a janela maximizada, porque ela é fixa em
+ * pixels de CSS. O cálculo fica como caminho preferencial para o dia em que
+ * essas variáveis existirem: aí a medida passa a vir do próprio Chromium.
+ */
+.window-controls-space {
+  flex: 0 0 auto;
+  align-self: stretch;
+  width: calc(
+    100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)
+  );
+  min-width: 138px;
 }
 .notification-dot {
   width: 5px;
@@ -537,8 +556,81 @@ a:focus-visible,
   color: var(--muted);
   font-size: 18px;
 }
-.category-index {
-  margin-bottom: 8px;
+/* A linha do canal e o "⋯" dela. O botão reserva o espaço mesmo escondido:
+   aparecer só no hover empurraria o nome do canal para o lado a cada passada
+   do mouse. */
+.channel-row-wrap {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.channel-row-wrap .channel-row {
+  flex: 1;
+  min-width: 0;
+}
+.channel-row-wrap .channel-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.channel-options {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  visibility: hidden;
+}
+.channel-row-wrap:hover .channel-options,
+.channel-options:focus-visible,
+.group-title:hover .channel-options {
+  visibility: visible;
+}
+.channel-options:hover {
+  color: var(--primary);
+  background: var(--surface-3);
+}
+/* No toque não existe hover: lá o "⋯" é a única porta para editar e excluir,
+   então ele fica sempre visível. */
+@media (hover: none) {
+  .channel-options {
+    visibility: visible;
+  }
+}
+/* Canais fora de categoria: sem título, colados no topo da barra, como no
+   Discord. O respiro embaixo separa-os da primeira categoria. */
+.loose-channels {
+  margin-bottom: 6px;
+}
+/* Criar canal e criar categoria eram os "+" dos títulos fixos que sumiram.
+   Viram ações no fim da lista: leem-se como ação, e não como mais uma seção
+   que a pessoa tentaria renomear. */
+.channel-create {
+  display: grid;
+  gap: 2px;
+  margin: 6px 0 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.channel-create button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: left;
+}
+.channel-create button:hover {
+  background: var(--surface-3);
+  color: var(--primary);
 }
 .category-actions {
   display: inline-flex;
@@ -2105,6 +2197,9 @@ a:focus-visible,
   display: flex;
   justify-content: space-between;
   align-items: start;
+  /* A busca e os filtros à direita se encostavam: `space-between` só afasta o
+     primeiro do último, e no meio não há folga nenhuma. */
+  gap: 12px;
   margin-bottom: 23px;
 }
 .editor-top h3 {
@@ -2829,6 +2924,27 @@ a:focus-visible,
   color: var(--muted);
   font-size: 10px;
 }
+.help-credits {
+  /* Fecha o modal com um fio, como as demais divisórias da interface: os
+     créditos são um recado à parte, e não a continuação do aviso acima. */
+  margin: 18px -30px -8px;
+  padding: 14px 30px 0;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 4px;
+}
+.help-credits p {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+.help-credits b {
+  color: var(--secondary);
+  font-weight: 600;
+}
+.help-credits span {
+  color: var(--yellow);
+}
 .user-panel {
   border: 0;
   color: inherit;
@@ -3518,6 +3634,17 @@ a:focus-visible,
 .admin-search {
   width: 210px;
 }
+/*
+ * O filtro do cabeçalho é um `Select`, e não um `input`.
+ *
+ * Ele usava `.admin-search`, que desenha moldura, fundo e recuo — mas quem
+ * recebe a classe é a raiz do componente, e o gatilho lá dentro já traz os
+ * seus. Davam duas cápsulas encaixadas, uma sobrando por fora da outra. Aqui
+ * fica só a largura; a aparência vem do próprio controle.
+ */
+.admin-filter {
+  width: 210px;
+}
 .invite-controls {
   margin-bottom: 16px;
   padding: 10px;
@@ -3855,7 +3982,6 @@ a:focus-visible,
   }
   .titlebar .brand,
   .window-nav,
-  .window-button,
   .server-rail,
   .channel-sidebar,
   .member-sidebar {
@@ -4188,7 +4314,14 @@ a:focus-visible,
   align-items: center;
 }
 .check-setting input {
-  width: auto !important;
+  /* `.profile-panel input` (0,1,1) espalha `width: 100%` por todo campo do
+     painel, e uma caixa de seleção não é um campo de largura cheia — daí o
+     `!important`. Ele valia para `auto`, que devolvia os ~13px do padrão do
+     sistema e desfazia os 17px pedidos adiante: a mesma caixa saía de um
+     tamanho aqui e de outro nas telas que não passam por esta regra. */
+  width: 17px !important;
+  height: 17px;
+  flex: none;
   accent-color: var(--brand);
 }
 
@@ -5464,6 +5597,12 @@ button svg,
   transition: border-color 0.15s ease, background 0.15s ease;
 }
 .ds-select-trigger > span {
+  /* O ícone da opção vem antes do texto, sem nada entre os dois: sem esta
+     folga saía "🔊Cornos apenas", grudado. */
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -5515,6 +5654,10 @@ button svg,
   bottom: calc(100% + 5px);
 }
 .ds-select-list li {
+  /* Mesma folga do gatilho: a opção na lista tem o mesmo ícone. */
+  display: flex;
+  align-items: center;
+  gap: 7px;
   padding: 8px 10px;
   border-radius: 6px;
   color: var(--secondary);
@@ -5531,7 +5674,9 @@ button svg,
 }
 .ds-select-list li.selected::after {
   content: "✓";
-  float: right;
+  /* Era `float: right`, que não existe dentro de um contêiner flex — o check
+     ia parar colado no texto. */
+  margin-left: auto;
   color: var(--brand);
 }
 .ds-select-list li.disabled {
@@ -5743,6 +5888,10 @@ button svg,
   font-style: normal;
 }
 .rail-folder-body {
+  /* A cápsula acompanha a largura da capa da pasta, logo acima dela. Sem a
+     largura declarada ela encolhia até os 34px dos ícones de dentro: ficava
+     mais estreita que a capa e os avatares encostavam nas duas bordas. */
+  width: 48px;
   display: flex;
   flex-direction: column;
   align-items: center;

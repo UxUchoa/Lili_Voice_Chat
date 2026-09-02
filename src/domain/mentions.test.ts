@@ -18,6 +18,14 @@ const targets: MentionTarget[] = [
     hint: "@anapaula",
   },
   { id: "u3", token: "bruno", label: "Bruno", kind: "user", hint: "@bruno" },
+  {
+    id: "eu",
+    token: "trauts",
+    label: "Trauts",
+    kind: "user",
+    hint: "@trauts",
+    self: true,
+  },
   { id: "r1", token: "Moderação", label: "Moderação", kind: "role", mentionable: true },
   {
     id: "r2",
@@ -111,7 +119,11 @@ describe("applyMention", () => {
 
 describe("suggestMentions", () => {
   it("lista todo mundo enquanto nada foi digitado", () => {
-    expect(suggestMentions("", targets)).toHaveLength(targets.length);
+    expect(suggestMentions("", targets)).toHaveLength(targets.length - 1);
+  });
+
+  it("não oferece a própria pessoa", () => {
+    expect(suggestMentions("trauts", targets)).toEqual([]);
   });
 
   it("põe quem começa com o trecho antes de quem só contém", () => {
@@ -156,6 +168,20 @@ describe("segmentMentions", () => {
   it("não destaca o @ colado em e-mail", () => {
     expect(segmentMentions("fulano@ana", targets)).toEqual([
       { type: "text", value: "fulano@ana" },
+    ]);
+  });
+
+  it("destaca a menção a quem está lendo, e a marca como própria", () => {
+    expect(segmentMentions("oi @trauts", targets)).toEqual([
+      { type: "text", value: "oi " },
+      {
+        type: "mention",
+        value: "@trauts",
+        label: "@Trauts",
+        kind: "user",
+        id: "eu",
+        self: true,
+      },
     ]);
   });
 

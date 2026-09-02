@@ -35,6 +35,15 @@ export interface MentionTarget {
   hint?: string;
   /** Cargo com menção desligada aparece na lista, mas não notifica. */
   mentionable?: boolean;
+  /**
+   * É a própria pessoa que está lendo.
+   *
+   * Ela precisa estar na lista para que o `@fulano` que alguém escreveu para
+   * ela seja destacado — sem isso, a única menção que a pessoa mais quer ver
+   * chegava como texto cru, mesmo tendo notificado. Fica de fora só das
+   * sugestões, onde oferecer a si mesmo não serve para nada.
+   */
+  self?: boolean;
 }
 
 /** As duas menções de alcance amplo, que não são pessoa nem cargo. */
@@ -105,11 +114,13 @@ export function suggestMentions(
   limit = 8,
 ): MentionTarget[] {
   const needle = query.trim().toLowerCase();
+  // A pessoa não se sugere; ela está na lista pelo destaque, não pela busca.
+  const offered = targets.filter((target) => !target.self);
   const fieldsOf = (target: MentionTarget) =>
     [target.token, target.label, target.hint ?? ""].map((value) =>
       value.toLowerCase(),
     );
-  return targets
+  return offered
     .map((target, index) => ({ target, index, fields: fieldsOf(target) }))
     .filter(
       (entry) => !needle || entry.fields.some((value) => value.includes(needle)),
@@ -136,6 +147,8 @@ export type MentionSegment =
       label: string;
       kind: "user" | "role" | "broadcast";
       id?: string;
+      /** A menção é de quem está lendo, para o destaque próprio. */
+      self?: boolean;
     };
 
 /**
@@ -228,6 +241,7 @@ export function segmentMentions(
       label: `@${target.label}`,
       kind: target.kind,
       id: target.id,
+      self: target.self,
     });
     index += 1 + target.token.length;
   }
