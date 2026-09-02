@@ -23,10 +23,11 @@ describe("normalizeOtp", () => {
     expect(normalizeOtp("Seu código é 123456.")).toBe("123456");
   });
 
-  it("aceita o código inteiro quando o servidor manda mais de seis dígitos", () => {
+  it("não corta em silêncio o que passa do tamanho esperado", () => {
     // `otp_length` vive no painel do projeto e já esteve em 8 enquanto isto
     // cortava em 6: o código saía truncado e o servidor respondia
-    // `otp_expired`, indistinguível de um código vencido.
+    // `otp_expired`, indistinguível de um código vencido. O excedente chega
+    // até `otpError`, que é quem recusa dizendo o tamanho.
     expect(normalizeOtp("51263612")).toBe("51263612");
   });
 
@@ -46,7 +47,7 @@ describe("isCompleteOtp", () => {
     expect(isCompleteOtp("123456")).toBe(true);
     expect(isCompleteOtp("12345")).toBe(false);
     expect(isCompleteOtp("12 34 56")).toBe(true);
-    expect(isCompleteOtp("51263612")).toBe(true);
+    expect(isCompleteOtp("51263612")).toBe(false);
   });
 });
 
@@ -57,16 +58,20 @@ describe("otpError", () => {
   });
 
   it("diz o tamanho esperado quando falta dígito", () => {
-    expect(otpError("123")).toBe(
-      `O código tem pelo menos ${OTP_LENGTH} dígitos.`,
-    );
+    expect(otpError("123")).toBe(`O código tem ${OTP_LENGTH} dígitos.`);
   });
 
   it("não reclama de um código completo", () => {
-    // Se está certo ou vencido, quem responde é o servidor. O tamanho exato
-    // também: um código mais longo que seis dígitos passa direto daqui.
+    // Se está certo ou vencido, quem responde é o servidor.
     expect(otpError("123456")).toBeUndefined();
-    expect(otpError("51263612")).toBeUndefined();
+  });
+
+  it("recusa o código mais longo dizendo o tamanho que veio", () => {
+    // O sintoma de um servidor reconfigurado. Cortar em silêncio, que era o
+    // que acontecia, mandava a pessoa perseguir um código nunca vencido.
+    expect(otpError("51263612")).toBe(
+      `O código tem ${OTP_LENGTH} dígitos, e este tem 8.`,
+    );
   });
 });
 

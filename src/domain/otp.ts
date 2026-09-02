@@ -15,17 +15,18 @@
 export const OTP_LENGTH = 6;
 
 /**
- * O maior código que o servidor tem como mandar.
+ * O maior código que o campo aceita digitar — não o que ele dá por válido.
  *
- * `otp_length` aceita de 6 a 10 dígitos, e em produção ele mora no painel do
- * projeto — fora deste repositório, onde já divergiu do `config.toml`: o
- * servidor mandava oito dígitos enquanto o campo cortava em seis. O código
- * chegava inteiro no e-mail, era truncado antes de sair daqui, e o Supabase
- * respondia `otp_expired` — a mesma resposta de código vencido. Nada na tela
- * dizia que faltavam dois dígitos.
+ * O tamanho exigido continua sendo `OTP_LENGTH`. Este limite maior existe só
+ * para o campo nunca **cortar em silêncio**, que foi o que quebrou o cadastro
+ * inteiro: `otp_length` aceita de 6 a 10 dígitos e mora no painel do projeto,
+ * fora deste repositório, e chegou a ficar em oito enquanto aqui se cortava em
+ * seis. O código saía truncado, o Supabase respondia `otp_expired` — a mesma
+ * resposta de um código vencido — e nada na tela dizia que faltavam dígitos.
  *
- * Aceitar a faixa inteira faz o campo sobreviver a essa divergência. Conferir
- * o tamanho exato é de quem gerou o código, não de quem o digita.
+ * Com o painel em seis, um código mais longo passa a ser recusado aqui mesmo,
+ * dizendo quantos dígitos vieram. Continua sendo uma recusa, mas dessa vez a
+ * pessoa lê o motivo em vez de perseguir um código que nunca esteve vencido.
  */
 export const OTP_MAX_LENGTH = 10;
 
@@ -45,7 +46,7 @@ export function normalizeOtp(input: string): string {
 
 /** O código está completo e pode ser enviado para conferência? */
 export function isCompleteOtp(input: string): boolean {
-  return normalizeOtp(input).length >= OTP_LENGTH;
+  return normalizeOtp(input).length === OTP_LENGTH;
 }
 
 /**
@@ -58,7 +59,12 @@ export function otpError(input: string): string | undefined {
   const digits = normalizeOtp(input);
   if (digits.length === 0) return "Digite o código que enviamos por e-mail.";
   if (digits.length < OTP_LENGTH)
-    return `O código tem pelo menos ${OTP_LENGTH} dígitos.`;
+    return `O código tem ${OTP_LENGTH} dígitos.`;
+  // Dizer quantos vieram: um código mais longo que o esperado quase sempre
+  // significa que o servidor foi reconfigurado, e essa é a única pista que
+  // aparece antes de alguém ir ler o painel.
+  if (digits.length > OTP_LENGTH)
+    return `O código tem ${OTP_LENGTH} dígitos, e este tem ${digits.length}.`;
   return undefined;
 }
 
