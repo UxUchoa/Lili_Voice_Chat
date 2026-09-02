@@ -3,6 +3,7 @@ import type { Channel } from "../domain/types";
 import { IconHash, IconVolume, IconX } from "./icons";
 import { createOnlineChannel } from "../services/online/data";
 import { ModalPortal } from "./ModalPortal";
+import { IconChevronDown } from "./icons";
 import { Select } from "./Select";
 
 export type NewChannelKind = "text" | "voice" | "category";
@@ -178,7 +179,7 @@ export function ChannelSetupModal({
             >
               <span className="channel-kind-mark" aria-hidden="true" />
               <span className="channel-kind-glyph" aria-hidden="true">
-                ▾
+                <IconChevronDown size={18} />
               </span>
               <span className="channel-kind-copy">
                 <b>Categoria</b>

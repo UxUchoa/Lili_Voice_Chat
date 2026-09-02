@@ -1,8 +1,11 @@
+import type { ReactNode } from "react";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
 export interface SelectOption {
   value: string;
   label: string;
+  /** Ícone à esquerda do rótulo. A busca por digitação usa só o `label`. */
+  icon?: ReactNode;
   disabled?: boolean;
 }
 
@@ -198,7 +201,14 @@ export function Select({
         onKeyDown={onKeyDown}
       >
         <span className={selected ? "" : "ds-select-placeholder"}>
-          {selected?.label ?? placeholder}
+          {selected ? (
+            <>
+              {selected.icon}
+              {selected.label}
+            </>
+          ) : (
+            placeholder
+          )}
         </span>
         <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
           <path
@@ -246,6 +256,7 @@ export function Select({
                 commit(index);
               }}
             >
+              {option.icon}
               {option.label}
             </li>
           ))}

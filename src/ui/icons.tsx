@@ -418,3 +418,122 @@ export const IconEyeOff = (props: IconProps) => (
     <line x1="2" x2="22" y1="2" y2="22" />
   </Base>
 );
+
+export const IconPlay = (props: IconProps) => (
+  <Base {...props}>
+    <path d="M6 3.7a1 1 0 0 1 1.5-.87l11.3 7.3a1 1 0 0 1 0 1.74L7.5 21.17A1 1 0 0 1 6 20.3Z" />
+  </Base>
+);
+
+export const IconPause = (props: IconProps) => (
+  <Base {...props}>
+    <rect x="6" y="4" width="4" height="16" rx="1" />
+    <rect x="14" y="4" width="4" height="16" rx="1" />
+  </Base>
+);
+
+export const IconPaperclip = (props: IconProps) => (
+  <Base {...props}>
+    <path d="M13.23 20.77a5.5 5.5 0 0 1-7.78-7.78l8.49-8.48a3.67 3.67 0 0 1 5.19 5.19l-8.49 8.48a1.83 1.83 0 0 1-2.6-2.6l7.79-7.78" />
+  </Base>
+);
+
+export const IconDownload = (props: IconProps) => (
+  <Base {...props}>
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="7 10 12 15 17 10" />
+    <line x1="12" x2="12" y1="15" y2="3" />
+  </Base>
+);
+
+export const IconLock = (props: IconProps) => (
+  <Base {...props}>
+    <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+  </Base>
+);
+
+export const IconShield = (props: IconProps) => (
+  <Base {...props}>
+    <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1Z" />
+  </Base>
+);
+
+export const IconClock = (props: IconProps) => (
+  <Base {...props}>
+    <circle cx="12" cy="12" r="10" />
+    <polyline points="12 6 12 12 16 14" />
+  </Base>
+);
+
+export const IconFolder = (props: IconProps) => (
+  <Base {...props}>
+    <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+  </Base>
+);
+
+export const IconMenu = (props: IconProps) => (
+  <Base {...props}>
+    <line x1="4" x2="20" y1="6" y2="6" />
+    <line x1="4" x2="20" y1="12" y2="12" />
+    <line x1="4" x2="20" y1="18" y2="18" />
+  </Base>
+);
+
+export const IconExternalLink = (props: IconProps) => (
+  <Base {...props}>
+    <path d="M15 3h6v6" />
+    <path d="M10 14 21 3" />
+    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+  </Base>
+);
+
+export const IconArrowDown = (props: IconProps) => (
+  <Base {...props}>
+    <path d="M12 5v14" />
+    <path d="m19 12-7 7-7-7" />
+  </Base>
+);
+
+export const IconArrowUp = (props: IconProps) => (
+  <Base {...props}>
+    <path d="M12 19V5" />
+    <path d="m5 12 7-7 7 7" />
+  </Base>
+);
+
+export const IconCircle = (props: IconProps) => (
+  <Base {...props}>
+    <circle cx="12" cy="12" r="10" />
+  </Base>
+);
+
+export const IconCornerDownRight = (props: IconProps) => (
+  <Base {...props}>
+    <polyline points="15 10 20 15 15 20" />
+    <path d="M4 4v7a4 4 0 0 0 4 4h12" />
+  </Base>
+);
+
+export const IconGrip = (props: IconProps) => (
+  <Base {...props}>
+    <circle cx="9" cy="6" r="1" />
+    <circle cx="9" cy="12" r="1" />
+    <circle cx="9" cy="18" r="1" />
+    <circle cx="15" cy="6" r="1" />
+    <circle cx="15" cy="12" r="1" />
+    <circle cx="15" cy="18" r="1" />
+  </Base>
+);
+
+export const IconMinus = (props: IconProps) => (
+  <Base {...props}>
+    <path d="M5 12h14" />
+  </Base>
+);
+
+export const IconSquare = (props: IconProps) => (
+  <Base {...props}>
+    <rect width="16" height="16" x="4" y="4" rx="2" />
+  </Base>
+);

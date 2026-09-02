@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Channel, PermissionOverride, Role, ServerMember, Profile } from "../domain/types";
 import { Permissions, hasPermission } from "../domain/permissions";
-import { IconHash, IconTrash, IconVolume, IconX } from "./icons";
+import {
+  IconCheck,
+  IconCircle,
+  IconHash,
+  IconTrash,
+  IconVolume,
+  IconX,
+} from "./icons";
 import { ModalPortal } from "./ModalPortal";
 import { Select } from "./Select";
 import { useConfirm } from "./ConfirmModal";
@@ -472,7 +479,7 @@ export function ChannelSettingsModal({
                           <span>{role.name}</span>
                           {targetsWithOverride.has(`ROLE:${role.id}`) && (
                             <em title="Tem permissões próprias neste canal">
-                              ●
+                              <IconCircle size={7} fill="currentColor" strokeWidth={0} />
                             </em>
                           )}
                         </button>
@@ -497,7 +504,9 @@ export function ChannelSettingsModal({
                             </span>
                             {targetsWithOverride.has(
                               `MEMBER:${member.userId}`,
-                            ) && <em title="Tem permissões próprias">●</em>}
+                            ) && <em title="Tem permissões próprias">
+                                <IconCircle size={7} fill="currentColor" strokeWidth={0} />
+                              </em>}
                           </button>
                         );
                       })}
@@ -527,9 +536,9 @@ export function ChannelSettingsModal({
                             >
                               {(
                                 [
-                                  ["deny", "✕"],
+                                  ["deny", <IconX size={13} />],
                                   ["inherit", "/"],
-                                  ["allow", "✓"],
+                                  ["allow", <IconCheck size={13} />],
                                 ] as const
                               ).map(([value, glyph]) => (
                                 <button

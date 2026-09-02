@@ -67,6 +67,16 @@ import type {
   ServerMember,
 } from "./domain/types";
 import { useMessages } from "./hooks/useMessages";
+import { useMentionTargets } from "./hooks/useMentionTargets";
+import { groupMembers, nameColorOf } from "./domain/memberList";
+import {
+  activeMentionQuery,
+  applyMention,
+  segmentMentions,
+  suggestMentions,
+  type MentionTarget,
+} from "./domain/mentions";
+import { MentionSuggestions } from "./ui/MentionSuggestions";
 import { useRtc } from "./hooks/useRtc";
 import type { RemotePeer } from "./hooks/useLiveKitRtc";
 import type { CameraResolution } from "./hooks/cameraModes";
@@ -175,7 +185,11 @@ import { useAppStore } from "./store/appStore";
 import { reportRuntimeError } from "./services/runtimeErrors";
 import { MediaCropModal } from "./ui/MediaCropModal";
 import { DeviceMenu } from "./ui/DeviceMenu";
-import { ContextMenu, useContextMenu } from "./ui/ContextMenu";
+import {
+  ContextMenu,
+  useContextMenu,
+  type ContextMenuItem,
+} from "./ui/ContextMenu";
 import { ComposerPicker } from "./ui/ComposerPicker";
 import { MessageAttachment } from "./ui/MessageAttachment";
 import {
@@ -187,6 +201,7 @@ import {
   type AttachmentResendRequest,
 } from "./services/online/attachments";
 import { useConfirm } from "./ui/ConfirmModal";
+import { usePrompt } from "./ui/PromptModal";
 import { buildDirectMessageMenu } from "./ui/useDirectMessageMenu";
 import { UserProfileModal, type UserRelationship } from "./ui/UserProfileModal";
 import { ServerPrivacyModal } from "./ui/ServerPrivacyModal";
@@ -226,27 +241,36 @@ import {
   parseLocationHash,
   useNavigationStore,
 } from "./store/navigationStore";
+import { ProfileCard } from "./ui/ProfileCard";
 import {
   ScreenSharePicker,
   type ShareQuality,
   type ShareSelection,
 } from "./ui/ScreenSharePicker";
 import {
+  IconArrowDown,
+  IconArrowUp,
   IconBan,
   IconBell,
   IconBellOff,
   IconCamera,
   IconCheck,
   IconChevronDown,
+  IconChevronRight,
   IconChevronUp,
+  IconGrip,
   IconHash,
   IconHeadphones,
   IconHeadphonesOff,
   IconHelp,
+  IconExternalLink,
   IconInbox,
   IconEye,
   IconEyeOff,
+  IconLock,
   IconMaximize,
+  IconMenu,
+  IconMinus,
   IconMessage,
   IconMic,
   IconMicOff,
@@ -258,6 +282,7 @@ import {
   IconPictureInPicture,
   IconPin,
   IconPlus,
+  IconCornerDownRight,
   IconReply,
   IconScreenShare,
   IconScreenShareOff,
@@ -265,6 +290,7 @@ import {
   IconSend,
   IconSettings,
   IconSmile,
+  IconSquare,
   IconTrash,
   IconUpload,
   IconUserPlus,
@@ -354,6 +380,9 @@ type Person = Pick<
   | "avatarUrl"
   | "color"
   | "status"
+  // A barra de membros mostra o status personalizado embaixo do nome, como no
+  // Discord; sem ele a linha ficava só com o nome do cargo repetido.
+  | "customStatus"
 > & { role?: string; self?: boolean };
 
 function Icon({
@@ -516,7 +545,7 @@ function Titlebar({
         aria-expanded={navigationOpen}
         onClick={onToggleNavigation}
       >
-        {navigationOpen ? "×" : "☰"}
+        {navigationOpen ? <IconX size={20} /> : <IconMenu size={20} />}
       </button>
       <div className="breadcrumbs">
         <span>{serverName}</span>
@@ -543,21 +572,21 @@ function Titlebar({
               aria-label="Minimizar"
               onClick={() => window.janjaDesktop?.minimize()}
             >
-              —
+              <IconMinus size={14} />
             </button>
             <button
               className="window-button"
               aria-label="Maximizar"
               onClick={() => window.janjaDesktop?.maximize()}
             >
-              □
+              <IconSquare size={13} />
             </button>
             <button
               className="window-button close"
               aria-label="Fechar"
               onClick={() => window.janjaDesktop?.close()}
             >
-              ×
+              <IconX size={18} />
             </button>
           </>
         )}
@@ -1036,7 +1065,7 @@ function ServerSetupModal({
               <span>Escolha nome, ícone e descrição do seu espaço.</span>
             </button>
             <button onClick={() => setMode("join")}>
-              <Icon>↗</Icon>
+              <IconExternalLink className="icon" size={20} />
               <b>Entrar em servidor</b>
               <span>Use o código criado por outro participante.</span>
             </button>
@@ -1454,6 +1483,7 @@ function DirectMessageSidebar({
     markChannelRead = useAppStore((state) => state.markChannelRead),
     currentUserId = useAppStore((state) => state.currentUserId);
   const contextMenu = useContextMenu();
+  const { ask: askPrompt, promptDialog } = usePrompt();
   const [newDmOpen, setNewDmOpen] = useState(false);
   const currentUser =
     profiles.find((profile) => profile.id === currentUserId) ?? profiles[0];
@@ -1557,25 +1587,35 @@ function DirectMessageSidebar({
           startCall: () => onCall(channel.id, false),
           editNote: () => {
             if (!peer) return;
-            const note = window.prompt(
-              `Nota sobre ${peer.displayName} (visível apenas para você)`,
-              contactFor(peer.id)?.note ?? "",
-            );
-            if (note === null) return;
-            void setContactNote(currentUserId, peer.id, note).then(
-              refreshWorkspace,
-            );
+            askPrompt({
+              title: `Nota sobre ${peer.displayName}`,
+              message: "Visível apenas para você.",
+              label: "Nota",
+              initialValue: contactFor(peer.id)?.note ?? "",
+              maxLength: 256,
+              multiline: true,
+              // Campo vazio apaga a nota; é a única forma de removê-la.
+              allowEmpty: true,
+              onSubmit: (note) =>
+                void setContactNote(currentUserId, peer.id, note).then(
+                  refreshWorkspace,
+                ),
+            });
           },
           editNickname: () => {
             if (!peer) return;
-            const nickname = window.prompt(
-              `Apelido para ${peer.displayName}`,
-              contactFor(peer.id)?.nickname ?? "",
-            );
-            if (nickname === null) return;
-            void setFriendNickname(currentUserId, peer.id, nickname).then(
-              refreshWorkspace,
-            );
+            askPrompt({
+              title: `Apelido para ${peer.displayName}`,
+              message: "Vazio volta ao nome de exibição.",
+              label: "Apelido",
+              initialValue: contactFor(peer.id)?.nickname ?? "",
+              maxLength: 32,
+              allowEmpty: true,
+              onSubmit: (nickname) =>
+                void setFriendNickname(currentUserId, peer.id, nickname).then(
+                  refreshWorkspace,
+                ),
+            });
           },
           closeDm: () =>
             void setDmState(currentUserId, channel.id, { closed: true }).then(
@@ -1780,6 +1820,7 @@ function DirectMessageSidebar({
       {contextMenu.menu && (
         <ContextMenu state={contextMenu.menu} onClose={contextMenu.close} />
       )}
+      {promptDialog}
       {newDmOpen && (
         <NewDirectMessageModal
           onClose={() => setNewDmOpen(false)}
@@ -2352,7 +2393,12 @@ function ChannelSidebar({
                   aria-label={`${collapsed ? "Expandir" : "Recolher"} categoria ${category.name}`}
                   onClick={() => toggleCategory(category.id)}
                 >
-                  {collapsed ? "▸" : "▾"} {category.name.toUpperCase()}
+                  {collapsed ? (
+                    <IconChevronRight size={12} />
+                  ) : (
+                    <IconChevronDown size={12} />
+                  )}{" "}
+                  {category.name.toUpperCase()}
                 </button>
                 {canManageChannels && (
                   <span className="category-actions">
@@ -2579,88 +2625,111 @@ function ChannelSidebar({
 
 function MemberSidebar({
   serverId,
-  onChannel,
+  onProfilePreview,
 }: {
   serverId: string;
-  onChannel: (id: string) => void;
+  onProfilePreview: (userId: string) => void;
 }) {
   const [query, setQuery] = useState("");
   const profiles = useAppStore((state) => state.profiles);
   const roles = useAppStore((state) => state.roles);
   const members = useAppStore((state) => state.members);
-  const currentUserId = useAppStore((state) => state.currentUserId);
-  const openDirectMessage = async (personId: string) => {
-    const channelId = await createOnlineDirectChannel([personId]);
-    await hydrateOnlineWorkspace(currentUserId);
-    onChannel(channelId);
-  };
-  const people: Person[] = members
-    .filter((member) => member.serverId === serverId)
+  const serverRoles = roles.filter((role) => role.serverId === serverId);
+  const serverMembers = members.filter(
+    (member) => member.serverId === serverId,
+  );
+  const people: Person[] = serverMembers
     .map((member) => {
-      const profile = profiles.find((item) => item.id === member.userId)!;
-      const highestRole = roles
-        .filter((role) => member.roleIds.includes(role.id))
-        .sort((a, b) => b.position - a.position)[0];
-      return { ...profile, role: highestRole?.name ?? "@everyone" };
+      // Um membro cujo perfil ainda não chegou virava uma linha em branco:
+      // o `!` deixava passar `undefined`, e o espalhamento não reclamava.
+      const profile =
+        profiles.find((item) => item.id === member.userId) ??
+        unknownPerson(member.userId);
+      return {
+        ...profile,
+        nickname: member.nickname,
+        color: nameColorOf(member, serverRoles) ?? profile.color,
+      };
     })
-    .filter(Boolean)
     .filter((person) =>
-      `${person.displayName} ${person.username}`
+      `${person.nickname ?? ""} ${person.displayName} ${person.username}`
         .toLowerCase()
-        .includes(query.toLowerCase()),
+        .includes(query.trim().toLowerCase()),
     );
-  const online = people.filter((person) => person.status !== "offline");
-  const offline = people.filter((person) => person.status === "offline");
+  const groups = groupMembers(people, serverMembers, serverRoles);
+  const total = serverMembers.length;
+
   return (
     <aside className="member-sidebar">
       <div className="member-heading">
-        <span>MEMBROS — {people.length}</span>
-        <button
-          className="icon-button"
-          aria-label="Pesquisar membros"
-          title="Pesquisar membros"
-          onClick={() => {
-            const value = window.prompt("Pesquisar membros", query);
-            if (value !== null) setQuery(value.trim());
-          }}
-        >
-          <IconSearch size={18} />
-        </button>
+        <span>MEMBROS — {total}</span>
       </div>
-      <MemberGroup
-        title={`ONLINE — ${online.length}`}
-        people={online}
-        onPerson={(personId) => {
-          if (personId === currentUserId) return;
-          void openDirectMessage(personId);
-        }}
-      />
-      <MemberGroup
-        title={`OFFLINE — ${offline.length}`}
-        people={offline}
-        offline
-        onPerson={(personId) => {
-          if (personId !== currentUserId) void openDirectMessage(personId);
-        }}
-      />
+      {/* A busca mora na barra, e não num `window.prompt`: o diálogo do
+          navegador tira o foco da página inteira, não dá para ver a lista
+          filtrando enquanto se digita e não é estilizável. */}
+      <div className="member-search">
+        <IconSearch size={15} />
+        <input
+          value={query}
+          aria-label="Pesquisar membros"
+          placeholder="Pesquisar membros"
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") setQuery("");
+          }}
+        />
+        {query && (
+          <button
+            className="member-search-clear"
+            aria-label="Limpar busca"
+            onClick={() => setQuery("")}
+          >
+            <IconX size={14} />
+          </button>
+        )}
+      </div>
+      {/* Clicar num membro abre o cartão de perfil, e não uma conversa: antes
+          a pessoa era jogada direto numa DM sem nunca ver quem era. "Enviar
+          mensagem" continua existindo, como ação de dentro do cartão. */}
+      {groups.length === 0 ? (
+        <p className="member-empty">
+          {query ? "Ninguém com esse nome." : "Ninguém por aqui ainda."}
+        </p>
+      ) : (
+        groups.map((group) => (
+          <MemberGroup
+            key={group.key}
+            title={`${group.title.toUpperCase()} — ${group.people.length}`}
+            color={group.color}
+            people={group.people}
+            offline={group.offline}
+            onPerson={onProfilePreview}
+          />
+        ))
+      )}
     </aside>
   );
 }
 
 function MemberGroup({
   title,
+  color,
   people,
   offline = false,
   onPerson,
 }: {
   title: string;
-  people: Person[];
+  /** Cor do cargo que dá nome ao grupo, quando há. */
+  color?: string;
+  people: (Person & { nickname?: string })[];
   offline?: boolean;
   onPerson: (personId: string) => void;
 }) {
   return (
     <div className="member-group">
-      <span className="member-group-title">{title}</span>
+      <span className="member-group-title" style={color ? { color } : undefined}>
+        {title}
+      </span>
       {people.map((person) => (
         <button
           className={`member-row ${offline ? "offline" : ""}`}
@@ -2669,8 +2738,12 @@ function MemberGroup({
         >
           <Avatar person={person} size="sm" online={!offline} />
           <span>
-            <b>{person.displayName}</b>
-            <small>{person.role}</small>
+            {/* A cor vem do cargo colorido mais alto; sem cargo colorido, o
+                nome fica na cor padrão do tema. */}
+            <b style={person.color ? { color: person.color } : undefined}>
+              {person.nickname || person.displayName}
+            </b>
+            {person.customStatus && <small>{person.customStatus}</small>}
           </span>
         </button>
       ))}
@@ -2684,12 +2757,14 @@ const COMPOSER_MAX_HEIGHT = 120;
 function Composer({
   channelId,
   channelName,
+  mentionTargets,
   onSend,
   onTyping,
   disabled,
 }: {
   channelId: string;
   channelName: string;
+  mentionTargets: MentionTarget[];
   onSend: (text: string, files: File[], spoilerNames: Set<string>) => void;
   onTyping: () => void;
   disabled?: boolean;
@@ -2700,6 +2775,9 @@ function Composer({
     /** Nomes marcados como spoiler; o nome e o unico id antes do upload. */
     [spoilerNames, setSpoilerNames] = useState<Set<string>>(new Set()),
     [nextAllowedAt, setNextAllowedAt] = useState(0),
+    /** Trecho `@...` sob o cursor, e qual sugestão está destacada. */
+    [mentionQuery, setMentionQuery] = useState<string>(),
+    [mentionActive, setMentionActive] = useState(0),
     [, setClock] = useState(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
@@ -2910,6 +2988,41 @@ function Composer({
         : remaining > 0
           ? `Slowmode: aguarde ${remaining}s.`
           : "";
+  const mentionListId = `mention-${channelId}`;
+  /**
+   * Lê o cursor direto do campo em vez de guardar a posição em estado: o
+   * `setState` do React chega depois do evento, e a lista abriria com o trecho
+   * anterior — sempre um caractere atrás do que foi digitado.
+   */
+  const syncMentionQuery = (field: HTMLTextAreaElement) => {
+    const active = activeMentionQuery(field.value, field.selectionStart ?? 0);
+    setMentionQuery(active?.query);
+    setMentionActive(0);
+  };
+  const mentionMatches =
+    mentionQuery === undefined
+      ? []
+      : suggestMentions(mentionQuery, mentionTargets);
+  const mentionOpen = mentionMatches.length > 0;
+  const pickMention = (target: MentionTarget | undefined) => {
+    const field = composerRef.current;
+    if (!target || !field) return;
+    const next = applyMention(
+      field.value,
+      field.selectionStart ?? field.value.length,
+      target,
+    );
+    setValue(next.text);
+    setMentionQuery(undefined);
+    // O cursor volta para depois do que foi inserido, e não para o fim do
+    // texto: mencionar alguém no meio da frase não pode jogar quem escreve
+    // para o final dela.
+    requestAnimationFrame(() => {
+      field.focus();
+      field.setSelectionRange(next.caret, next.caret);
+    });
+  };
+
   return (
     <div className="composer-wrap">
       {attachError && (
@@ -2919,7 +3032,7 @@ function Composer({
             aria-label="Fechar aviso"
             onClick={() => setAttachError("")}
           >
-            ×
+            <IconX size={18} />
           </button>
         </p>
       )}
@@ -2953,7 +3066,7 @@ function Composer({
                     })
                   }
                 >
-                  {marked ? "🙈" : "👁"}
+                  {marked ? <IconEyeOff size={14} /> : <IconEye size={14} />}
                 </button>
                 <button
                   aria-label={`Remover ${file.name}`}
@@ -2963,7 +3076,7 @@ function Composer({
                     )
                   }
                 >
-                  ×
+                  <IconX size={18} />
                 </button>
               </span>
             );
@@ -2998,17 +3111,61 @@ function Composer({
             event.target.value = "";
           }}
         />
+        {mentionOpen && (
+          <MentionSuggestions
+            id={mentionListId}
+            targets={mentionMatches}
+            active={mentionActive}
+            onHover={setMentionActive}
+            onPick={pickMention}
+          />
+        )}
         <textarea
           ref={composerRef}
           rows={1}
           disabled={blocked}
           maxLength={8000}
           value={value}
+          role="combobox"
+          aria-expanded={mentionOpen}
+          aria-autocomplete="list"
+          aria-controls={mentionOpen ? mentionListId : undefined}
+          aria-activedescendant={
+            mentionOpen ? `${mentionListId}-${mentionActive}` : undefined
+          }
           onChange={(event) => {
             setValue(event.target.value);
+            syncMentionQuery(event.target);
             onTyping();
           }}
+          // Mover o cursor com seta ou clique também muda a menção em curso.
+          onSelect={(event) => syncMentionQuery(event.currentTarget)}
+          onBlur={() => setMentionQuery(undefined)}
           onKeyDown={(event) => {
+            if (mentionOpen) {
+              if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                event.preventDefault();
+                const step = event.key === "ArrowDown" ? 1 : -1;
+                setMentionActive(
+                  (current) =>
+                    (current + step + mentionMatches.length) %
+                    mentionMatches.length,
+                );
+                return;
+              }
+              if (event.key === "Enter" || event.key === "Tab") {
+                // Enter escolhe a menção em vez de enviar: mandar a mensagem
+                // pela metade com a lista aberta é o erro que mais incomoda.
+                event.preventDefault();
+                pickMention(mentionMatches[mentionActive]);
+                return;
+              }
+              if (event.key === "Escape") {
+                event.preventDefault();
+                setMentionQuery(undefined);
+                return;
+              }
+            }
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
               submit();
@@ -3051,7 +3208,11 @@ function Composer({
       <span
         className={`composer-note ${disabledReason ? "composer-blocked" : ""}`}
       >
-        <Icon>{disabledReason ? "!" : "🔒"}</Icon>{" "}
+        {disabledReason ? (
+          <Icon>!</Icon>
+        ) : (
+          <IconLock className="icon" size={13} />
+        )}{" "}
         {disabledReason ||
           `${value.length}/8.000`}
       </span>
@@ -3062,7 +3223,42 @@ function Composer({
 const inlineMarkdownPattern =
   /(`[^`\n]+`|\*\*[^*\n]+\*\*|~~[^~\n]+~~|\*[^*\n]+\*|\[[^\]\n]+\]\(https?:\/\/[^\s)]+\)|https?:\/\/[^\s<]+)/g;
 
-function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
+/**
+ * Destaca as menções dentro de um trecho de texto puro.
+ *
+ * Só chega aqui o que sobrou depois do markdown embutido, então uma menção
+ * dentro de crase continua texto — que é o certo: `@ana` num bloco de código
+ * está sendo mostrado, e não notificando ninguém.
+ */
+function renderMentions(
+  text: string,
+  targets: MentionTarget[],
+  keyPrefix: string,
+): ReactNode {
+  const segments = segmentMentions(text, targets);
+  if (segments.every((segment) => segment.type === "text")) return text;
+  return segments.map((segment, index) =>
+    segment.type === "text" ? (
+      <Fragment key={`${keyPrefix}-m${index}`}>{segment.value}</Fragment>
+    ) : (
+      <span
+        key={`${keyPrefix}-m${index}`}
+        className={`mention mention-${segment.kind}`}
+        // O título traz o texto cru, para quem lê saber o que foi escrito de
+        // fato quando o nome de exibição mudou depois do envio.
+        title={segment.value}
+      >
+        {segment.label}
+      </span>
+    ),
+  );
+}
+
+function renderInlineMarkdown(
+  text: string,
+  keyPrefix: string,
+  targets: MentionTarget[],
+): ReactNode[] {
   return text.split(inlineMarkdownPattern).map((piece, index) => {
     const key = `${keyPrefix}-${index}`;
     if (piece.startsWith("`") && piece.endsWith("`"))
@@ -3086,16 +3282,18 @@ function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
           {piece}
         </a>
       );
-    return piece;
+    return renderMentions(piece, targets, key);
   });
 }
 
 function MarkdownTextBlocks({
   text,
   blockKey,
+  mentionTargets,
 }: {
   text: string;
   blockKey: string;
+  mentionTargets: MentionTarget[];
 }) {
   const lines = text.replace(/\r\n/g, "\n").split("\n");
   const nodes: ReactNode[] = [];
@@ -3112,6 +3310,7 @@ function MarkdownTextBlocks({
       const content = renderInlineMarkdown(
         heading[2],
         `${blockKey}-heading-${index}`,
+        mentionTargets,
       );
       const Heading = `h${level}` as keyof React.JSX.IntrinsicElements;
       nodes.push(<Heading key={`${blockKey}-${index}`}>{content}</Heading>);
@@ -3131,6 +3330,7 @@ function MarkdownTextBlocks({
               {renderInlineMarkdown(
                 quote,
                 `${blockKey}-quote-${index}-${quoteIndex}`,
+                mentionTargets,
               )}
               {quoteIndex < quoteLines.length - 1 && <br />}
             </Fragment>
@@ -3156,6 +3356,7 @@ function MarkdownTextBlocks({
               {renderInlineMarkdown(
                 item,
                 `${blockKey}-list-${index}-${itemIndex}`,
+                mentionTargets,
               )}
             </li>
           ))}
@@ -3182,6 +3383,7 @@ function MarkdownTextBlocks({
             {renderInlineMarkdown(
               paragraph,
               `${blockKey}-paragraph-${index}-${paragraphIndex}`,
+              mentionTargets,
             )}
             {paragraphIndex < paragraphs.length - 1 && <br />}
           </Fragment>
@@ -3192,7 +3394,13 @@ function MarkdownTextBlocks({
   return <>{nodes}</>;
 }
 
-function MessageText({ text }: { text: string }) {
+function MessageText({
+  text,
+  mentionTargets,
+}: {
+  text: string;
+  mentionTargets: MentionTarget[];
+}) {
   const parts = text.split(/(```[\s\S]*?```)/g);
   return (
     <>
@@ -3204,6 +3412,7 @@ function MessageText({ text }: { text: string }) {
               key={index}
               text={part}
               blockKey={`markdown-${index}`}
+              mentionTargets={mentionTargets}
             />
           );
         const fenced = part.slice(3, -3).replace(/^\n/, "");
@@ -3233,6 +3442,7 @@ function ChatView({
   onSearch,
   onToggleMembers,
   membersVisible,
+  onProfilePreview,
 }: {
   channel: Channel;
   onCall?: (withVideo: boolean) => void;
@@ -3241,8 +3451,10 @@ function ChatView({
   onSearch: () => void;
   onToggleMembers: () => void;
   membersVisible: boolean;
+  onProfilePreview: (userId: string) => void;
 }) {
   const profiles = useAppStore((state) => state.profiles);
+  const mentionTargets = useMentionTargets(channel);
   const currentUserId = useAppStore((state) => state.currentUserId);
   const markChannelRead = useAppStore((state) => state.markChannelRead);
   const notificationSettings = useAppStore(
@@ -3253,6 +3465,7 @@ function ChatView({
     (state) => state.setNotificationSetting,
   );
   const { ask: askConfirm, confirmDialog } = useConfirm();
+  const messageMenu = useContextMenu();
   const [replyToId, setReplyToId] = useState<string | undefined>(),
     // Edição acontece no lugar da mensagem. Antes era um `window.prompt`, que
     // o Chromium do Electron simplesmente não implementa: no desktop o botão
@@ -3496,6 +3709,90 @@ function ChatView({
 
   const chooseReaction = (messageId: string) =>
     setReactingTo(messageId);
+
+  /**
+   * Menu de contexto da mensagem — item 8.
+   *
+   * Repete as ações que já existem no hover, e não uma segunda implementação:
+   * cada item chama exatamente o mesmo handler do botão correspondente. Duas
+   * versões da mesma ação divergiriam na primeira mudança de regra — e o hover
+   * some no toque, onde este menu é a única forma de chegar nelas.
+   */
+  const openMessageMenu = (
+    event: { preventDefault: () => void; clientX: number; clientY: number },
+    message: (typeof messages)[number],
+  ) => {
+    const mine = message.authorId === currentUserId;
+    const copy = (value: string) =>
+      void navigator.clipboard?.writeText(value).catch(() => undefined);
+    messageMenu.open(event, [
+      {
+        id: "react",
+        label: "Adicionar reação",
+        onSelect: () => chooseReaction(message.id),
+      },
+      {
+        id: "reply",
+        label: "Responder",
+        onSelect: () => setReplyToId(message.id),
+      },
+      {
+        id: "pin",
+        label: message.pinned ? "Desafixar mensagem" : "Fixar mensagem",
+        onSelect: () =>
+          pin.mutate(message.id, {
+            onError: (error) => setSendError(error.message),
+          }),
+      },
+      ...(mine
+        ? [
+            {
+              id: "edit",
+              label: "Editar mensagem",
+              separatorBefore: true,
+              onSelect: () =>
+                setEditing({ id: message.id, text: message.text }),
+            },
+          ]
+        : []),
+      {
+        id: "copy-text",
+        label: "Copiar texto",
+        separatorBefore: !mine,
+        // Sem texto não há o que copiar: a mensagem é só anexo.
+        disabled: !message.text,
+        onSelect: () => copy(message.text),
+      },
+      {
+        id: "copy-id",
+        label: "Copiar ID da mensagem",
+        hint: "Para suporte",
+        onSelect: () => copy(message.id),
+      },
+      ...(mine
+        ? [
+            {
+              id: "delete",
+              label: "Apagar mensagem",
+              danger: true,
+              separatorBefore: true,
+              onSelect: () =>
+                askConfirm({
+                  title: "Apagar mensagem",
+                  message:
+                    "A mensagem some para todo mundo e fica no lugar como “Mensagem apagada”. Não dá para desfazer.",
+                  confirmLabel: "Apagar",
+                  danger: true,
+                  onConfirm: () =>
+                    remove.mutate(message.id, {
+                      onError: (error) => setSendError(error.message),
+                    }),
+                }),
+            },
+          ]
+        : []),
+    ]);
+  };
   const submitReaction = (messageId: string, emoji: string) => {
     const invalid = reactionError(emoji);
     if (invalid) {
@@ -3510,6 +3807,9 @@ function ChatView({
   return (
     <main className="conversation">
       {confirmDialog}
+      {messageMenu.menu && (
+        <ContextMenu state={messageMenu.menu} onClose={messageMenu.close} />
+      )}
       {reactingTo && (
         <ReactionComposer
           onSubmit={(emoji) => submitReaction(reactingTo, emoji)}
@@ -3526,7 +3826,13 @@ function ChatView({
             />
           ) : (
             <span className="channel-symbol">
-              {channel.kind === "dm" ? "@" : channel.kind === "gdm" ? "♟" : "#"}
+              {channel.kind === "dm" ? (
+                "@"
+              ) : channel.kind === "gdm" ? (
+                <IconUsers size={16} />
+              ) : (
+                "#"
+              )}
             </span>
           )}
           <div>
@@ -3697,6 +4003,13 @@ function ChatView({
               <article
                 className={`message ${deleted ? "deleted" : ""}`}
                 id={`message-${message.id}`}
+                onContextMenu={(event) => {
+                  // Numa seleção de texto o menu do navegador é o útil
+                  // (copiar, pesquisar); roubá-lo atrapalharia mais do que
+                  // ajuda. E numa mensagem apagada não sobrou ação nenhuma.
+                  if (deleted || !window.getSelection()?.isCollapsed) return;
+                  openMessageMenu(event, message);
+                }}
               >
                 {reply && (
                   <button
@@ -3725,10 +4038,24 @@ function ChatView({
                     </span>
                   </button>
                 )}
-                <Avatar person={author} size="lg" />
+                {/* `display: contents` mantém o avatar como item da grade de
+                    `.message`; um botão comum viraria o item e ganharia caixa
+                    própria, engordando a coluna do avatar. */}
+                <button
+                  className="message-author-avatar"
+                  aria-label={`Ver perfil de ${author.displayName}`}
+                  onClick={() => onProfilePreview(author.id)}
+                >
+                  <Avatar person={author} size="lg" />
+                </button>
                 <div className="message-body">
                   <div className="message-meta">
-                    <b>{author.displayName}</b>
+                    <button
+                      className="message-author-name"
+                      onClick={() => onProfilePreview(author.id)}
+                    >
+                      <b>{author.displayName}</b>
+                    </button>
                     <span>
                       {new Date(message.createdAt).toLocaleString("pt-BR")}
                       {message.editedAt && !deleted ? " · editada" : ""}
@@ -3764,7 +4091,7 @@ function ChatView({
                   ) : (
                     message.text && (
                       <div className="message-markdown">
-                        <MessageText text={message.text} />
+                        <MessageText text={message.text} mentionTargets={mentionTargets} />
                       </div>
                     )
                   )}
@@ -3944,6 +4271,7 @@ function ChatView({
           channelName={
             channel.kind === "text" ? `#${channel.name}` : channel.name
           }
+          mentionTargets={mentionTargets}
           onTyping={announceTyping}
           disabled={send.isPending}
           onSend={(text, files, spoilerNames) => {
@@ -4063,7 +4391,7 @@ function GroupDmSettingsPanel({
             <h2>Configurar grupo</h2>
           </div>
           <button className="close-settings" onClick={onClose}>
-            ×
+            <IconX size={18} />
           </button>
         </header>
         <div className="group-dm-identity">
@@ -5175,7 +5503,7 @@ function CallView({
           }`}
           data-rtc-state={connectionError ? "error" : connectionState}
         >
-          <span>●</span>{" "}
+          <span className="rtc-dot" aria-hidden="true" />{" "}
           {connectionError
             ? connectionState === "error"
               ? "Falha na conexão da chamada"
@@ -5275,12 +5603,6 @@ function CallView({
             >
               {orderedTiles.map((tile) => renderTile(tile))}
             </div>
-          </div>
-        )}
-        {remotePeers.length === 0 && (
-          <div className="call-waiting">
-            <b>Esperando outro participante…</b>
-            <span>Convide alguém ou abra outro cliente neste canal.</span>
           </div>
         )}
       </div>
@@ -5595,6 +5917,7 @@ function VoiceTextPanel({
   channel: Channel;
   onClose: () => void;
 }) {
+  const mentionTargets = useMentionTargets(channel);
   const profiles = useAppStore((state) => state.profiles),
     currentUserId = useAppStore((state) => state.currentUserId),
     { data: messages = [], send } = useMessages(channel.id),
@@ -5635,6 +5958,7 @@ function VoiceTextPanel({
       <Composer
         channelId={channel.id}
         channelName={channel.name}
+        mentionTargets={mentionTargets}
         onTyping={announceTyping}
         disabled={send.isPending}
         onSend={(text, files, spoilerNames) =>
@@ -6405,11 +6729,13 @@ function SearchModal({
               onClick={() => void openMatch(match)}
             >
               <b>
-                {match.type === "server"
-                  ? "◉"
-                  : match.type === "channel"
-                    ? "#"
-                    : "@"}
+                {match.type === "server" ? (
+                  <IconVolume size={15} />
+                ) : match.type === "channel" ? (
+                  <IconHash size={15} />
+                ) : (
+                  "@"
+                )}
               </b>
               <span>{match.label}</span>
             </button>
@@ -6419,7 +6745,9 @@ function SearchModal({
               key={`message-${message.id}`}
               onClick={() => openMessage(message)}
             >
-              <b>↳</b>
+              <b>
+                <IconCornerDownRight size={16} />
+              </b>
               <span>
                 {message.text.slice(0, 100)}
                 <small>
@@ -6939,7 +7267,7 @@ function SettingsPanel({
             <h2>{server?.name ?? "Servidor local"}</h2>
           </div>
           <button className="close-settings" onClick={onClose}>
-            ×
+            <IconX size={18} />
           </button>
         </header>
         <nav className="settings-tabs">
@@ -6963,7 +7291,7 @@ function SettingsPanel({
           <div className="settings-content">
             <div className="roles-list">
               <div className="settings-search">
-                ⌕{" "}
+                <IconSearch size={15} />{" "}
                 <input
                   aria-label="Pesquisar cargos"
                   value={roleQuery}
@@ -6980,7 +7308,7 @@ function SettingsPanel({
                     className="role-item"
                     onClick={() => setSelectedRoleId(role.id)}
                   >
-                    <span className="drag-handle">⠿</span>
+                    <IconGrip className="drag-handle" size={14} />
                     <span
                       className="role-dot"
                       style={{ background: role.color }}
@@ -6999,14 +7327,14 @@ function SettingsPanel({
                         title="Subir cargo"
                         onClick={() => void reorderRole(role.id, "up")}
                       >
-                        ↑
+                        <IconArrowUp size={14} />
                       </button>
                       <button
                         aria-label={`Descer ${role.name}`}
                         title="Descer cargo"
                         onClick={() => void reorderRole(role.id, "down")}
                       >
-                        ↓
+                        <IconArrowDown size={14} />
                       </button>
                       <button
                         aria-label={`Duplicar ${role.name}`}
@@ -7073,7 +7401,13 @@ function SettingsPanel({
                       onChange={setSimulationChannelId}
                       options={channels.map((channel) => ({
                         value: channel.id,
-                        label: `${channel.kind === "voice" ? "◉" : "#"} ${channel.name}`,
+                        label: channel.name,
+              icon:
+                channel.kind === "voice" ? (
+                  <IconVolume size={14} />
+                ) : (
+                  <IconHash size={14} />
+                ),
                       }))}
                     />
                   </label>
@@ -7113,7 +7447,8 @@ function SettingsPanel({
                           className={allowed ? "allowed" : "denied"}
                         >
                           <b>
-                            {allowed ? "✓" : "×"} {name.replaceAll("_", " ")}
+                            {allowed ? <IconCheck size={14} /> : <IconX size={14} />}{" "}
+              {name.replaceAll("_", " ")}
                           </b>
                           <small>{simulationOrigin(name)}</small>
                         </div>
@@ -7217,11 +7552,13 @@ function SettingsPanel({
                           <li key={channel.id}>
                             <span>
                               <i aria-hidden="true">
-                                {channel.kind === "voice"
-                                  ? "◉"
-                                  : channel.kind === "category"
-                                    ? "▾"
-                                    : "#"}
+                                {channel.kind === "voice" ? (
+                                  <IconVolume size={13} />
+                                ) : channel.kind === "category" ? (
+                                  <IconChevronDown size={13} />
+                                ) : (
+                                  <IconHash size={13} />
+                                )}
                               </i>
                               {channel.name}
                               {channel.kind === "category" && (
@@ -7708,6 +8045,7 @@ function ServerGeneralSettings({
 }
 
 function ChannelManagementSettings({ serverId }: { serverId: string }) {
+  const channelMenu = useContextMenu();
   const channels = useAppStore((state) => state.channels)
       .filter((channel) => channel.serverId === serverId)
       .sort((a, b) => a.position - b.position),
@@ -7758,6 +8096,9 @@ function ChannelManagementSettings({ serverId }: { serverId: string }) {
   );
   return (
     <div className="settings-content single-content">
+      {channelMenu.menu && (
+        <ContextMenu state={channelMenu.menu} onClose={channelMenu.close} />
+      )}
       {deletingCategory && (
         <CategoryDeleteModal
           categoryName={deletingCategory.name}
@@ -7805,13 +8146,15 @@ function ChannelManagementSettings({ serverId }: { serverId: string }) {
       <div className="channel-admin-list">
         {channels.map((channel) => (
           <div className="channel-admin-row" key={channel.id}>
-            <Icon>
-              {channel.kind === "voice"
-                ? "◉"
-                : channel.kind === "category"
-                  ? "▾"
-                  : "#"}
-            </Icon>
+            <span className="icon" aria-hidden="true">
+              {channel.kind === "voice" ? (
+                <IconVolume size={15} />
+              ) : channel.kind === "category" ? (
+                <IconChevronDown size={15} />
+              ) : (
+                <IconHash size={15} />
+              )}
+            </span>
             <div>
               <b>{channel.name}</b>
               <small>
@@ -7849,48 +8192,63 @@ function ChannelManagementSettings({ serverId }: { serverId: string }) {
                 ]}
               />
             )}
+            {/* Privacidade, ordem, duplicar e excluir vivem num menu: oito
+                controles por linha deixavam a coluna do nome sem espaço e
+                apertavam o seletor de categoria. Editar e categoria ficam,
+                que são o que se mexe toda hora. */}
             <button
-              className="outline-button"
-              onClick={() =>
-                void saveChannel(channel, { private: !channel.private })
+              className="icon-button channel-admin-more"
+              aria-label={`Ações para ${channel.name}`}
+              title="Mais ações"
+              onClick={(event) =>
+                channelMenu.open(event, [
+                  {
+                    id: "privacy",
+                    label:
+                      channel.kind === "category"
+                        ? channel.private
+                          ? "Exibir categoria"
+                          : "Ocultar categoria"
+                        : channel.private
+                          ? "Tornar público"
+                          : "Tornar privado",
+                    onSelect: () =>
+                      void saveChannel(channel, { private: !channel.private }),
+                  },
+                  {
+                    id: "up",
+                    label: "Subir",
+                    separatorBefore: true,
+                    onSelect: () => void reorderChannel(channel.id, "up"),
+                  },
+                  {
+                    id: "down",
+                    label: "Descer",
+                    onSelect: () => void reorderChannel(channel.id, "down"),
+                  },
+                  {
+                    id: "duplicate",
+                    label: "Duplicar",
+                    separatorBefore: true,
+                    onSelect: () => void duplicateChannel(channel.id),
+                  },
+                  {
+                    id: "delete",
+                    label:
+                      channel.kind === "category"
+                        ? "Excluir categoria"
+                        : "Excluir canal",
+                    danger: true,
+                    onSelect: () => {
+                      if (channel.kind === "category")
+                        setDeletingCategory(channel);
+                      else void removeChannel(channel.id);
+                    },
+                  },
+                ])
               }
             >
-              {channel.kind === "category"
-                ? channel.private
-                  ? "Exibir categoria"
-                  : "Ocultar categoria"
-                : channel.private
-                  ? "Tornar público"
-                  : "Tornar privado"}
-            </button>
-            <button
-              className="outline-button"
-              title="Subir canal"
-              onClick={() => void reorderChannel(channel.id, "up")}
-            >
-              ↑
-            </button>
-            <button
-              className="outline-button"
-              title="Descer canal"
-              onClick={() => void reorderChannel(channel.id, "down")}
-            >
-              ↓
-            </button>
-            <button
-              className="outline-button"
-              onClick={() => void duplicateChannel(channel.id)}
-            >
-              Duplicar
-            </button>
-            <button
-              className="outline-button danger-text"
-              onClick={() => {
-                if (channel.kind === "category") setDeletingCategory(channel);
-                else void removeChannel(channel.id);
-              }}
-            >
-              Excluir
+              <IconMoreHorizontal size={18} />
             </button>
           </div>
         ))}
@@ -8028,7 +8386,13 @@ function ChannelPermissionsSettingsView({ serverId }: { serverId: string }) {
             onChange={setChannelId}
             options={channels.map((channel) => ({
               value: channel.id,
-              label: `${channel.kind === "voice" ? "◉" : "#"} ${channel.name}`,
+              label: channel.name,
+              icon:
+                channel.kind === "voice" ? (
+                  <IconVolume size={14} />
+                ) : (
+                  <IconHash size={14} />
+                ),
             }))}
           />
         </label>
@@ -8084,7 +8448,7 @@ function ChannelPermissionsSettingsView({ serverId }: { serverId: string }) {
                     void setChannelPermission(Permissions[name], "allow")
                   }
                 >
-                  ✓ Permitir
+                  <IconCheck size={14} /> Permitir
                 </button>
                 <button
                   className={state === "deny" ? "selected deny" : ""}
@@ -8092,7 +8456,7 @@ function ChannelPermissionsSettingsView({ serverId }: { serverId: string }) {
                     void setChannelPermission(Permissions[name], "deny")
                   }
                 >
-                  × Negar
+                  <IconX size={14} /> Negar
                 </button>
               </div>
             </div>
@@ -8104,6 +8468,8 @@ function ChannelPermissionsSettingsView({ serverId }: { serverId: string }) {
 }
 
 function MembersSettingsView({ serverId }: { serverId: string }) {
+  const { ask: askPrompt, promptDialog } = usePrompt();
+  const memberMenu = useContextMenu();
   const [query, setQuery] = useState(""),
     [roleFilter, setRoleFilter] = useState(""),
     [voiceChannelId, setVoiceChannelId] = useState(""),
@@ -8148,15 +8514,19 @@ function MembersSettingsView({ serverId }: { serverId: string }) {
     await setOnlineMemberRole(serverId, userId, roleId, assign);
     await hydrateOnlineWorkspace(currentUserId);
   };
-  const updateNickname = async (userId: string, currentNickname = "") => {
-    const nickname = window.prompt(
-      "Nickname no servidor (vazio remove)",
-      currentNickname,
-    );
-    if (nickname === null) return;
-    await updateOnlineMemberNickname(serverId, userId, nickname);
-    await hydrateOnlineWorkspace(currentUserId);
-  };
+  const updateNickname = (userId: string, currentNickname = "") =>
+    askPrompt({
+      title: "Nickname no servidor",
+      message: "Vazio remove o nickname e volta ao nome de exibição.",
+      label: "Nickname",
+      initialValue: currentNickname,
+      maxLength: 32,
+      allowEmpty: true,
+      onSubmit: (nickname) =>
+        void updateOnlineMemberNickname(serverId, userId, nickname).then(() =>
+          hydrateOnlineWorkspace(currentUserId),
+        ),
+    });
   const moderate = async (
     userId: string,
     action: "kick" | "ban" | "timeout",
@@ -8202,8 +8572,145 @@ function MembersSettingsView({ serverId }: { serverId: string }) {
           .includes(query.toLowerCase())
       );
     });
+  /** Motivo é opcional: exigi-lo travaria a moderação urgente por um campo. */
+  const askReason = (
+    userId: string,
+    action: "kick" | "ban" | "timeout",
+    title: string,
+    confirmLabel: string,
+  ) =>
+    askPrompt({
+      title,
+      label: "Motivo",
+      placeholder: "Fica registrado na auditoria",
+      confirmLabel,
+      maxLength: 200,
+      multiline: true,
+      allowEmpty: true,
+      danger: true,
+      onSubmit: (reason) => void moderate(userId, action, reason || undefined),
+    });
+
+  /**
+   * Ações de voz e moderação de um membro.
+   *
+   * As permissões continuam sendo as mesmas de antes; o que mudou é que elas
+   * decidem se o item entra no menu, e não se um botão aparece na linha.
+   * Ações de voz precisam de um canal selecionado no topo da página — sem ele
+   * entram desabilitadas, com a razão no `hint`, em vez de sumir sem explicar.
+   */
+  const openMemberMenu = (
+    event: { preventDefault: () => void; clientX: number; clientY: number },
+    member: ServerMember,
+    profile: Profile,
+    self: boolean,
+  ) => {
+    const semCanal = !voiceChannelId;
+    const dicaVoz = semCanal
+      ? "Escolha um canal de voz acima"
+      : self
+        ? "Não vale para você"
+        : undefined;
+    const items: ContextMenuItem[] = [];
+
+    if (canManageNicknames || (self && canChangeNickname))
+      items.push({
+        id: "nickname",
+        label: "Alterar nickname",
+        onSelect: () => updateNickname(member.userId, member.nickname),
+      });
+
+    if (canMuteMembers)
+      items.push({
+        id: "mute",
+        label: member.serverMuted ? "Desmutar" : "Mutar voz",
+        hint: dicaVoz,
+        separatorBefore: items.length > 0,
+        disabled: self || semCanal,
+        onSelect: () =>
+          void moderateVoice(
+            member.userId,
+            member.serverMuted ? "unmute" : "mute",
+          ),
+      });
+
+    if (canDeafenMembers)
+      items.push({
+        id: "deafen",
+        label: member.serverDeafened ? "Deixar ouvir" : "Ensurdecer",
+        hint: dicaVoz,
+        disabled: self || semCanal,
+        onSelect: () =>
+          void moderateVoice(
+            member.userId,
+            member.serverDeafened ? "undeafen" : "deafen",
+          ),
+      });
+
+    if (canMoveMembers) {
+      const destinos = voiceChannels.filter(
+        (channel) => channel.id !== voiceChannelId,
+      );
+      items.push({
+        id: "move",
+        label: "Mover para",
+        hint: destinos.length === 0 ? "Não há outro canal de voz" : dicaVoz,
+        disabled: self || semCanal || destinos.length === 0,
+        submenu: destinos.map((channel) => ({
+          id: `move-${channel.id}`,
+          label: channel.name,
+          onSelect: () =>
+            void moderateVoice(member.userId, "move", channel.id),
+        })),
+      });
+      items.push({
+        id: "disconnect",
+        label: "Desconectar da voz",
+        hint: dicaVoz,
+        disabled: self || semCanal,
+        onSelect: () => void moderateVoice(member.userId, "disconnect"),
+      });
+    }
+
+    const moderacao = items.length;
+    if (canTimeoutMembers)
+      items.push({
+        id: "timeout",
+        label: "Aplicar timeout",
+        separatorBefore: items.length === moderacao && items.length > 0,
+        disabled: self,
+        onSelect: () =>
+          askReason(member.userId, "timeout", "Aplicar timeout", "Aplicar"),
+      });
+    if (canKickMembers)
+      items.push({
+        id: "kick",
+        label: "Remover do servidor",
+        separatorBefore: !canTimeoutMembers && items.length > 0,
+        disabled: self,
+        onSelect: () =>
+          askReason(member.userId, "kick", "Remover do servidor", "Remover"),
+      });
+    if (canBanMembers)
+      items.push({
+        id: "ban",
+        label: "Banir do servidor",
+        danger: true,
+        disabled: self,
+        onSelect: () =>
+          askReason(member.userId, "ban", "Banir do servidor", "Banir"),
+      });
+
+    if (items.length === 0) return;
+    memberMenu.open(event, items);
+  };
+
   return (
     <div className="settings-content single-content">
+      {promptDialog}
+      {memberMenu.menu && (
+        <ContextMenu state={memberMenu.menu} onClose={memberMenu.close} />
+      )}
       <div className="editor-top">
         <div>
           <span className="eyebrow">GESTÃO SINCRONIZADA</span>
@@ -8236,7 +8743,8 @@ function MembersSettingsView({ serverId }: { serverId: string }) {
             onChange={setVoiceChannelId}
             options={voiceChannels.map((channel) => ({
               value: channel.id,
-              label: `◉ ${channel.name}`,
+              label: channel.name,
+              icon: <IconVolume size={14} />,
             }))}
           />
         )}
@@ -8278,7 +8786,7 @@ function MembersSettingsView({ serverId }: { serverId: string }) {
                         void setMemberRole(member.userId, role.id, false)
                       }
                     >
-                      {role.name} ×
+                      {role.name} <IconX size={12} />
                     </button>
                   ))}
                 </span>
@@ -8302,113 +8810,18 @@ function MembersSettingsView({ serverId }: { serverId: string }) {
                     .map((role) => ({ value: role.id, label: role.name }))}
                 />
               )}
-              {(canManageNicknames || (self && canChangeNickname)) && (
-                <button
-                  className="outline-button"
-                  onClick={() =>
-                    void updateNickname(member.userId, member.nickname)
-                  }
-                >
-                  Nickname
-                </button>
-              )}
-              {canMuteMembers && (
-                <button
-                  className="outline-button"
-                  disabled={self || !voiceChannelId}
-                  onClick={() =>
-                    void moderateVoice(
-                      member.userId,
-                      member.serverMuted ? "unmute" : "mute",
-                    )
-                  }
-                >
-                  {member.serverMuted ? "Desmutar" : "Mutar voz"}
-                </button>
-              )}
-              {canDeafenMembers && (
-                <button
-                  className="outline-button"
-                  disabled={self || !voiceChannelId}
-                  onClick={() =>
-                    void moderateVoice(
-                      member.userId,
-                      member.serverDeafened ? "undeafen" : "deafen",
-                    )
-                  }
-                >
-                  {member.serverDeafened ? "Ouvir" : "Ensurdecer"}
-                </button>
-              )}
-              {canMoveMembers && (
-                <>
-                  <Select
-                    className="admin-role-select"
-                    value=""
-                    placeholder="Mover para…"
-                    disabled={self || !voiceChannelId}
-                    ariaLabel={`Mover ${profile.displayName} para outro canal de voz`}
-                    onChange={(next) => {
-                      if (next)
-                        void moderateVoice(member.userId, "move", next);
-                    }}
-                    options={voiceChannels
-                      .filter((channel) => channel.id !== voiceChannelId)
-                      .map((channel) => ({
-                        value: channel.id,
-                        label: channel.name,
-                      }))}
-                  />
-                  <button
-                    className="outline-button"
-                    disabled={self || !voiceChannelId}
-                    onClick={() =>
-                      void moderateVoice(member.userId, "disconnect")
-                    }
-                  >
-                    Desconectar voz
-                  </button>
-                </>
-              )}
-              {canTimeoutMembers && (
-                <button
-                  className="outline-button"
-                  disabled={self}
-                  onClick={() => {
-                    const reason =
-                      window.prompt("Motivo do timeout") ?? undefined;
-                    void moderate(member.userId, "timeout", reason);
-                  }}
-                >
-                  Timeout
-                </button>
-              )}
-              {canKickMembers && (
-                <button
-                  className="outline-button"
-                  disabled={self}
-                  onClick={() => {
-                    const reason =
-                      window.prompt("Motivo da remoção") ?? undefined;
-                    void moderate(member.userId, "kick", reason);
-                  }}
-                >
-                  Kick
-                </button>
-              )}
-              {canBanMembers && (
-                <button
-                  className="outline-button danger-text"
-                  disabled={self}
-                  onClick={() => {
-                    const reason =
-                      window.prompt("Motivo do banimento") ?? undefined;
-                    void moderate(member.userId, "ban", reason);
-                  }}
-                >
-                  Ban
-                </button>
-              )}
+              {/* Voz e moderação vivem num menu — item de UX. Nove controles
+                  soltos por linha quebravam em três fileiras e faziam a lista
+                  de membros virar uma parede de botões; e são ações raras
+                  perto de "dar cargo", que é o que se faz o tempo todo. */}
+              <button
+                className="icon-button member-admin-more"
+                aria-label={`Ações para ${profile.displayName}`}
+                title="Mais ações"
+                onClick={(event) => openMemberMenu(event, member, profile, self)}
+              >
+                <IconMoreHorizontal size={18} />
+              </button>
             </div>
           </div>
         );
@@ -8566,27 +8979,34 @@ function InvitesSettingsView({ serverId }: { serverId: string }) {
           className={`invite-row ${invite.revokedAt ? "revoked" : ""}`}
           key={invite.id}
         >
-          <code>{inviteUrl(invite.code)}</code>
-          <span>
-            {invite.uses}/{invite.maxUses ?? "∞"} usos ·{" "}
-            {invite.expiresAt
-              ? `expira ${new Date(invite.expiresAt).toLocaleString("pt-BR")}`
-              : "sem expiração"}
-          </span>
-          <button
-            className="outline-button"
-            disabled={Boolean(invite.revokedAt)}
-            onClick={() => void copyInvite(invite.code)}
-          >
-            {copiedCode === invite.code ? "Copiado" : "Copiar link"}
-          </button>
-          <button
-            className="outline-button"
-            disabled={Boolean(invite.revokedAt)}
-            onClick={() => void revokeInvite(invite.id)}
-          >
-            {invite.revokedAt ? "Revogado" : "Revogar"}
-          </button>
+          {/* Link e uso empilhados numa coluna só: em quatro colunas o link,
+              que não tem espaço para quebrar, transbordava por cima do texto
+              de uso. */}
+          <div className="invite-identity">
+            <code>{inviteUrl(invite.code)}</code>
+            <span>
+              {invite.uses}/{invite.maxUses ?? "∞"} usos ·{" "}
+              {invite.expiresAt
+                ? `expira ${new Date(invite.expiresAt).toLocaleString("pt-BR")}`
+                : "sem expiração"}
+            </span>
+          </div>
+          <div className="invite-actions">
+            <button
+              className="outline-button"
+              disabled={Boolean(invite.revokedAt)}
+              onClick={() => void copyInvite(invite.code)}
+            >
+              {copiedCode === invite.code ? "Copiado" : "Copiar link"}
+            </button>
+            <button
+              className="outline-button"
+              disabled={Boolean(invite.revokedAt)}
+              onClick={() => void revokeInvite(invite.id)}
+            >
+              {invite.revokedAt ? "Revogado" : "Revogar"}
+            </button>
+          </div>
         </div>
       ))}
     </div>
@@ -8930,6 +9350,7 @@ function ProfilePanel({
   onRemoveDevice: () => Promise<void>;
 }) {
   const confirm = useConfirm();
+  const { ask: askPrompt, promptDialog } = usePrompt();
   const profiles = useAppStore((state) => state.profiles),
     currentUserId = useAppStore((state) => state.currentUserId),
     notificationSettings = useAppStore((state) => state.notificationSettings),
@@ -9102,11 +9523,16 @@ function ProfilePanel({
       );
     }
   };
-  const verifyDevice = async (deviceId: string) => {
-    const code = window.prompt(
-      "Digite o código de 20 caracteres mostrado no outro dispositivo",
-    );
-    if (code === null) return;
+  const verifyDevice = (deviceId: string) =>
+    askPrompt({
+      title: "Verificar dispositivo",
+      message: "Digite o código mostrado no outro dispositivo.",
+      label: "Código de 20 caracteres",
+      maxLength: 20,
+      confirmLabel: "Verificar",
+      onSubmit: (code) => void applyDeviceCode(deviceId, code),
+    });
+  const applyDeviceCode = async (deviceId: string, code: string) => {
     try {
       await verifyOnlineDevice(deviceId, code);
       setDevices(await listOnlineDevices(account.profileId));
@@ -9202,6 +9628,27 @@ function ProfilePanel({
       );
     }
   };
+  /**
+   * Prévia do próprio perfil — item 24.
+   *
+   * Montada a partir do rascunho, e não do perfil já salvo: o ponto é ver o
+   * resultado antes de gravar. Usa o mesmo `ProfileCard` que desenha o cartão
+   * de outra pessoa, então o que aparece aqui é literalmente o que os outros
+   * veem — uma prévia com marcação própria voltaria a divergir na primeira
+   * mudança de layout.
+   *
+   * `invisible` aparece como offline porque é assim que os outros enxergam.
+   */
+  const preview: Profile = {
+    ...profile,
+    displayName: name.trim() || profile.displayName,
+    username: username.trim() || profile.username,
+    bio,
+    pronouns,
+    customStatus,
+    status: presence === "invisible" ? "offline" : presence,
+  };
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <section
@@ -9215,18 +9662,10 @@ function ProfilePanel({
         >
           <IconX size={20} />
         </button>
-        <div
-          className="profile-banner-preview"
-          style={
-            profile.bannerUrl
-              ? { backgroundImage: `url(${profile.bannerUrl})` }
-              : undefined
-          }
-        >
-          <Avatar person={profile} size="xl" />
+        <span className="eyebrow">COMO OS OUTROS TE VEEM</span>
+        <div className="profile-live-card">
+          <ProfileCard profile={preview} />
         </div>
-        <span className="eyebrow">PERFIL SINCRONIZADO</span>
-        <h2>{profile.displayName}</h2>
         <div className="profile-media-fields">
           <label className="media-upload-button">
             <IconCamera size={18} />
@@ -9737,6 +10176,7 @@ function ProfilePanel({
           Sair e remover este dispositivo
         </button>
         {confirm.confirmDialog}
+        {promptDialog}
       </section>
     </div>
   );
@@ -9891,7 +10331,7 @@ function HelpPanel({ onClose }: { onClose: () => void }) {
         onClick={(event) => event.stopPropagation()}
       >
         <button className="close-settings" onClick={onClose}>
-          ×
+          <IconX size={18} />
         </button>
         <Logo />
         <span className="eyebrow">AJUDA LOCAL</span>
@@ -9918,7 +10358,7 @@ function HelpPanel({ onClose }: { onClose: () => void }) {
           </div>
         </div>
         <p className="help-security">
-          🔒 Só participantes do canal leem as mensagens, e essa regra é
+          <IconLock className="icon" size={13} /> Só participantes do canal leem as mensagens, e essa regra é
           aplicada no próprio banco, a cada consulta. A comunicação com o
           servidor é cifrada (HTTPS e DTLS-SRTP). O tratamento dos seus dados
           está descrito na política de privacidade.
@@ -10596,7 +11036,7 @@ function App({
               setRuntimeError("");
             }}
           >
-            ×
+            <IconX size={18} />
           </button>
         </div>
       )}
@@ -10701,6 +11141,7 @@ function App({
           ) : section === "dm" && activeDmChannel ? (
             <ChatView
               channel={activeDmChannel}
+              onProfilePreview={setPreviewUserId}
               onSearch={() => setSearchOpen(true)}
               onToggleMembers={() => setMembersVisible((visible) => !visible)}
               membersVisible={membersVisible}
@@ -10756,6 +11197,7 @@ function App({
         ) : (
           <ChatView
             channel={activeChannel}
+            onProfilePreview={setPreviewUserId}
             onSearch={() => setSearchOpen(true)}
             onToggleMembers={() => setMembersVisible((visible) => !visible)}
             membersVisible={membersVisible}
@@ -10763,7 +11205,10 @@ function App({
           />
         )}
         {membersVisible && view === "server" && activeChannel && (
-          <MemberSidebar serverId={navServerId} onChannel={selectChannel} />
+          <MemberSidebar
+            serverId={navServerId}
+            onProfilePreview={setPreviewUserId}
+          />
         )}
       </div>
       {signaling.incoming && incomingCaller && (
@@ -11453,7 +11898,7 @@ function DesktopUpdateNotice() {
           aria-label="Fechar aviso de atualização"
           onClick={() => setJustUpdatedFrom(null)}
         >
-          ×
+          <IconX size={18} />
         </button>
       </div>
     );

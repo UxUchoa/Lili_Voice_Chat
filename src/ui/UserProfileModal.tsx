@@ -11,6 +11,7 @@ import {
   IconVideo,
   IconX,
 } from "./icons";
+import { ProfileCard } from "./ProfileCard";
 
 export interface UserProfileActions {
   message: () => void;
@@ -76,15 +77,6 @@ export function UserProfileModal({
     return () => window.removeEventListener("keydown", escape);
   }, [onClose]);
 
-  const statusLabel =
-    profile.status === "online"
-      ? "Online"
-      : profile.status === "idle"
-        ? "Ausente"
-        : profile.status === "dnd"
-          ? "Não perturbe"
-          : "Offline";
-
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <section
@@ -101,51 +93,7 @@ export function UserProfileModal({
         >
           <IconX size={20} />
         </button>
-        <div
-          className="user-profile-banner"
-          style={
-            {
-              "--profile-color": profile.color,
-              ...(profile.bannerUrl
-                ? { backgroundImage: `url(${profile.bannerUrl})` }
-                : {}),
-            } as CSSProperties
-          }
-        />
-        <div className="user-profile-avatar">
-          <span
-            className="avatar avatar-xl"
-            style={{ "--avatar-color": profile.color } as CSSProperties}
-          >
-            {profile.avatarUrl ? (
-              <img src={profile.avatarUrl} alt="" />
-            ) : (
-              <span>{profile.avatar}</span>
-            )}
-            <i className={`presence ${profile.status}`} />
-          </span>
-        </div>
-
-        <div className="user-profile-body">
-          <div className="user-profile-identity">
-            <h2>{nickname || profile.displayName}</h2>
-            <span>@{profile.username}</span>
-            {nickname && <small>Também conhecido como {profile.displayName}</small>}
-            {profile.pronouns && <small>{profile.pronouns}</small>}
-            <span className="user-profile-status">
-              <i className={`presence ${profile.status}`} />
-              {statusLabel}
-              {profile.customStatus ? ` · ${profile.customStatus}` : ""}
-            </span>
-          </div>
-
-          {profile.bio && (
-            <div className="user-profile-section">
-              <span className="eyebrow">SOBRE MIM</span>
-              <p>{profile.bio}</p>
-            </div>
-          )}
-
+        <ProfileCard profile={profile} nickname={nickname}>
           {mutualServers.length > 0 && (
             <div className="user-profile-section">
               <span className="eyebrow">
@@ -302,33 +250,31 @@ export function UserProfileModal({
                 <IconUserX size={20} />
               </button>
             )}
-            {relationship === "blocked" ? (
-              actions.unblock && (
-                <button
-                  className="icon-button accept"
-                  aria-label="Desbloquear"
-                  title="Desbloquear"
-                  disabled={busy}
-                  onClick={actions.unblock}
-                >
-                  <IconUserPlus size={20} />
-                </button>
-              )
-            ) : (
-              actions.block && (
-                <button
-                  className="icon-button danger-text"
-                  aria-label="Bloquear"
-                  title="Bloquear"
-                  disabled={busy}
-                  onClick={actions.block}
-                >
-                  <IconBan size={20} />
-                </button>
-              )
-            )}
+            {relationship === "blocked"
+              ? actions.unblock && (
+                  <button
+                    className="icon-button accept"
+                    aria-label="Desbloquear"
+                    title="Desbloquear"
+                    disabled={busy}
+                    onClick={actions.unblock}
+                  >
+                    <IconUserPlus size={20} />
+                  </button>
+                )
+              : actions.block && (
+                  <button
+                    className="icon-button danger-text"
+                    aria-label="Bloquear"
+                    title="Bloquear"
+                    disabled={busy}
+                    onClick={actions.block}
+                  >
+                    <IconBan size={20} />
+                  </button>
+                )}
           </div>
-        </div>
+        </ProfileCard>
       </section>
     </div>
   );

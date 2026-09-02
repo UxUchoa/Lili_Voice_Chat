@@ -6,6 +6,7 @@ import {
   type ReactNode,
 } from "react";
 import { IconChevronRight } from "./icons";
+import { ModalPortal } from "./ModalPortal";
 
 export interface ContextMenuItem {
   id: string;
@@ -223,16 +224,30 @@ export function ContextMenu({
       </div>
     ));
 
+  /**
+   * Vai para o fim do `body`.
+   *
+   * O menu é `position: fixed` e as coordenadas são de viewport, mas um
+   * ancestral com `transform`, `filter` ou `contain` reancora o fixed nele — e
+   * um ancestral com `overflow: auto` ainda recorta o que passar da borda. Foi
+   * o que aconteceu dentro das configurações do servidor: o menu abria, e os
+   * últimos itens ficavam fora da área clicável.
+   *
+   * O fechamento por clique fora continua valendo: ele compara com `menuRef`,
+   * que aponta para o nó do menu onde quer que ele esteja.
+   */
   return (
-    <div
-      ref={menuRef}
-      className="context-menu"
-      role="menu"
-      style={{ left: position.x, top: position.y, maxHeight }}
-      onContextMenu={(event) => event.preventDefault()}
-    >
-      {renderItems(state.items)}
-    </div>
+    <ModalPortal>
+      <div
+        ref={menuRef}
+        className="context-menu"
+        role="menu"
+        style={{ left: position.x, top: position.y, maxHeight }}
+        onContextMenu={(event) => event.preventDefault()}
+      >
+        {renderItems(state.items)}
+      </div>
+    </ModalPortal>
   );
 }
 

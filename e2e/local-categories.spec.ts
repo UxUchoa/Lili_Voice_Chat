@@ -159,9 +159,13 @@ test("categorias podem ser editadas, ocultadas e excluídas pela UI", async ({
     await page.keyboard.press("Escape");
     await expect(quickSearch).toHaveCount(0);
 
-    await categoryRow
-      .getByRole("button", { name: "Ocultar categoria" })
-      .click();
+    // Privacidade, ordem e exclusão saíram da linha e vivem no menu "⋯": oito
+    // controles por linha não deixavam espaço para o nome nem para o seletor
+    // de categoria.
+    const abrirMenuDaCategoria = () =>
+      categoryRow.getByRole("button", { name: /^Ações para/ }).click();
+    await abrirMenuDaCategoria();
+    await page.getByRole("menuitem", { name: "Ocultar categoria" }).click();
     await expect(categoryRow).toContainText("Categoria · oculta", {
       timeout: 10_000,
     });
@@ -191,7 +195,8 @@ test("categorias podem ser editadas, ocultadas e excluídas pela UI", async ({
       "criar canal dentro da categoria",
     );
 
-    await categoryRow.getByRole("button", { name: "Excluir" }).click();
+    await abrirMenuDaCategoria();
+    await page.getByRole("menuitem", { name: "Excluir categoria" }).click();
     const deleteModal = page.getByRole("alertdialog", {
       name: "Excluir categoria",
     });

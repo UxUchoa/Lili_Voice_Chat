@@ -10,6 +10,7 @@ import {
 import { MediaLightbox } from "./MediaLightbox";
 import { VoicePlayer } from "./VoicePlayer";
 import { isVoiceMessage } from "../domain/voiceMessage";
+import { IconClock, IconDownload, IconEyeOff, IconPaperclip } from "./icons";
 
 type Attachment = MessagePayload["attachments"][number];
 
@@ -110,9 +111,7 @@ export function MessageAttachment({
   if (expired) {
     return (
       <div className="attachment attachment-expired">
-        <span className="attachment-expired-icon" aria-hidden="true">
-          ⧗
-        </span>
+        <IconClock className="attachment-expired-icon" size={18} />
         <span>
           <b>{attachment.name}</b>
           <small>
@@ -153,19 +152,6 @@ export function MessageAttachment({
     );
   }
 
-  if (covered)
-    return (
-      <button
-        className="attachment-spoiler"
-        onClick={() => setRevealed(true)}
-        aria-label={`Mostrar ${attachment.name}, marcado como spoiler`}
-      >
-        <span aria-hidden="true">👁</span>
-        <b>Mostrar spoiler</b>
-        <small>{attachment.name}</small>
-      </button>
-    );
-
   const meta = (
     <small>
       {formatBytes(attachment.size)} · {attachmentTimeLeft(createdAt)}
@@ -173,23 +159,39 @@ export function MessageAttachment({
   );
 
   /**
-   * Envolve o anexo revelado para oferecer o "ocultar".
+   * Envolve o anexo marcado como spoiler.
    *
-   * O controle não pode morar dentro do conteúdo: o anexo comum é um
-   * `<button>` inteiro, e um botão dentro de outro é HTML inválido — o clique
-   * em "ocultar" dispararia o download junto.
+   * A mídia continua montada e no tamanho real por baixo do desfoque: trocar
+   * por uma caixa genérica fazia a mensagem pular de altura ao revelar, e o
+   * vídeo perdia as dimensões que o próprio arquivo define.
+   *
+   * Enquanto coberto o conteúdo fica `inert`. Só esconder no CSS deixaria o
+   * botão de download por baixo ainda alcançável pelo teclado.
    */
-  const withRehide = (content: ReactElement) =>
+  const withSpoiler = (content: ReactElement) =>
     attachment.spoiler ? (
-      <div className="attachment-revealed">
-        {content}
-        <button
-          className="attachment-rehide"
-          onClick={() => setRevealed(false)}
-          aria-label={`Ocultar ${attachment.name} de novo`}
-        >
-          🙈 Ocultar
-        </button>
+      <div className={`attachment-spoiler${covered ? " is-covered" : ""}`}>
+        <div className="attachment-spoiler-content" inert={covered}>
+          {content}
+        </div>
+        {covered ? (
+          <button
+            className="attachment-spoiler-reveal"
+            onClick={() => setRevealed(true)}
+            aria-label={`Mostrar ${attachment.name}, marcado como spoiler`}
+          >
+            <b>SPOILER</b>
+          </button>
+        ) : (
+          <button
+            className="attachment-spoiler-hide"
+            onClick={() => setRevealed(false)}
+            title="Marcar como spoiler de novo"
+            aria-label={`Ocultar ${attachment.name} de novo`}
+          >
+            <IconEyeOff size={16} />
+          </button>
+        )}
       </div>
     ) : (
       content
@@ -199,7 +201,7 @@ export function MessageAttachment({
   // velocidade nem trata a duracao ausente que o `MediaRecorder` deixa no
   // cabecalho. Audio que a pessoa subiu como arquivo continua no caminho comum.
   if (isVoiceMessage(attachment))
-    return withRehide(
+    return withSpoiler(
       <VoicePlayer
         name={attachment.name}
         onResolveUrl={async () =>
@@ -209,7 +211,7 @@ export function MessageAttachment({
     );
 
   if (kind === "image" || kind === "video" || kind === "audio") {
-    return withRehide(
+    return withSpoiler(
       <div className={`attachment-media attachment-media-${kind}`}>
         {url ? (
           kind === "image" ? (
@@ -266,7 +268,7 @@ export function MessageAttachment({
             aria-label={`Salvar ${attachment.name}`}
             onClick={() => onDownload(attachment)}
           >
-            ↓
+            <IconDownload size={16} />
           </button>
         </div>
         {error && (
@@ -290,18 +292,18 @@ export function MessageAttachment({
     );
   }
 
-  return withRehide(
+  return withSpoiler(
     <button
       className="attachment"
       onClick={() => onDownload(attachment)}
       title={`Salvar ${attachment.name}`}
     >
-      <span aria-hidden="true">📎</span>
+      <IconPaperclip className="attachment-icon" size={20} />
       <span>
         <b>{attachment.name}</b>
         {meta}
       </span>
-      ↓
+      <IconDownload className="attachment-arrow" size={18} />
     </button>,
   );
 }

@@ -6,6 +6,7 @@ import {
   voiceFileName,
   type VoiceFormat,
 } from "../domain/voiceMessage";
+import { IconMic } from "./icons";
 
 type Stage = "idle" | "requesting" | "recording" | "ready" | "denied";
 
@@ -133,7 +134,7 @@ export function VoiceRecorder({
         title="Gravar mensagem de voz"
         onClick={() => void start()}
       >
-        🎙
+        <IconMic size={20} />
       </button>
     );
 

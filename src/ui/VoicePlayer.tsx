@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { formatDuration } from "../domain/voiceMessage";
+import { IconLoader, IconPause, IconPlay } from "./icons";
 
 const SPEEDS = [1, 1.5, 2] as const;
 
@@ -87,7 +88,13 @@ export function VoicePlayer({
         disabled={loading}
         onClick={() => void toggle()}
       >
-        {loading ? "…" : playing ? "❚❚" : "▶"}
+        {loading ? (
+          <IconLoader className="icon-spin" size={16} />
+        ) : playing ? (
+          <IconPause size={16} />
+        ) : (
+          <IconPlay size={16} />
+        )}
       </button>
 
       <div className="voice-player-track">

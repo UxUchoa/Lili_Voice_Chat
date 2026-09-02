@@ -12,14 +12,7 @@ import {
 import { supabase } from "../services/online/client";
 import { reportRuntimeError } from "../services/runtimeErrors";
 import { useAppStore } from "../store/appStore";
-
-const escapeRegExp = (value: string) =>
-  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-const containsMention = (text: string, label: string) =>
-  new RegExp(`(?:^|\\s)@${escapeRegExp(label)}(?=$|\\s|[.,!?;:])`, "i").test(
-    text,
-  );
+import { containsMention } from "../domain/mentions";
 
 /**
  * Quantas quedas seguidas antes de incomodar o usuário. Três erra pouco: uma

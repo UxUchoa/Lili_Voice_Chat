@@ -7,6 +7,11 @@
   font-synthesis: none;
   --canvas: #030202;
   --surface-1: #0d0b0c;
+  /* Goteira lateral da coluna da conversa. O compositor, o indicador de
+     digitação, o contador e as barras de resposta e de erro têm que começar na
+     mesma vertical: quando cada um tinha o próprio recuo, o aviso de digitação
+     ficava colado na borda enquanto o campo começava bem mais à direita. */
+  --composer-gutter: 7%;
   --surface-2: #161315;
   --surface-3: #211d20;
   --brand: #f00c14;
@@ -836,6 +841,12 @@ a:focus-visible,
 .presence.idle {
   background: #fbc605;
 }
+.presence.dnd {
+  background: #f0483e;
+}
+/* Invisível é o que a própria pessoa escolhe; para todo mundo ela está
+   offline, então o ponto tem que ser o mesmo cinza. */
+.presence.invisible,
 .presence.offline {
   background: #625b5e;
 }
@@ -943,7 +954,9 @@ a:focus-visible,
 .message-list {
   flex: 1;
   overflow-y: auto;
-  padding: 28px 7%;
+  /* A mesma goteira do compositor: a mensagem e o campo onde ela é escrita
+     começam na mesma vertical. */
+  padding: 28px var(--composer-gutter);
   scrollbar-width: thin;
   scrollbar-color: #30292c transparent;
 }
@@ -1138,6 +1151,14 @@ a:focus-visible,
 .file-icon {
   color: var(--yellow);
 }
+.attachment-icon {
+  flex: none;
+  color: var(--yellow);
+}
+.attachment-arrow {
+  flex: none;
+  color: var(--muted);
+}
 .attachment span:nth-child(2) {
   display: flex;
   flex-direction: column;
@@ -1174,7 +1195,7 @@ a:focus-visible,
   color: var(--muted);
 }
 .composer-wrap {
-  padding: 0 7% 13px;
+  padding: 0 var(--composer-gutter) 13px;
 }
 .composer {
   min-height: 46px;
@@ -1270,6 +1291,47 @@ a:focus-visible,
   color: var(--muted);
   font-size: 16px;
 }
+/* Busca da barra de membros — item 11. Fica na barra, e não num
+   `window.prompt`: o diálogo do navegador tira o foco da página e não deixa
+   ver a lista filtrando enquanto se digita. */
+.member-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 4px 14px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.member-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--primary);
+  font-size: 12px;
+}
+.member-search input::placeholder {
+  color: var(--muted);
+}
+.member-search-clear {
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.member-search-clear:hover {
+  color: var(--primary);
+}
+.member-empty {
+  margin: 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
 .member-group {
   margin-bottom: 18px;
 }
@@ -1340,6 +1402,15 @@ a:focus-visible,
 .encryption-badge > span {
   color: #45d685;
   font-size: 8px;
+}
+/* O ponto de estado da chamada é desenhado, e não um glifo: o "●" mudava de
+   tamanho e de linha de base conforme a fonte que cada sistema resolvia. */
+.rtc-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
 }
 .encryption-badge.pending {
   border-color: rgba(251, 198, 5, 0.22);
@@ -2360,6 +2431,16 @@ a:focus-visible,
   flex-direction: column;
   gap: 3px;
 }
+/* A identidade cresce e as ações ficam do tamanho do conteúdo. `.member-admin-row
+   > div` valia para as duas colunas, então a de ações também era `flex: 1` e
+   levava metade da linha — com nove controles dentro, quebrava em três
+   fileiras. Hoje sobraram dois: o seletor de cargo e o menu. */
+.member-admin-row > .member-admin-actions {
+  flex: none;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
 .member-admin-row b {
   font-size: 12px;
 }
@@ -2449,11 +2530,10 @@ a:focus-visible,
     width: 250px;
     flex-basis: 250px;
   }
-  .message-list,
-  .composer-wrap {
-    padding-left: 4%;
-    padding-right: 4%;
+  .conversation {
+    --composer-gutter: 4%;
   }
+
   .search-pill {
     width: 175px;
   }
@@ -2652,30 +2732,13 @@ a:focus-visible,
 .create-group-friends input {
   min-height: auto;
 }
-.profile-banner-preview {
-  width: 100%;
-  min-height: 118px;
-  display: flex;
-  align-items: flex-end;
-  padding: 14px;
+/* Prévia do próprio perfil — item 24. A moldura é daqui; o desenho de dentro
+   é o mesmo cartão que os outros veem, para os dois não divergirem. */
+.profile-live-card {
+  overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 10px;
-  background:
-    radial-gradient(
-      circle at 80% 20%,
-      rgba(240, 12, 20, 0.28),
-      transparent 42%
-    ),
-    linear-gradient(135deg, #251417, #0d0b0c);
-  background-position: center;
-  background-size: cover;
-}
-.profile-banner-preview .avatar {
-  margin-bottom: -38px;
-  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.4);
-}
-.profile-banner-preview + .eyebrow {
-  margin-top: 26px;
+  border-radius: 14px;
+  background: var(--surface-1);
 }
 .profile-media-fields {
   width: 100%;
@@ -3150,7 +3213,7 @@ a:focus-visible,
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 18px;
+  padding: 6px var(--composer-gutter);
   color: var(--muted);
   background: #0b090a;
   font-size: 10px;
@@ -3413,18 +3476,33 @@ a:focus-visible,
 }
 .invite-row {
   display: grid;
-  grid-template-columns: minmax(150px, 1fr) 2fr auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
-  padding: 10px 0;
+  gap: 16px;
+  padding: 12px 0;
   border-bottom: 1px solid var(--line);
+}
+.invite-identity {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
 }
 .invite-row code {
   color: var(--yellow);
+  font-size: 12px;
+  /* Um link de convite não tem espaços: sem isto ele quebrava só no hífen do
+     domínio e as linhas seguintes escapavam da coluna. */
+  overflow-wrap: anywhere;
 }
 .invite-row span {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
+}
+.invite-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 .invite-row.revoked {
   opacity: 0.5;
@@ -3515,7 +3593,9 @@ a:focus-visible,
 }
 .channel-admin-row {
   display: grid;
-  grid-template-columns: auto minmax(130px, 1fr) repeat(8, auto);
+  /* Ícone, nome, Editar, categoria e o menu. Eram oito colunas de ações, que
+     não deixavam espaço para o nome nem para o seletor de categoria. */
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: 7px;
   padding: 9px;
@@ -3588,8 +3668,14 @@ a:focus-visible,
   color: var(--secondary);
   overflow-wrap: anywhere;
 }
+.voice-text-panel {
+  --composer-gutter: 8px;
+}
 .voice-text-panel .composer-wrap {
-  padding: 8px;
+  /* A goteira lateral vem do token; o respiro vertical é próprio deste painel,
+     que é estreito e não tem o mesmo ar da conversa cheia. */
+  padding-top: 8px;
+  padding-bottom: 8px;
 }
 .recent-calls > button {
   display: flex;
@@ -3691,11 +3777,17 @@ a:focus-visible,
   .channel-admin-row {
     grid-template-columns: auto minmax(130px, 1fr);
   }
+  /* `select` nativo não existe mais aqui: o controle é o `.ds-select`. */
   .channel-admin-row > button,
-  .channel-admin-row > select {
+  .channel-admin-row > .ds-select {
     grid-column: 2;
     width: 100%;
     max-width: none;
+  }
+  /* O menu não é um botão de largura cheia: ele é um alvo de ícone. */
+  .channel-admin-row > .channel-admin-more {
+    width: auto;
+    justify-self: end;
   }
 }
 
@@ -4230,19 +4322,6 @@ a:focus-visible,
 .tile-strip .tile-name {
   font-size: 10px;
   padding: 2px 8px;
-}
-.call-waiting {
-  position: absolute;
-  inset: auto 0 90px 0;
-  display: grid;
-  justify-items: center;
-  gap: 4px;
-  color: var(--secondary);
-  pointer-events: none;
-  text-align: center;
-}
-.call-waiting b {
-  color: var(--primary);
 }
 .peer-volume {
   position: absolute;
@@ -4990,7 +5069,7 @@ a:focus-visible,
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 0 16px 16px;
+  margin: 0 var(--composer-gutter) 16px;
   padding: 14px 16px;
   border-radius: 8px;
   background: var(--surface-2);
@@ -5410,68 +5489,68 @@ button svg,
 }
 
 /* Spoiler em anexo — item 13.
-   A capa substitui o conteudo em vez de so desfoca-lo: assim o arquivo nem
-   chega a ser baixado antes de a pessoa decidir ver. O desfoque fica na
-   propria capa, para o efeito continuar sendo o que se espera de um spoiler. */
+   A midia fica montada e desfocada no lugar: revelar nao muda a altura da
+   mensagem, e o video mantem as dimensoes do proprio arquivo. O custo e que o
+   anexo pequeno ja baixa antes da decisao de ver — o mesmo que ele faria sem
+   spoiler, entao nao ha trafego a mais por causa da capa. */
 .attachment-spoiler {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 14px 16px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background:
-    repeating-linear-gradient(
-      45deg,
-      rgba(255, 255, 255, 0.035) 0 10px,
-      transparent 10px 20px
-    ),
-    var(--surface-2);
-  color: var(--secondary);
-  text-align: left;
+  position: relative;
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+}
+.attachment-spoiler.is-covered .attachment-spoiler-content {
+  filter: blur(44px);
+  /* O desfoque sangra para fora da caixa; recortar tira o halo da borda. */
+  clip-path: inset(0 round 8px);
+  user-select: none;
+}
+
+/* A area toda revela, e nao so a pilha: e o alvo que se espera ao clicar. */
+.attachment-spoiler-reveal {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: transparent;
   cursor: pointer;
 }
-.attachment-spoiler:hover {
-  border-color: var(--brand);
-  color: var(--primary);
+.attachment-spoiler-reveal b {
+  padding: 7px 16px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
 }
-.attachment-spoiler b {
-  font-size: 13px;
+.attachment-spoiler-reveal:hover b {
+  background: rgba(0, 0, 0, 0.86);
 }
-.attachment-spoiler small {
-  margin-left: auto;
-  overflow: hidden;
-  max-width: 45%;
-  color: var(--muted);
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  /* Desfoque no nome: um titulo entrega o spoiler tanto quanto a imagem. */
-  filter: blur(3px);
-}
-.attachment-spoiler:hover small {
-  filter: none;
-}
-.attachment-revealed {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-}
-.attachment-revealed > :first-child {
-  flex: 1;
-  min-width: 0;
-}
-.attachment-rehide {
-  padding: 2px 7px;
-  border-radius: 6px;
-  background: var(--surface-3);
-  color: var(--secondary);
-  font-size: 10px;
+
+/* Reesconder mora no canto do proprio anexo, e nao numa pilha solta embaixo. */
+.attachment-spoiler-hide {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  opacity: 0;
   cursor: pointer;
+  transition: opacity 0.12s ease;
 }
-.attachment-rehide:hover {
-  color: var(--primary);
+.attachment-spoiler:hover .attachment-spoiler-hide,
+.attachment-spoiler-hide:focus-visible {
+  opacity: 1;
+}
+.attachment-spoiler-hide:hover {
+  background: rgba(0, 0, 0, 0.82);
 }
 
 /* Rascunho marcado como spoiler no compositor. */
@@ -5628,18 +5707,24 @@ button svg,
 }
 
 /* Modal da pasta. */
+/* Campo do diálogo de texto — item 25. Compartilha as regras com o da pasta:
+   são o mesmo controle, e separá-los faria um dos dois envelhecer sozinho. */
+.prompt-modal-field,
 .folder-modal-field {
   display: flex;
   flex-direction: column;
   gap: 6px;
   margin-bottom: 14px;
 }
+.prompt-modal-field span,
 .folder-modal-field span {
   color: var(--muted);
   font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
+.prompt-modal-field input,
+.prompt-modal-field textarea,
 .folder-modal-field input {
   padding: 9px 12px;
   border: 1px solid var(--line);
@@ -5648,9 +5733,17 @@ button svg,
   color: var(--primary);
   font-size: 14px;
 }
+.prompt-modal-field input:focus,
+.prompt-modal-field textarea:focus,
 .folder-modal-field input:focus {
   border-color: var(--brand);
   outline: none;
+}
+.prompt-modal-field textarea {
+  min-height: 76px;
+  resize: vertical;
+  font-family: inherit;
+  line-height: 1.5;
 }
 .folder-modal-colors {
   display: flex;
@@ -5856,4 +5949,29 @@ button svg,
   flex-basis: 100%;
   color: var(--brand);
   font-size: 11px;
+}
+
+/* Autor da mensagem clicável — item 23.
+   `display: contents` porque `.message` é grid e o avatar é o item da coluna
+   1: um botão comum passaria a ser o item no lugar dele, ganharia caixa
+   própria e engordaria a coluna. */
+.message-author-avatar {
+  display: contents;
+  cursor: pointer;
+}
+.message-author-name {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.message-author-name:hover b {
+  text-decoration: underline;
+}
+.message-author-name:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 4px;
 }

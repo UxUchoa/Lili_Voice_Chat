@@ -226,9 +226,13 @@ test("duas sessões isoladas trocam mensagens no mesmo canal", async ({
     await expect(memberPage.locator(".composer textarea")).toBeVisible({
       timeout: 20_000,
     });
+    // Conta as linhas online em vez de ler o título do primeiro grupo: a
+    // barra agrupa por cargo destacado, então o primeiro título é o cargo do
+    // dono, e não "ONLINE". O que o teste quer saber é que as duas sessões
+    // aparecem presentes — isso continua valendo em qualquer agrupamento.
     await expect(
-      ownerPage.locator(".member-group-title").first(),
-    ).toContainText("ONLINE — 2", { timeout: 20_000 });
+      ownerPage.locator(".member-row:not(.offline)"),
+    ).toHaveCount(2, { timeout: 20_000 });
     // Sem grupo criptográfico não há nada a sincronizar antes de conversar:
     // basta que as duas sessões estejam registradas e vendo o canal.
     await waitFor(async () => {
@@ -242,7 +246,7 @@ test("duas sessões isoladas trocam mensagens no mesmo canal", async ({
     const memberProfile = await unwrap(
       ownerApi
         .from("profiles")
-        .select("id,username")
+        .select("id,username,display_name")
         .eq("id", userIds[1])
         .single(),
       "resolver username do membro E2E",
@@ -519,10 +523,17 @@ test("duas sessões isoladas trocam mensagens no mesmo canal", async ({
     const editableMentionMessage = `@${memberProfile.username} temporária`;
     await ownerComposer.fill(editableMentionMessage);
     await ownerComposer.press("Enter");
+    // A mensagem renderizada mostra o nome de exibição na menção, e não o
+    // `@username` que foi digitado — é o formato do Discord, e o corpo gravado
+    // continua sendo o texto literal. Por isso a linha é localizada pela parte
+    // que não é menção, e a menção em si é verificada como pílula.
     const editableMentionRow = ownerPage
       .locator(".message")
-      .filter({ hasText: editableMentionMessage });
+      .filter({ hasText: "temporária" });
     await expect(editableMentionRow).toBeVisible({ timeout: 20_000 });
+    await expect(editableMentionRow.locator(".mention")).toHaveText(
+      `@${memberProfile.display_name}`,
+    );
     const editableMentionRecord = await unwrap(
       ownerApi
         .from("messages")

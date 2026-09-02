@@ -93,7 +93,7 @@ test("perfil P0 e mídia privada persistem no Supabase local", async ({
       },
     );
     await expect(
-      page.locator(".profile-banner-preview .avatar img"),
+      page.locator(".profile-live-card .avatar img"),
     ).toBeVisible();
 
     const profileResult = await api
@@ -124,7 +124,7 @@ test("perfil P0 e mídia privada persistem no Supabase local", async ({
       "ela/dela",
     );
     await expect(
-      page.locator(".profile-banner-preview .avatar img"),
+      page.locator(".profile-live-card .avatar img"),
     ).toBeVisible();
     await page.locator(".profile-panel .close-settings").click();
     await openServer(page, serverId);
