@@ -6,6 +6,20 @@ Uma seção por versão publicada. O texto daqui é o corpo da release no GitHub
 publicação de propósito — release sem notas é release que ninguém sabe o que
 mudou.
 
+## 0.1.8
+
+### Correções
+
+- **O seletor de GIFs abria com todos os quadros quebrados.** A política de
+  segurança do build ainda liberava o provedor anterior, o Tenor, e recusava o
+  Giphy — que é de onde o seletor busca desde a versão passada. O navegador
+  descartava cada prévia antes de virar requisição, e a falha parecia ser da
+  busca, que estava funcionando o tempo todo. Escolher o GIF também dependia
+  disso: o arquivo é baixado aqui antes de virar anexo seu.
+- **O código de verificação volta a exigir seis dígitos**, agora recusando em
+  voz alta em vez de cortar em silêncio. Um código mais longo que o esperado
+  diz o tamanho que veio, em vez de virar um "código inválido" sem explicação.
+
 ## 0.1.7
 
 ### Novidades
