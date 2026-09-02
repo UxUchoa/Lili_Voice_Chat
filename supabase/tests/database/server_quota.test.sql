@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(12);
+select plan(13);
 
 insert into auth.users(id, email, aud, role, raw_user_meta_data)
 values
@@ -182,36 +182,70 @@ select is(
 
 -- ============================================================
 -- Arquivo orfao: o bug que existia antes desta migracao
+--
+-- O `delete` acontece com os papeis reais: `authenticated`, que e como o
+-- aplicativo apaga o anexo de uma mensagem, e `service_role`, que e como a
+-- funcao de borda apaga os vencidos. Como superusuario, que era o que este
+-- teste fazia, os `grant` da tabela sao ignorados e o gatilho passa mesmo sem
+-- ter permissao de escrever em `pending_storage_deletions`.
+--
+-- O caminho por CASCADE nao serve de prova aqui: o gatilho de integridade roda
+-- como dono da tabela, entao apagar a mensagem inteira funcionaria de qualquer
+-- jeito. Quem quebrava era o `delete` direto na linha do anexo.
 -- ============================================================
 reset role;
 insert into public.messages(
   id, channel_id, author_id, sender_device_id, body, payload_version
-) values (
-  '1d0000bb-0000-0000-0000-000000000001',
+)
+select
+  m.id,
   (select id from public.channels
    where server_id = (select id from public.servers where name = 'Servidor da cota')
    limit 1),
   '1d000000-0000-0000-0000-000000000001',
   '1d00de00-0000-0000-0000-000000000001', 'x', 4
-);
+from (values
+  ('1d0000bb-0000-0000-0000-000000000001'::uuid),
+  ('1d0000bb-0000-0000-0000-000000000002'::uuid)
+) as m(id);
 insert into public.message_attachments(
   message_id, channel_id, storage_object, byte_size, name, mime
-) values (
-  '1d0000bb-0000-0000-0000-000000000001',
-  (select channel_id from public.messages where id = '1d0000bb-0000-0000-0000-000000000001'),
-  'canal/arquivo-que-ficaria-orfao.bin',
+)
+select
+  m.id,
+  (select channel_id from public.messages where id = m.id),
+  m.objeto,
   1024,
-  'arquivo-que-ficaria-orfao.bin',
+  m.objeto,
   'application/octet-stream'
-);
+from (values
+  ('1d0000bb-0000-0000-0000-000000000001'::uuid, 'canal/arquivo-que-ficaria-orfao.bin'),
+  ('1d0000bb-0000-0000-0000-000000000002'::uuid, 'canal/arquivo-vencido-que-ficaria-orfao.bin')
+) as m(id, objeto);
 
-delete from public.messages where id = '1d0000bb-0000-0000-0000-000000000001';
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '1d000000-0000-0000-0000-000000000001', true);
+delete from public.message_attachments
+where message_id = '1d0000bb-0000-0000-0000-000000000001';
+reset role;
 
 select is(
   (select count(*)::integer from public.pending_storage_deletions
    where path = 'canal/arquivo-que-ficaria-orfao.bin'),
   1,
-  'apagar a mensagem registra o anexo para a funcao de borda remover do Storage'
+  'apagar o anexo pelo aplicativo registra o arquivo para a funcao de borda remover do Storage'
+);
+
+set local role service_role;
+delete from public.message_attachments
+where message_id = '1d0000bb-0000-0000-0000-000000000002';
+reset role;
+
+select is(
+  (select count(*)::integer from public.pending_storage_deletions
+   where path = 'canal/arquivo-vencido-que-ficaria-orfao.bin'),
+  1,
+  'a limpeza dos vencidos, feita com service_role, registra o arquivo do mesmo jeito'
 );
 
 select * from finish();
