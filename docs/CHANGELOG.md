@@ -6,6 +6,43 @@ Uma seção por versão publicada. O texto daqui é o corpo da release no GitHub
 publicação de propósito — release sem notas é release que ninguém sabe o que
 mudou.
 
+## 0.1.7
+
+### Novidades
+
+- **As notas da versão aparecem dentro do aplicativo.** O `electron-updater` já
+  recebia o corpo da release junto do aviso de versão nova — ele só era
+  descartado. Agora vira um painel, com o mesmo texto que está na página da
+  release.
+- **O download da atualização não começa mais sozinho.** São ~118 MB que saíam
+  pela rede da pessoa sem aviso: o primeiro sinal de que havia versão nova era o
+  "pronto para reiniciar". Agora a versão se anuncia com o que mudou e um botão.
+- **Botão de baixar à mão** quando o atualizador não puder fazer o trabalho —
+  canal ausente, erro de rede, instalação sem permissão de escrita. É a saída de
+  quem está justamente com o caminho automático quebrado.
+
+### Correções
+
+- **O cadastro não passava da tela do código.** O servidor estava configurado
+  para mandar oito dígitos e o aplicativo cortava em seis: o código saía
+  truncado daqui e a resposta do servidor era a mesma de um código vencido, o
+  que mandava todo mundo procurar o erro no lugar errado. O campo passa a
+  aceitar a faixa inteira que o servidor pode usar, e nem a tela nem o e-mail
+  prometem mais um número de dígitos que não é deles.
+- **Apagar mensagem com anexo falhava pela metade.** O arquivo saía do
+  armazenamento e a mensagem continuava na conversa apontando para ele, porque a
+  exclusão esbarrava numa permissão do banco. A limpeza automática dos anexos
+  vencidos parava pelo mesmo motivo.
+- **Envio de e-mail recusado no cadastro** devolvia a pessoa ao formulário, onde
+  tentar de novo gerava outro código e cancelava o que ainda estava a caminho.
+  Agora leva à tela do código, com o reenvio liberado na hora.
+- **A última mensagem ficava cortada** nas conversas longas. A descida
+  automática dependia de quantas mensagens havia na lista, e passando de
+  cinquenta esse número para de mudar: chegava mensagem, a lista rolava sozinha
+  para cima e nada descia.
+- O prazo do código de verificação era dito em dois lugares com dois valores
+  diferentes. O e-mail agora diz o que o servidor faz.
+
 ## 0.1.6
 
 - **A cota do servidor acompanha a exclusão de outro servidor.** A fatia é o
