@@ -64,6 +64,60 @@ const hasPackagedUpdateConfiguration = () =>
   existsSync(path.join(process.resourcesPath, "app-update.yml"));
 
 /**
+ * Endereço da release no GitHub, montado a partir do `app-update.yml` que o
+ * electron-builder embarca.
+ *
+ * É o mesmo lugar de onde o updater baixa, e serve para quando ele não puder
+ * fazer o trabalho: canal ausente, erro de rede, instalação sem permissão de
+ * escrita. Aí o botão leva a pessoa direto ao instalador em vez de deixá-la
+ * com um aviso e nenhuma saída.
+ */
+const releaseUrlFor = (version) => {
+  if (!hasPackagedUpdateConfiguration()) return undefined;
+  try {
+    const config = readFileSync(
+      path.join(process.resourcesPath, "app-update.yml"),
+      "utf8",
+    );
+    const owner = /^\s*owner:\s*(\S+)\s*$/m.exec(config)?.[1];
+    const repo = /^\s*repo:\s*(\S+)\s*$/m.exec(config)?.[1];
+    if (!owner || !repo) return undefined;
+    return version
+      ? `https://github.com/${owner}/${repo}/releases/tag/v${version}`
+      : `https://github.com/${owner}/${repo}/releases/latest`;
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * As notas da versão, como o provedor as entrega.
+ *
+ * O GitHub manda o corpo da release — o mesmo texto que sai de
+ * `docs/CHANGELOG.md`. Com `fullChangelog` vem uma lista de versões, e por
+ * isso os dois formatos são achatados aqui: o resto do aplicativo lida com uma
+ * string, e não com a forma que o provedor escolheu.
+ */
+const releaseNotesFrom = (info) => {
+  const notes = info?.releaseNotes;
+  if (typeof notes === "string") return notes.trim() || undefined;
+  if (Array.isArray(notes))
+    return (
+      notes
+        .map((entry) =>
+          typeof entry === "string"
+            ? entry
+            : [entry?.version && `## ${entry.version}`, entry?.note]
+                .filter(Boolean)
+                .join("\n"),
+        )
+        .join("\n\n")
+        .trim() || undefined
+    );
+  return undefined;
+};
+
+/**
  * Endereço que a janela carrega.
  *
  * O aplicativo instalado é uma casca nativa sobre o **mesmo** site: ele não
@@ -186,19 +240,35 @@ function setupAutoUpdater() {
     autoUpdater.setFeedURL({ provider: "generic", url: testFeed });
     autoUpdater.disableDifferentialDownload = true;
   }
-  autoUpdater.autoDownload = true;
+  /*
+   * O download deixa de comecar sozinho.
+   *
+   * Sao ~118 MB, e ate aqui eles saiam pela rede da pessoa sem aviso: o
+   * primeiro sinal de que havia atualizacao era o "pronto para reiniciar".
+   * Agora a versao nova se anuncia com as notas do que mudou e um botao, e
+   * quem decide baixar e quem esta usando o aplicativo.
+   *
+   * No modo de teste o automatico continua: o teste de atualizacao instalada
+   * roda sem ninguem para clicar.
+   */
+  autoUpdater.autoDownload = updateTestMode;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.logger = console;
   autoUpdater.on("checking-for-update", () =>
     publishUpdateState({ status: "checking", error: undefined }),
   );
-  autoUpdater.on("update-available", (info) =>
+  autoUpdater.on("update-available", (info) => {
     publishUpdateState({
-      status: "downloading",
+      // Com `autoDownload` desligado, "disponivel" e um estado de verdade, e
+      // nao um instante entre a checagem e o download.
+      status: updateTestMode ? "downloading" : "available",
       version: info.version,
       progress: 0,
-    }),
-  );
+      notes: releaseNotesFrom(info),
+      releaseUrl: releaseUrlFor(info.version),
+      error: undefined,
+    });
+  });
   autoUpdater.on("update-not-available", (info) =>
     publishUpdateState({
       status: "current",
@@ -217,6 +287,8 @@ function setupAutoUpdater() {
       status: "ready",
       version: info.version,
       progress: 100,
+      notes: releaseNotesFrom(info),
+      releaseUrl: releaseUrlFor(info.version),
     });
     if (updateTestMode) {
       recordUpdateTest("update-downloaded", { targetVersion: info.version });
@@ -474,6 +546,19 @@ ipcMain.handle("update:check", (event) => {
   if (event.sender !== mainWindow?.webContents)
     throw new Error("Acesso negado.");
   return checkForUpdates();
+});
+ipcMain.on("update:download", (event) => {
+  // So a partir de "disponivel": um segundo clique no meio do download faria o
+  // electron-updater comecar outro por cima do primeiro.
+  if (event.sender !== mainWindow?.webContents) return;
+  if (updateState.status !== "available") return;
+  publishUpdateState({ status: "downloading", progress: 0, error: undefined });
+  void autoUpdater.downloadUpdate().catch((error) =>
+    publishUpdateState({
+      status: "error",
+      error: error instanceof Error ? error.message : String(error),
+    }),
+  );
 });
 ipcMain.on("update:install", (event) => {
   if (

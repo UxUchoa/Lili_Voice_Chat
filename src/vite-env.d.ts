@@ -16,6 +16,7 @@ interface Window {
     unwrapSecret: (wrapped: string) => Promise<string>;
     updateStatus: () => Promise<LiliUpdateState>;
     checkForUpdates: () => Promise<LiliUpdateState>;
+    downloadUpdate: () => void;
     installUpdate: () => void;
     onUpdateState: (callback: (state: LiliUpdateState) => void) => () => void;
   };
@@ -35,6 +36,8 @@ interface LiliUpdateState {
     | "development"
     | "unconfigured"
     | "checking"
+    /** Versão nova anunciada, esperando a pessoa mandar baixar. */
+    | "available"
     | "downloading"
     | "current"
     | "ready"
@@ -43,4 +46,8 @@ interface LiliUpdateState {
   version: string;
   progress: number;
   error?: string;
+  /** Corpo da release no GitHub — o texto de `docs/CHANGELOG.md`. */
+  notes?: string;
+  /** Página da release, para baixar à mão quando o updater não puder. */
+  releaseUrl?: string;
 }

@@ -1276,8 +1276,6 @@
 }
 .admin-role-select {
   max-width: 160px;
-  min-height: 34px;
-  border-radius: 8px;
 }
 .admin-role {
   font-size: 12px;
@@ -2032,9 +2030,7 @@ button.toggle,
   padding: 0 12px;
   font-size: 12.5px;
 }
-.member-admin-row > .member-admin-actions .admin-role-select {
-  min-height: 32px;
-}
+
 
 /* ============================================================
    Painel da conta e do perfil

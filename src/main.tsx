@@ -233,6 +233,7 @@ import { useCallSignaling } from "./hooks/useCallSignaling";
 import { IncomingCallOverlay, OutgoingCallOverlay } from "./ui/CallOverlays";
 import { ServerIcon } from "./ui/ServerIcon";
 import { ChannelSetupModal, type NewChannelKind } from "./ui/ChannelSetupModal";
+import { ReleaseNotesModal } from "./ui/ReleaseNotes";
 import { ChannelSettingsModal } from "./ui/ChannelSettingsModal";
 import {
   ServerProfileFields,
@@ -9431,7 +9432,8 @@ function ProfilePanel({
     [logoutBusy, setLogoutBusy] = useState(false),
     [newPassword, setNewPassword] = useState(""),
     [securityNotice, setSecurityNotice] = useState(""),
-    [updateState, setUpdateState] = useState<LiliUpdateState | null>(null);
+    [updateState, setUpdateState] = useState<LiliUpdateState | null>(null),
+    [updateNotesOpen, setUpdateNotesOpen] = useState(false);
   useEffect(() => {
     void (async () => {
       try {
@@ -10061,6 +10063,10 @@ function ProfilePanel({
                 <button onClick={() => window.janjaDesktop?.installUpdate()}>
                   Reiniciar e instalar
                 </button>
+              ) : updateState?.status === "available" ? (
+                <button onClick={() => window.janjaDesktop?.downloadUpdate()}>
+                  Baixar a versão {updateState.version}
+                </button>
               ) : (
                 <button
                   onClick={() =>
@@ -10076,6 +10082,53 @@ function ProfilePanel({
                 >
                   Verificar atualizações
                 </button>
+              )}
+              {updateState?.notes && (
+                <button
+                  className="outline-button"
+                  onClick={() => setUpdateNotesOpen(true)}
+                >
+                  Ver o que mudou na {updateState.version}
+                </button>
+              )}
+              {/* Sai do updater e vai para a página da release: é a saída de
+                  quem está com o canal de atualização quebrado, que é
+                  justamente quem não pode contar com o botão de cima. */}
+              {updateState?.releaseUrl && (
+                <a
+                  className="release-link"
+                  href={updateState.releaseUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Baixar o instalador no GitHub
+                </a>
+              )}
+              {updateNotesOpen && updateState && (
+                <ReleaseNotesModal
+                  version={updateState.version}
+                  notes={updateState.notes}
+                  releaseUrl={updateState.releaseUrl}
+                  onClose={() => setUpdateNotesOpen(false)}
+                  actions={
+                    updateState.status === "available" ? (
+                      <button
+                        onClick={() => {
+                          window.janjaDesktop?.downloadUpdate();
+                          setUpdateNotesOpen(false);
+                        }}
+                      >
+                        Baixar agora
+                      </button>
+                    ) : updateState.status === "ready" ? (
+                      <button
+                        onClick={() => window.janjaDesktop?.installUpdate()}
+                      >
+                        Reiniciar e instalar
+                      </button>
+                    ) : undefined
+                  }
+                />
               )}
             </div>
           </details>
@@ -11652,8 +11705,15 @@ function OnlineAuthGate() {
           setOtpStep({
             purpose: "signup",
             email: result.email,
-            sentAt: Date.now(),
+            // Sem e-mail enviado não há espera de reenvio a cumprir: a pessoa
+            // precisa poder pedir de novo assim que chegar nesta tela.
+            sentAt: result.emailFailed ? 0 : Date.now(),
           });
+          if (result.emailFailed)
+            setError(
+              "A conta foi criada, mas o servidor de e-mail recusou o envio " +
+                "do código. Peça o reenvio aqui em alguns minutos.",
+            );
         } else {
           // A conta fica em espera: entrar antes de a pessoa guardar a chave é
           // a forma mais fácil de ela nunca guardar.
@@ -12004,6 +12064,9 @@ function DesktopUpdateNotice() {
   const [updateState, setUpdateState] = useState<LiliUpdateState | null>(null);
   const [justUpdatedFrom, setJustUpdatedFrom] = useState<string | null>(null);
   const [dismissedReady, setDismissedReady] = useState(false);
+  /** Versão anunciada que a pessoa mandou esperar; some quando outra chega. */
+  const [postponed, setPostponed] = useState<string | null>(null);
+  const [notesOpen, setNotesOpen] = useState(false);
 
   useEffect(() => {
     if (!window.janjaDesktop) return;
@@ -12041,6 +12104,79 @@ function DesktopUpdateNotice() {
 
   if (!window.janjaDesktop) return null;
 
+  const notes = (
+    <>
+      {notesOpen && updateState && (
+        <ReleaseNotesModal
+          version={updateState.version}
+          notes={updateState.notes}
+          releaseUrl={updateState.releaseUrl}
+          onClose={() => setNotesOpen(false)}
+          actions={
+            updateState.status === "available" ? (
+              <button
+                onClick={() => {
+                  window.janjaDesktop?.downloadUpdate();
+                  setNotesOpen(false);
+                }}
+              >
+                Baixar agora
+              </button>
+            ) : updateState.status === "ready" ? (
+              <button onClick={() => window.janjaDesktop?.installUpdate()}>
+                Reiniciar e instalar
+              </button>
+            ) : undefined
+          }
+        />
+      )}
+    </>
+  );
+  /** O "o que mudou" só aparece quando a release trouxe notas. */
+  const notesButton = updateState?.notes ? (
+    <button onClick={() => setNotesOpen(true)}>Ver o que mudou</button>
+  ) : null;
+
+  if (updateState?.status === "available" && postponed !== updateState.version)
+    return (
+      <>
+        <div className="update-banner" role="status">
+          <span>
+            Versão {updateState.version} disponível.
+            {updateState.notes ? "" : " Baixe quando quiser."}
+          </span>
+          <div className="update-banner-actions">
+            <button onClick={() => window.janjaDesktop?.downloadUpdate()}>
+              Baixar agora
+            </button>
+            {notesButton}
+            <button
+              aria-label="Adiar atualização"
+              onClick={() => setPostponed(updateState.version)}
+            >
+              Depois
+            </button>
+          </div>
+        </div>
+        {notes}
+      </>
+    );
+
+  if (updateState?.status === "downloading")
+    return (
+      <>
+        <div className="update-banner update-banner-info" role="status">
+          <span>
+            Baixando a versão {updateState.version}… {updateState.progress}%
+          </span>
+          {notesButton && (
+            <div className="update-banner-actions">{notesButton}</div>
+          )}
+        </div>
+        {notes}
+      </>
+    );
+
   if (justUpdatedFrom)
     return (
       <div className="update-banner update-banner-info" role="status">
@@ -12056,25 +12192,29 @@ function DesktopUpdateNotice() {
 
   if (updateState?.status === "ready" && !dismissedReady)
     return (
-      <div className="update-banner" role="status">
-        <span>
-          Versão {updateState.version} pronta. Reinicie para atualizar.
-        </span>
-        <div className="update-banner-actions">
-          <button onClick={() => window.janjaDesktop?.installUpdate()}>
-            Reiniciar e instalar
-          </button>
-          <button
-            aria-label="Adiar atualização"
-            onClick={() => setDismissedReady(true)}
-          >
-            Depois
-          </button>
+      <>
+        <div className="update-banner" role="status">
+          <span>
+            Versão {updateState.version} pronta. Reinicie para atualizar.
+          </span>
+          <div className="update-banner-actions">
+            <button onClick={() => window.janjaDesktop?.installUpdate()}>
+              Reiniciar e instalar
+            </button>
+            {notesButton}
+            <button
+              aria-label="Adiar atualização"
+              onClick={() => setDismissedReady(true)}
+            >
+              Depois
+            </button>
+          </div>
         </div>
-      </div>
+        {notes}
+      </>
     );
 
-  return null;
+  return notesOpen ? notes : null;
 }
 
 const rootElement = document.getElementById("root")!;

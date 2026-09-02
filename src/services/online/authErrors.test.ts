@@ -71,6 +71,22 @@ describe("código de verificação", () => {
     ).toMatch(/Peça um novo/);
   });
 
+  it("separa o envio recusado do código errado", () => {
+    // São duas causas com saídas diferentes: uma é esperar e reenviar, a outra
+    // é conferir o número. Antes as duas chegavam como o inglês do servidor.
+    const envio = humanizeAuthError(
+      new Error("Error sending confirmation email"),
+    );
+    expect(envio.message).toMatch(/servidor de e-mail recusou/);
+    expect(envio.message).not.toMatch(/não confere/);
+  });
+
+  it("avisa que um código novo cancela o anterior", () => {
+    expect(humanizeAuthError(new Error("otp_expired")).message).toMatch(
+      /cancela o código anterior/,
+    );
+  });
+
   it("fala em código, e não em link, no e-mail não confirmado", () => {
     expect(
       humanizeAuthError(new Error("Email not confirmed")).message,

@@ -1,6 +1,6 @@
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "./client";
-import { humanizeAuthError } from "./authErrors";
+import { humanizeAuthError, isEmailDeliveryFailure } from "./authErrors";
 import {
   generateRecoveryKey,
   hashRecoveryKey,
@@ -60,7 +60,12 @@ export async function getCurrentOnlineAccount() {
  */
 export type RegistrationResult =
   | { status: "active"; account: OnlineAccount; recoveryKey: string }
-  | { status: "pending"; email: string };
+  | {
+      status: "pending";
+      email: string;
+      /** A conta nasceu, mas o e-mail com o código não saiu do servidor. */
+      emailFailed?: boolean;
+    };
 
 export async function registerOnlineAccount(input: {
   email: string;
@@ -79,6 +84,12 @@ export async function registerOnlineAccount(input: {
       },
     },
   });
+  // Envio recusado não é cadastro perdido: a conta foi criada e o que faltou
+  // foi a mensagem. Devolver a pessoa ao formulário a faria tentar de novo, e
+  // cada tentativa gera outro código — cancelando inclusive o que ainda esteja
+  // a caminho. Daqui ela segue para a tela do código, onde existe o reenvio.
+  if (error && isEmailDeliveryFailure(error))
+    return { status: "pending", email, emailFailed: true };
   if (error) throw humanizeAuthError(error);
   // Sem sessão o cadastro depende de confirmação por e-mail e a chave não pode
   // ser registrada ainda; quem entrar depois recebe a dele no primeiro login.

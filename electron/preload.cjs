@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld(
     unwrapSecret: (wrapped) => ipcRenderer.invoke("secret:unwrap", wrapped),
     updateStatus: () => ipcRenderer.invoke("update:status"),
     checkForUpdates: () => ipcRenderer.invoke("update:check"),
+    downloadUpdate: () => ipcRenderer.send("update:download"),
     installUpdate: () => ipcRenderer.send("update:install"),
     onUpdateState: (callback) => {
       const listener = (_event, state) => callback(state);

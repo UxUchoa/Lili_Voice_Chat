@@ -2547,14 +2547,12 @@ a:focus-visible,
   font-size: 10px;
   font-weight: 600;
 }
+/* Estas duas classes nasceram para um `select` nativo, e hoje vestem a raiz do
+   componente `Select` — que já traz moldura, fundo e recuo no próprio gatilho.
+   Repetir a moldura aqui desenhava uma cápsula por fora da outra, e a de
+   dentro sobrava pelas bordas. Sobra o tamanho; a aparência é do controle. */
 .admin-role-select {
-  min-height: 32px;
   max-width: 110px;
-  padding: 6px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  color: var(--secondary);
-  background: var(--surface-2);
 }
 .member-role-actions {
   display: flex;
@@ -2923,6 +2921,90 @@ a:focus-visible,
 .help-security {
   color: var(--muted);
   font-size: 10px;
+}
+/* ============================================================
+   Notas da versão — o corpo da release do GitHub dentro do app.
+   O painel segue a mesma moldura do de ajuda: mesma largura, mesmo fio, mesmo
+   botão de fechar no canto.
+   ============================================================ */
+.release-notes-panel {
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(72vh, 640px);
+  overflow-y: auto;
+  padding: 30px;
+  position: relative;
+  border: 1px solid #3b3034;
+  border-radius: 14px;
+  background: var(--surface-1);
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.58);
+}
+.release-notes-panel .close-settings {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+}
+.release-notes-panel h2 {
+  margin: 10px 0 14px;
+}
+.release-notes h4 {
+  margin: 18px 0 8px;
+  color: var(--primary);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.release-notes h4:first-child {
+  margin-top: 0;
+}
+.release-notes p {
+  margin: 0 0 10px;
+  color: var(--secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.release-notes ul {
+  margin: 0 0 12px;
+  padding-left: 18px;
+  display: grid;
+  gap: 7px;
+}
+.release-notes li {
+  color: var(--secondary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.release-notes li::marker {
+  color: var(--brand);
+}
+.release-notes strong {
+  color: var(--primary);
+  font-weight: 600;
+}
+.release-notes code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--surface-3);
+  font-size: 12px;
+}
+.release-notes-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+}
+.release-notes-actions a,
+.release-link {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 12px;
+}
+.release-notes-actions a:hover,
+.release-link:hover {
+  color: var(--primary);
+  text-decoration: underline;
 }
 .help-credits {
   /* Fecha o modal com um fio, como as demais divisórias da interface: os
@@ -3788,13 +3870,7 @@ a:focus-visible,
   color: var(--muted);
 }
 .admin-category-select {
-  max-width: 140px;
-  padding: 7px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  color: var(--secondary);
-  background: var(--surface-3);
-  font-size: 9px;
+  max-width: 150px;
 }
 .call-view {
   position: relative;
