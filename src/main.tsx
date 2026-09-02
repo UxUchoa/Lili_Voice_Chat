@@ -9089,7 +9089,18 @@ function QuotaSettingsView({ serverId }: { serverId: string }) {
   const server = useAppStore((state) =>
       state.servers.find((item) => item.id === serverId),
     ),
-    currentUserId = useAppStore((state) => state.currentUserId);
+    currentUserId = useAppStore((state) => state.currentUserId),
+    /**
+     * Quantos servidores existem agora.
+     *
+     * A fatia é o teto da instância dividido por esse número, então ela muda
+     * sozinha quando um servidor é criado ou excluído — e a medição precisa
+     * acompanhar. Antes ela acontecia só ao abrir a aba e no botão
+     * "Atualizar": quem excluía um servidor com a aba aberta continuava vendo
+     * a fatia antiga, e ficava parecendo que a exclusão não tinha liberado
+     * nada.
+     */
+    serverCount = useAppStore((state) => state.servers.length);
   const [quota, setQuota] = useState<OnlineQuotaStatus | null>(null),
     [serverQuota, setServerQuota] = useState<ServerQuotaStatus | null>(null),
     [error, setError] = useState(""),
@@ -9121,9 +9132,11 @@ function QuotaSettingsView({ serverId }: { serverId: string }) {
   };
   useEffect(() => {
     if (owner) void load();
-    // A medição é explícita e não precisa de polling permanente.
+    // Fora a mudança no número de servidores, a medição é explícita: ela varre
+    // tabelas inteiras, e um polling permanente cobraria isso do banco a cada
+    // intervalo para quase sempre repetir o mesmo número.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [owner]);
+  }, [owner, serverCount]);
   if (!owner)
     return (
       <div className="settings-content single-content">
