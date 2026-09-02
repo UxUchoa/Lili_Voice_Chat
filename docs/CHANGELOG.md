@@ -6,6 +6,21 @@ Uma seção por versão publicada. O texto daqui é o corpo da release no GitHub
 publicação de propósito — release sem notas é release que ninguém sabe o que
 mudou.
 
+## 0.1.9
+
+### Correções
+
+- **O histórico mostrava as chamadas dos outros.** Quem dividia um canal de voz
+  encontrava, no próprio painel de amigos, chamadas de que nunca participou —
+  com o nome de quem esteve nelas e a hora. A permissão de entrar no canal, que
+  precisa existir para o "ativo agora" mostrar quem já está na sala, também
+  estava abrindo tudo o que já tinha terminado. Chamada em andamento continua
+  sendo um fato do canal; encerrada, é de quem esteve nela.
+
+  > Esta correção depende do banco: a política nova sobe com as migrações, e
+  > sem elas a versão nova do aplicativo apenas deixa de **mostrar** o que
+  > continua acessível.
+
 ## 0.1.8
 
 ### Correções
