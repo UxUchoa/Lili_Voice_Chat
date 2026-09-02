@@ -29,6 +29,10 @@ mudou.
   que mandava todo mundo procurar o erro no lugar errado. O campo passa a
   aceitar a faixa inteira que o servidor pode usar, e nem a tela nem o e-mail
   prometem mais um número de dígitos que não é deles.
+- **A prévia do próprio perfil não aparecia.** O painel de conta é uma coluna
+  que rola, e o cartão da prévia era o único item que o navegador podia
+  encolher — sobrava dele a espessura das bordas. Avatar, banner, nome e
+  presença estavam lá o tempo todo, cortados por dois pixels de altura.
 - **Apagar mensagem com anexo falhava pela metade.** O arquivo saía do
   armazenamento e a mensagem continuava na conversa apontando para ele, porque a
   exclusão esbarrava numa permissão do banco. A limpeza automática dos anexos

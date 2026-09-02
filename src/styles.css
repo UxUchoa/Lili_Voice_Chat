@@ -2826,8 +2826,21 @@ a:focus-visible,
   min-height: auto;
 }
 /* Prévia do próprio perfil — item 24. A moldura é daqui; o desenho de dentro
-   é o mesmo cartão que os outros veem, para os dois não divergirem. */
+   é o mesmo cartão que os outros veem, para os dois não divergirem.
+   `flex-shrink: 0` porque o painel é uma coluna flex com `max-height: 100%`,
+   e o conteúdo passa dela: os itens encolhem antes de o painel rolar. Um bloco
+   se defende disso pelo mínimo automático, que é a altura do conteúdo — mas
+   `overflow: hidden` zera esse mínimo, e era justamente o que este cartão
+   declarava para arredondar os cantos. Ele virava o único item que o navegador
+   podia esmagar, absorvia todo o excesso e ficava com 2px, a soma das duas
+   bordas: a prévia sumia inteira, banner, foto e nome, e parecia imagem que
+   não carregou.
+
+   `width: 100%` pelo mesmo painel: `align-items: flex-start` encolhe a largura
+   ao conteúdo, e o cartão saía mais estreito que o resto do formulário. */
 .profile-live-card {
+  flex-shrink: 0;
+  width: 100%;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 14px;
