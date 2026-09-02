@@ -98,7 +98,7 @@ test("cadastro só se completa com o código do e-mail", async ({
   ).toBeDisabled();
 
   // Código errado não pode passar, e a mensagem não diz se ele existia.
-  await otpCard.getByLabel(/Código de 6 dígitos/).fill("000000");
+  await otpCard.getByLabel(/Código recebido por e-mail/).fill("000000");
   await otpCard.getByRole("button", { name: "Confirmar" }).click();
   await expect(otpCard.locator(".auth-error")).toContainText(
     /não confere ou já expirou/,
@@ -106,7 +106,7 @@ test("cadastro só se completa com o código do e-mail", async ({
   );
 
   const code = await readCodeFor(email);
-  await otpCard.getByLabel(/Código de 6 dígitos/).fill(code);
+  await otpCard.getByLabel(/Código recebido por e-mail/).fill(code);
   await otpCard.getByRole("button", { name: "Confirmar" }).click();
 
   // Confirmou: a chave de recuperação é entregue e a conta entra.
@@ -160,7 +160,7 @@ test("recuperação de senha usa código, e a senha nova passa a valer", async (
   await expect(otpCard).toContainText(/senha nova/);
 
   const code = await readCodeFor(email);
-  await otpCard.getByLabel(/Código de 6 dígitos/).fill(code);
+  await otpCard.getByLabel(/Código recebido por e-mail/).fill(code);
   await otpCard.getByRole("button", { name: "Confirmar" }).click();
 
   // A tela da senha nova vem antes de o aplicativo abrir: sem isso a pessoa

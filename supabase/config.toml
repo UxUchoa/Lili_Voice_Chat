@@ -61,9 +61,15 @@ enable_confirmations = true
 # retorno, e o desktop empacotado vive em `file://`: nenhum provedor de e-mail
 # sabe abrir isso, então a confirmação só se completava pelo site.
 otp_length = 6
-# Dez minutos. O padrão de uma hora é generoso demais para um código de seis
-# dígitos, que é curto o bastante para ser tentado à força.
-otp_expiry = 600
+# Uma hora, o mesmo valor do painel de produção — este arquivo não é enviado
+# pelo deploy, e os dois lados só continuam iguais se alguém os mantiver assim.
+#
+# Dez minutos parecia o número seguro para seis dígitos, mas o prazo não corre
+# do momento em que a pessoa lê: corre do envio, e entre o Brevo e a caixa de
+# entrada some um pedaço dele. Quem paga é quem abriu o e-mail tarde, não quem
+# tenta adivinhar — esse esbarra antes no limite de tentativas do próprio
+# Supabase, que é o que de fato torna seis dígitos inviáveis de forçar.
+otp_expiry = 3600
 
 # Os modelos moram em arquivo para poderem ser revisados no diff — o editor do
 # painel não deixa rastro de quem mudou o quê.

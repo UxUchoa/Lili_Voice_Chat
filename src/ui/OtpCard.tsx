@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   OTP_LENGTH,
+  OTP_MAX_LENGTH,
   normalizeOtp,
   otpError,
   otpInstruction,
@@ -89,8 +90,8 @@ export function OtpCard({
             // recusar a colagem, que `type="number"` estragaria.
             inputMode="numeric"
             autoComplete="one-time-code"
-            maxLength={OTP_LENGTH}
-            aria-label={`Código de ${OTP_LENGTH} dígitos`}
+            maxLength={OTP_MAX_LENGTH}
+            aria-label="Código recebido por e-mail"
             aria-invalid={Boolean(shown)}
             placeholder={"0".repeat(OTP_LENGTH)}
             onChange={(event) => {

@@ -274,8 +274,20 @@ No painel do projeto:
    `supabase/templates/confirmation.html` e `supabase/templates/recovery.html`.
    Os dois usam `{{ .Token }}`; um modelo que ainda tenha `{{ .ConfirmationURL }}`
    volta a mandar link.
-4. **Authentication → Providers → Email** → _Email OTP Expiration_ em `600`
-   segundos. Uma hora é generoso demais para seis dígitos.
+4. **Authentication → Providers → Email** → _Email OTP Expiration_ em `3600`
+   segundos, o mesmo `otp_expiry` do `config.toml`. O prazo corre do envio, não
+   da leitura: entre o Brevo e a caixa de entrada some um pedaço dele. O texto
+   dos dois modelos promete sessenta minutos — se mudar aqui, mude lá.
+5. **Authentication → Providers → Email** → _Email OTP length_ em `6`, o mesmo
+   `otp_length` do `config.toml`.
+
+   > Este campo já ficou em `8` em produção enquanto o aplicativo cortava o
+   > código em seis dígitos, e o cadastro parou inteiro: o código saía truncado,
+   > o servidor respondia `otp_expired` e a tela dizia "o código não confere ou
+   > já expirou" — a mesma frase de um código vencido de verdade, sem nada
+   > apontando para a configuração. O campo hoje aceita até dez dígitos, então a
+   > divergência não quebra mais o cadastro; ainda assim é aqui que os dois
+   > lados devem bater.
 
 O ambiente local não usa o Brevo: `[auth.email.smtp]` fica desligado no
 `config.toml` e o e-mail cai no Mailpit (`http://127.0.0.1:54324`). É o que
@@ -283,8 +295,9 @@ permite ao `e2e/local-email-otp.spec.ts` ler o código e provar o fluxo inteiro
 sem mandar mensagem para ninguém.
 
 > O `config.toml` **não** é enviado pelo deploy — `npm run deploy:supabase` faz
-> `db push`, `secrets set` e `functions deploy`, e nada mais. Os quatro passos
-> acima são manuais no painel.
+> `db push`, `secrets set` e `functions deploy`, e nada mais. Os cinco passos
+> acima são manuais no painel, e é por isso que eles saem do lugar sem que
+> nenhum commit mostre.
 
 ### Chave de recuperação
 

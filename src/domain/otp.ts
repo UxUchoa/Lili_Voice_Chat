@@ -14,6 +14,21 @@
 /** Quantos dígitos o Supabase manda. Espelha `otp_length` no config.toml. */
 export const OTP_LENGTH = 6;
 
+/**
+ * O maior código que o servidor tem como mandar.
+ *
+ * `otp_length` aceita de 6 a 10 dígitos, e em produção ele mora no painel do
+ * projeto — fora deste repositório, onde já divergiu do `config.toml`: o
+ * servidor mandava oito dígitos enquanto o campo cortava em seis. O código
+ * chegava inteiro no e-mail, era truncado antes de sair daqui, e o Supabase
+ * respondia `otp_expired` — a mesma resposta de código vencido. Nada na tela
+ * dizia que faltavam dois dígitos.
+ *
+ * Aceitar a faixa inteira faz o campo sobreviver a essa divergência. Conferir
+ * o tamanho exato é de quem gerou o código, não de quem o digita.
+ */
+export const OTP_MAX_LENGTH = 10;
+
 /** Segundos entre um envio e o próximo, espelhando o limite do servidor. */
 export const OTP_RESEND_SECONDS = 60;
 
@@ -25,12 +40,12 @@ export const OTP_RESEND_SECONDS = 60;
  * dígitos, na ordem em que vieram.
  */
 export function normalizeOtp(input: string): string {
-  return input.replace(/\D/g, "").slice(0, OTP_LENGTH);
+  return input.replace(/\D/g, "").slice(0, OTP_MAX_LENGTH);
 }
 
 /** O código está completo e pode ser enviado para conferência? */
 export function isCompleteOtp(input: string): boolean {
-  return normalizeOtp(input).length === OTP_LENGTH;
+  return normalizeOtp(input).length >= OTP_LENGTH;
 }
 
 /**
@@ -43,7 +58,7 @@ export function otpError(input: string): string | undefined {
   const digits = normalizeOtp(input);
   if (digits.length === 0) return "Digite o código que enviamos por e-mail.";
   if (digits.length < OTP_LENGTH)
-    return `O código tem ${OTP_LENGTH} dígitos.`;
+    return `O código tem pelo menos ${OTP_LENGTH} dígitos.`;
   return undefined;
 }
 
@@ -79,9 +94,15 @@ export function otpTitle(purpose: OtpPurpose): string {
     : "Recuperar a senha";
 }
 
-/** A frase que explica o que fazer, com o endereço no meio. */
+/**
+ * A frase que explica o que fazer, com o endereço no meio.
+ *
+ * Sem dizer quantos dígitos: quem decide isso é o `otp_length` do servidor, e
+ * uma frase que promete seis enquanto chegam oito manda a pessoa desconfiar do
+ * e-mail em vez da configuração.
+ */
 export function otpInstruction(purpose: OtpPurpose, email: string): string {
   return purpose === "signup"
-    ? `Enviamos um código de ${OTP_LENGTH} dígitos para ${email}. Digite abaixo para ativar sua conta.`
-    : `Enviamos um código de ${OTP_LENGTH} dígitos para ${email}. Digite abaixo para escolher uma senha nova.`;
+    ? `Enviamos um código para ${email}. Digite abaixo para ativar sua conta.`
+    : `Enviamos um código para ${email}. Digite abaixo para escolher uma senha nova.`;
 }

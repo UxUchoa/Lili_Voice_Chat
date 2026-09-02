@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   OTP_LENGTH,
+  OTP_MAX_LENGTH,
   OTP_RESEND_SECONDS,
   isCompleteOtp,
   normalizeOtp,
@@ -22,8 +23,16 @@ describe("normalizeOtp", () => {
     expect(normalizeOtp("Seu código é 123456.")).toBe("123456");
   });
 
-  it("corta o que passa do tamanho, em vez de recusar", () => {
-    expect(normalizeOtp("1234567890")).toBe("123456");
+  it("aceita o código inteiro quando o servidor manda mais de seis dígitos", () => {
+    // `otp_length` vive no painel do projeto e já esteve em 8 enquanto isto
+    // cortava em 6: o código saía truncado e o servidor respondia
+    // `otp_expired`, indistinguível de um código vencido.
+    expect(normalizeOtp("51263612")).toBe("51263612");
+  });
+
+  it("corta só o que passa do maior código possível", () => {
+    expect(normalizeOtp("123456789012")).toBe("1234567890");
+    expect(normalizeOtp("123456789012")).toHaveLength(OTP_MAX_LENGTH);
   });
 
   it("devolve vazio quando não há dígito nenhum", () => {
@@ -37,6 +46,7 @@ describe("isCompleteOtp", () => {
     expect(isCompleteOtp("123456")).toBe(true);
     expect(isCompleteOtp("12345")).toBe(false);
     expect(isCompleteOtp("12 34 56")).toBe(true);
+    expect(isCompleteOtp("51263612")).toBe(true);
   });
 });
 
@@ -47,12 +57,16 @@ describe("otpError", () => {
   });
 
   it("diz o tamanho esperado quando falta dígito", () => {
-    expect(otpError("123")).toBe(`O código tem ${OTP_LENGTH} dígitos.`);
+    expect(otpError("123")).toBe(
+      `O código tem pelo menos ${OTP_LENGTH} dígitos.`,
+    );
   });
 
   it("não reclama de um código completo", () => {
-    // Se está certo ou vencido, quem responde é o servidor.
+    // Se está certo ou vencido, quem responde é o servidor. O tamanho exato
+    // também: um código mais longo que seis dígitos passa direto daqui.
     expect(otpError("123456")).toBeUndefined();
+    expect(otpError("51263612")).toBeUndefined();
   });
 });
 
@@ -94,6 +108,10 @@ describe("textos por finalidade", () => {
     expect(otpTitle("signup")).not.toBe(otpTitle("recovery"));
     expect(otpInstruction("signup", "a@b.com")).toMatch(/ativar sua conta/);
     expect(otpInstruction("recovery", "a@b.com")).toMatch(/senha nova/);
+  });
+
+  it("não promete um número de dígitos que o servidor pode não usar", () => {
+    expect(otpInstruction("signup", "a@b.com")).not.toMatch(/\d+ dígitos/);
   });
 
   it("põe o endereço na instrução, para conferir se está certo", () => {
