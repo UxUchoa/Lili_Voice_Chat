@@ -3684,9 +3684,24 @@ function ChatView({
     pinnedToBottom.current =
       node.scrollHeight - node.scrollTop - node.clientHeight < 120;
   };
+  /**
+   * A descida acompanha *qual* é a última mensagem, e não quantas existem.
+   *
+   * A primeira página traz as 50 mais recentes. Passando disso, uma mensagem
+   * nova empurra a mais antiga para fora da lista e o total continua 50 — com
+   * a dependência em `messages.length`, o efeito simplesmente não rodava. E
+   * como a linha que saiu no topo tem altura, o conteúdo ainda escorregava
+   * para cima: a mensagem recém-enviada nascia meio escondida atrás do
+   * compositor, que é o "desceu, mas não até o fim".
+   *
+   * Pelo id da última, o efeito roda exatamente quando existe uma mensagem
+   * nova no fim — inclusive quando a otimista é trocada pela do servidor, e
+   * nunca quando "Carregar mais antigas" acrescenta linhas no topo.
+   */
+  const lastMessageId = messages.at(-1)?.id;
   useEffect(() => {
     if (pinnedToBottom.current) scrollToEnd("auto");
-  }, [messages.length, scrollToEnd]);
+  }, [lastMessageId, scrollToEnd]);
   /**
    * O que cresce embaixo da lista não pode comer a última mensagem.
    *
