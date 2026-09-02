@@ -81,6 +81,7 @@ import { OtpCard } from "./ui/OtpCard";
 import type { OtpPurpose } from "./domain/otp";
 import { useRtc } from "./hooks/useRtc";
 import type { RemotePeer } from "./hooks/useLiveKitRtc";
+import { screenTrackConstraints } from "./hooks/screenShare";
 import type { CameraResolution } from "./hooks/cameraModes";
 import { useOnlinePresence } from "./hooks/useOnlinePresence";
 import { useTyping } from "./hooks/useTyping";
@@ -4940,6 +4941,19 @@ function CallView({
     if (window.janjaDesktop) setSharePickerOpen(true);
     else void startSharing({ ...shareQuality });
   };
+  /**
+   * Muda a qualidade escolhida e leva a mudança para o que já está no ar.
+   *
+   * O menu de qualidade vive dentro da chamada, então quase toda mudança
+   * acontece com a transmissão em curso. Guardar só no estado movia o
+   * marcador na tela e não tocava em nada: o ajuste passava a valer apenas se
+   * a pessoa parasse e recomeçasse o compartilhamento, o que ninguém adivinha.
+   */
+  const changeShareQuality = (next: ShareQuality) => {
+    setShareQuality(next);
+    setScreenQuality(next);
+  };
+
   const startSharing = async (selection: ShareSelection) => {
     setSharePickerOpen(false);
     const quality = {
@@ -4960,9 +4974,10 @@ function CallView({
       navigator.mediaDevices.getDisplayMedia({
         video: {
           displaySurface: "window",
-          width: { ideal: width },
-          height: { ideal: height },
-          frameRate: { ideal: selection.frameRate },
+          // As mesmas restrições que o menu de qualidade reaplica no meio da
+          // transmissão: se as duas fossem escritas em lugares diferentes,
+          // mudar de ideia daria um resultado diferente de começar assim.
+          ...screenTrackConstraints(selection),
         },
         // O tratamento de voz **precisa** ficar fora do áudio do sistema: um
         // jogo ou um vídeo passando por cancelamento de eco e ganho
@@ -5844,10 +5859,10 @@ function CallView({
                               : ""
                           }
                           onClick={() =>
-                            setShareQuality((current) => ({
-                              ...current,
+                            changeShareQuality({
+                              ...shareQuality,
                               resolution,
-                            }))
+                            })
                           }
                         >
                           <span className="device-check">
@@ -5872,10 +5887,10 @@ function CallView({
                               : ""
                           }
                           onClick={() =>
-                            setShareQuality((current) => ({
-                              ...current,
+                            changeShareQuality({
+                              ...shareQuality,
                               frameRate,
-                            }))
+                            })
                           }
                         >
                           <span className="device-check">
@@ -5922,7 +5937,7 @@ function CallView({
       {sharePickerOpen && (
         <ScreenSharePicker
           quality={shareQuality}
-          onQualityChange={setShareQuality}
+          onQualityChange={changeShareQuality}
           systemAudio={voice.shareSystemAudio}
           onSystemAudioChange={(shareSystemAudio) =>
             setVoice({ shareSystemAudio })

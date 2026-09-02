@@ -11,6 +11,7 @@ import {
 import { ensureDevice } from "../services/online/messages";
 import { setOnlineVoiceMediaState } from "../services/online/calls";
 import { CAMERA_MODES, cameraMode } from "./cameraModes";
+import { screenShareBitrate, screenTrackConstraints } from "./screenShare";
 import { supabase } from "../services/online/client";
 import { onlineConfig } from "../services/online/config";
 import { playSound } from "../services/sounds";
@@ -75,24 +76,6 @@ function rtcErrorMessage(caught: unknown) {
  * plataformas de vídeo usam para conteúdo com movimento: abaixo disso o
  * encoder prefere derrubar a resolução a manter a nitidez.
  */
-
-function screenShareBitrate({
-  resolution,
-  frameRate,
-}: {
-  resolution: number;
-  frameRate: number;
-}) {
-  // O teto do compartilhamento é 1080p: 1440p custava dez megabits para uma
-  // diferença que some num tile de meia tela, e a banda é dividida entre todos
-  // os servidores da instância.
-  const base = resolution >= 1080 ? 6_000_000 : 3_000_000;
-  return frameRate >= 60
-    ? Math.round(base * 1.7)
-    : frameRate <= 15
-      ? Math.round(base * 0.7)
-      : base;
-}
 
 export function useLiveKitRtc(roomId: string, enabled = true) {
   const currentUserId = useAppStore((state) => state.currentUserId);
@@ -509,9 +492,52 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
     };
   }, [currentUserId, enabled, participantName, publishDesiredTracks, roomId]);
 
+  /**
+   * Muda a qualidade do compartilhamento, inclusive o que já está no ar.
+   *
+   * Guardar a escolha num ref bastava enquanto ela só era lida na publicação
+   * da track. Só que o menu de qualidade fica **durante** a chamada: quem
+   * mexia ali via o marcador mudar de lugar e mais nada, porque a transmissão
+   * já publicada seguia com o encoder e a captura de antes. O ajuste só valia
+   * na vez seguinte, e para chegar nela era preciso parar e recomeçar.
+   *
+   * São duas pontas, e as duas precisam ser tocadas. O `sender` decide o que
+   * sai pela rede; a track decide o que entra no encoder. Mudar só o primeiro
+   * limita os quadros mas continua gastando o custo de capturar em 60, e
+   * mudar só o segundo deixa o teto de bits do tamanho antigo.
+   */
   const setScreenQuality = useCallback(
     (quality: { resolution: number; frameRate: number }) => {
       screenQualityRef.current = quality;
+      const publication = roomRef.current?.localParticipant.getTrackPublication(
+        Track.Source.ScreenShare,
+      );
+      const track = publication?.track;
+      if (!track) return;
+
+      const sender = track.sender;
+      if (sender) {
+        const parameters = sender.getParameters();
+        for (const encoding of parameters.encodings ?? []) {
+          encoding.maxBitrate = screenShareBitrate(quality);
+          encoding.maxFramerate = quality.frameRate;
+        }
+        void sender
+          .setParameters(parameters)
+          .catch((caught) =>
+            console.warn('[share] o encoder recusou a qualidade nova', caught),
+          );
+      }
+
+      // A captura do Electron nasce de `chromeMediaSource`, e nem toda fonte
+      // aceita ser reconfigurada em andamento. Quando recusa, o limite do
+      // `sender` acima continua valendo — a transmissão muda, mesmo que a
+      // captura siga gerando mais quadros do que sairão daqui.
+      void track.mediaStreamTrack
+        .applyConstraints(screenTrackConstraints(quality))
+        .catch((caught) =>
+          console.warn('[share] a fonte recusou a resolução nova', caught),
+        );
     },
     [],
   );
