@@ -237,6 +237,26 @@ export async function requestOnlinePasswordReset(email: string) {
 }
 
 /**
+ * Deixa no console o código de erro do servidor, e não só a frase traduzida.
+ *
+ * "O código não confere ou já expirou" é a resposta certa para quem está
+ * usando o aplicativo — ela não diz a quem tenta adivinhar se o número
+ * existia. Mas para quem está depurando ela apaga a diferença entre um código
+ * vencido, um substituído por outro pedido e um problema de configuração do
+ * projeto, que têm soluções diferentes. Fica no console, onde só quem procura
+ * encontra.
+ */
+function logOtpFailure(purpose: string, error: unknown) {
+  const detail = error as { code?: string; status?: number; message?: string };
+  console.warn(
+    `[otp] a confirmação de ${purpose} falhou:`,
+    detail?.code ?? "sem código",
+    detail?.status ?? "",
+    detail?.message ?? "",
+  );
+}
+
+/**
  * Confirma o cadastro com o código recebido por e-mail.
  *
  * `verifyOtp` devolve uma sessão já autenticada, então a chave de recuperação
@@ -250,7 +270,10 @@ export async function confirmOnlineSignupCode(email: string, code: string) {
     token: code,
     type: "signup",
   });
-  if (error) throw humanizeAuthError(error);
+  if (error) {
+    logOtpFailure("cadastro", error);
+    throw humanizeAuthError(error);
+  }
   if (!data.user)
     throw new Error("A confirmação não devolveu a conta. Tente entrar.");
   return {
@@ -273,7 +296,10 @@ export async function confirmOnlineRecoveryCode(email: string, code: string) {
     token: code,
     type: "recovery",
   });
-  if (error) throw humanizeAuthError(error);
+  if (error) {
+    logOtpFailure("recuperação", error);
+    throw humanizeAuthError(error);
+  }
   if (!data.session)
     throw new Error("O código não abriu a sessão. Peça um novo.");
 }
