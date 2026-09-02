@@ -59,9 +59,16 @@ export const DEFAULT_NOISE_SUPPRESSION: NoiseSuppressionMode = "rnnoise";
  * com buracos. Cancelamento de eco e ganho automático continuam nos dois casos
  * — eles resolvem outra coisa (o alto-falante voltando para o microfone e o
  * volume da pessoa), que nenhum supressor de ruído faz.
+ *
+ * `channelCount: 1` é o que faz o áudio sair nos dois ouvidos. Voz é mono, e o
+ * modelo do RNNoise também: ele processa um canal só. Quando o driver entregava
+ * o microfone em estéreo, o supressor filtrava o canal esquerdo e deixava o
+ * direito intocado — silêncio — e a track publicada saía meio muda, que é o
+ * "só toca no fone esquerdo".
  */
 export function captureConstraints(mode: NoiseSuppressionMode) {
   return {
+    channelCount: 1,
     echoCancellation: mode !== "off",
     autoGainControl: mode !== "off",
     noiseSuppression: mode === "browser",
@@ -134,10 +141,30 @@ export async function createMicPipeline(
     // isto o worklet não roda e a track sai muda.
     if (context.state === "suspended") await context.resume();
     const worklet = await createWorklet(context, mode);
+    /**
+     * Trava o grafo em mono, do supressor até o destino.
+     *
+     * `captureConstraints` já pede um canal só, mas constraint de canal é um
+     * pedido: um driver que só entrega estéreo continua entregando. E o nó do
+     * supressor nasce sem `outputChannelCount`, então o número de canais de
+     * saída acompanha o da entrada — com dois canais na entrada ele filtrava o
+     * esquerdo e nunca escrevia no direito, que saía mudo.
+     *
+     * `explicit` com um canal força a mistura da entrada antes do processamento;
+     * `speakers` é o que soma os dois lados em vez de descartar um.
+     */
+    worklet.channelCount = 1;
+    worklet.channelCountMode = "explicit";
+    worklet.channelInterpretation = "speakers";
     const input = context.createMediaStreamSource(
       new MediaStream([source]),
     );
     const output = context.createMediaStreamDestination();
+    // O destino nasce com dois canais; um canal só publica a track em mono, e
+    // mono toca igual nos dois ouvidos.
+    output.channelCount = 1;
+    output.channelCountMode = "explicit";
+    output.channelInterpretation = "speakers";
     input.connect(worklet);
     worklet.connect(output);
     const track = output.stream.getAudioTracks()[0];
