@@ -6,6 +6,49 @@ Uma seção por versão publicada. O texto daqui é o corpo da release no GitHub
 publicação de propósito — release sem notas é release que ninguém sabe o que
 mudou.
 
+## 0.2.0
+
+### Novidades
+
+- **Quatro modos de qualidade para o compartilhamento de tela**: 720p e 1080p,
+  cada um a 30 ou 60 quadros por segundo.
+- **720p a 60 quadros é o novo padrão.** Conteúdo em movimento — jogo, vídeo,
+  navegação — é lido pela fluidez, e meia resolução a sessenta quadros custa
+  menos banda que resolução cheia a trinta.
+- **Trocar de modo vale na hora.** Antes o menu só mudava o texto na tela: a
+  escolha passava a valer na próxima vez que você começasse a compartilhar, o
+  que ninguém tinha como adivinhar.
+
+### Correções
+
+- **O compartilhamento rodava a cerca de 15 quadros por segundo, escolhesse
+  você o que escolhesse.** O limite não vinha da sua rede nem da sua máquina:
+  a biblioteca de vídeo ignorava em silêncio a qualidade que pedíamos e
+  aplicava o padrão dela, de quinze quadros. A opção de 15 quadros também saiu
+  da lista — não é qualidade, era o sintoma.
+- **A lista de GIFs virava um carrossel horizontal.** A grade era montada com
+  um recurso de colunas que, num espaço de altura limitada, cresce para o lado
+  em vez de continuar para baixo. Por isso a forma mudava conforme a categoria
+  escolhida e só a última faixa rolava direito.
+- **O compartilhamento levava junto o som do computador inteiro.** Agora o
+  padrão é só a imagem, e o áudio segue a fonte escolhida: compartilhando uma
+  aba, vai o som daquela aba e de mais nada. O Windows não sabe capturar
+  apenas o som de uma janela, então quando essa opção for ligada a tela diz,
+  com todas as letras, que vai o som de tudo o que estiver tocando.
+- **O aviso de atualização voltava a cada abertura** mesmo depois de você
+  mandar deixar para depois, e o "veja o que mudou" nunca aparecia depois de
+  instalar. As duas respostas passam a sobreviver ao fechar o aplicativo, e a
+  versão instalada agora carrega as próprias notas.
+
+### Melhorias
+
+- **Banda por modo, dimensionada para a nossa infraestrutura**: de 1,5 Mb/s no
+  720p a 30 quadros até 4 Mb/s no 1080p a 60. Antes um 1080p a 60 pedia dez
+  megabits — mais do que a instância entrega, o que fazia o controle de
+  congestionamento cortar tudo de uma vez.
+- **Quando a rede aperta, o que cede primeiro é a nitidez, não a fluidez.**
+  Era o contrário, e é metade da explicação dos quinze quadros.
+
 ## 0.1.9
 
 ### Correções

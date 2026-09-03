@@ -81,7 +81,22 @@ import { OtpCard } from "./ui/OtpCard";
 import type { OtpPurpose } from "./domain/otp";
 import { useRtc } from "./hooks/useRtc";
 import type { RemotePeer } from "./hooks/useLiveKitRtc";
-import { screenTrackConstraints } from "./hooks/screenShare";
+import {
+  DEFAULT_SHARE_QUALITY,
+  SHARE_PRESETS,
+  screenTrackConstraints,
+  sharePreset,
+} from "./hooks/screenShare";
+
+/* Os modos oferecidos no menu saem da mesma tabela que a captura e o encoder
+   usam. Listá-los à mão aqui foi como o menu passou a mostrar 1440p e 15
+   quadros que a transmissão nunca entregou. */
+const SHARE_RESOLUTIONS = [
+  ...new Set(SHARE_PRESETS.map((preset) => preset.resolution)),
+];
+const SHARE_FRAME_RATES = [
+  ...new Set(SHARE_PRESETS.map((preset) => preset.frameRate)),
+];
 import type { CameraResolution } from "./hooks/cameraModes";
 import { useOnlinePresence } from "./hooks/useOnlinePresence";
 import { useTyping } from "./hooks/useTyping";
@@ -4656,10 +4671,9 @@ function CallView({
     [audioOutputId, setAudioOutputId] = useState(""),
     [inputMode, setInputMode] = useState<"vad" | "ptt">("vad"),
     [deafened, setDeafened] = useState(false),
-    [shareQuality, setShareQuality] = useState<ShareQuality>({
-      resolution: 1080,
-      frameRate: 60,
-    }),
+    [shareQuality, setShareQuality] = useState<ShareQuality>(
+      DEFAULT_SHARE_QUALITY,
+    ),
     [sharePickerOpen, setSharePickerOpen] = useState(false),
     [cameraQuality, setCameraQualityState] = useState<CameraResolution>(() => {
       // A câmera tem um modo só. Qualquer preferência antiga — 1080p, 1440p,
@@ -4963,8 +4977,8 @@ function CallView({
     setShareQuality(quality);
     // O encoder precisa da qualidade antes da publicação da track.
     setScreenQuality(quality);
-    const width = Math.round((selection.resolution * 16) / 9);
-    const height = selection.resolution;
+    const preset = sharePreset(selection);
+    const { width, height } = preset;
     // O diálogo do Chrome é desenhado pelo navegador e não pode ser estilizado
     // pela página — é justamente o que impede um site de falsificar o seletor.
     // Estas dicas são o que ele aceita: abrir já na aba de janelas, esconder a
@@ -4979,17 +4993,23 @@ function CallView({
           // mudar de ideia daria um resultado diferente de começar assim.
           ...screenTrackConstraints(selection),
         },
-        // O tratamento de voz **precisa** ficar fora do áudio do sistema: um
-        // jogo ou um vídeo passando por cancelamento de eco e ganho
-        // automático chega do outro lado abafado e com o volume oscilando.
-        audio: withSystemAudio && {
+        // O tratamento de voz **precisa** ficar fora daqui: um jogo ou um
+        // vídeo passando por cancelamento de eco e ganho automático chega do
+        // outro lado abafado e com o volume oscilando.
+        audio: {
           echoCancellation: false,
           noiseSuppression: false,
           autoGainControl: false,
         },
         selfBrowserSurface: "exclude",
         surfaceSwitching: "include",
-        systemAudio: withSystemAudio ? "include" : "exclude",
+        // `exclude` sempre, mesmo com o áudio ligado. É o que separa o som da
+        // **superfície escolhida** do som do computador inteiro: escolhendo
+        // uma aba, o navegador entrega o áudio daquela aba e de mais nada;
+        // escolhendo uma janela ou um monitor, não entrega áudio algum. Com
+        // `include`, compartilhar um jogo levava junto Spotify, Discord e
+        // qualquer notificação — e a pessoa não tinha como saber.
+        systemAudio: "exclude",
       } as DisplayMediaStreamOptions);
     /**
      * Captura pelo id do desktopCapturer, com o áudio do sistema junto.
@@ -5061,11 +5081,13 @@ function CallView({
       setSharing(true);
       const audioShared = stream.getAudioTracks().length > 0;
       setMediaNotice(
-        `Compartilhando ${selection.sourceName ?? "sua tela"} em ${selection.resolution}p · ${selection.frameRate} fps` +
+        `Compartilhando ${selection.sourceName ?? "sua tela"} em ${preset.label}` +
           (audioShared
-            ? " · com áudio do sistema."
+            ? withSystemAudio
+              ? " · com o som do computador inteiro."
+              : " · com o som da aba escolhida."
             : withSystemAudio
-              ? " · sem áudio (a fonte escolhida não entrega o som do sistema)."
+              ? " · sem áudio (esta fonte não entrega som)."
               : " · sem áudio."),
       );
     } catch (error) {
@@ -5848,7 +5870,7 @@ function CallView({
                           todos os servidores dividem a mesma banda, a camada
                           extra custa quase o dobro e some num tile de meia
                           tela. O teto é 1080p. */}
-                      {([720, 1080] as const).map((resolution) => (
+                      {SHARE_RESOLUTIONS.map((resolution) => (
                         <button
                           key={resolution}
                           role="menuitemradio"
@@ -5876,7 +5898,7 @@ function CallView({
                     </div>
                     <div className="device-menu-group">
                       <span className="device-menu-label">TAXA DE QUADROS</span>
-                      {([15, 30, 60] as const).map((frameRate) => (
+                      {SHARE_FRAME_RATES.map((frameRate) => (
                         <button
                           key={frameRate}
                           role="menuitemradio"
@@ -12076,7 +12098,36 @@ function AuthGate() {
  * `localStorage` faria o aviso aparecer de novo a cada abertura seguinte,
  * não só na primeira depois da troca.
  */
+/**
+ * A última versão que esta instalação já mostrou, e a que a pessoa mandou
+ * esperar.
+ *
+ * Em `localStorage`, e não em `sessionStorage`: as duas respostas precisam
+ * sobreviver a fechar o aplicativo. Guardadas por sessão, "depois" voltava a
+ * perguntar a cada abertura, e o aviso de "atualizamos, veja o que mudou"
+ * nunca chegava a aparecer — a memória morria justamente no reinício que
+ * instala a versão nova.
+ */
 const DESKTOP_LAST_SEEN_VERSION_KEY = "janja.desktop.lastSeenVersion";
+const DESKTOP_POSTPONED_VERSION_KEY = "janja.desktop.postponedVersion";
+
+/** Leitura tolerante: armazenamento bloqueado não pode derrubar a tela. */
+function readStored(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStored(key: string, value: string | null) {
+  try {
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
+  } catch {
+    // Sem persistência o aviso reaparece, que é melhor que quebrar.
+  }
+}
 
 /**
  * Avisa sobre a atualização nas duas pontas do ciclo, sempre visível — monta
@@ -12095,7 +12146,9 @@ function DesktopUpdateNotice() {
   const [justUpdatedFrom, setJustUpdatedFrom] = useState<string | null>(null);
   const [dismissedReady, setDismissedReady] = useState(false);
   /** Versão anunciada que a pessoa mandou esperar; some quando outra chega. */
-  const [postponed, setPostponed] = useState<string | null>(null);
+  const [postponed, setPostponed] = useState<string | null>(() =>
+    readStored(DESKTOP_POSTPONED_VERSION_KEY),
+  );
   const [notesOpen, setNotesOpen] = useState(false);
 
   useEffect(() => {
@@ -12111,20 +12164,21 @@ function DesktopUpdateNotice() {
   }, []);
 
   useEffect(() => {
-    if (!window.janjaDesktop || !updateState?.version) return;
-    let lastSeen: string | null = null;
-    try {
-      lastSeen = sessionStorage.getItem(DESKTOP_LAST_SEEN_VERSION_KEY);
-      sessionStorage.setItem(
-        DESKTOP_LAST_SEEN_VERSION_KEY,
-        updateState.version,
-      );
-    } catch {
-      return; // Armazenamento bloqueado: sem aviso, sem quebrar o app.
-    }
-    if (lastSeen && lastSeen !== updateState.version)
-      setJustUpdatedFrom(lastSeen);
-  }, [updateState?.version]);
+    // A comparação é com a versão **rodando**, não com a anunciada: guardar a
+    // anunciada fazia a instalação seguinte parecer velha conhecida, e o aviso
+    // do que mudou nunca aparecia.
+    const rodando = updateState?.appVersion;
+    if (!window.janjaDesktop || !rodando) return;
+    const lastSeen = readStored(DESKTOP_LAST_SEEN_VERSION_KEY);
+    if (lastSeen === rodando) return;
+    writeStored(DESKTOP_LAST_SEEN_VERSION_KEY, rodando);
+    // Primeira abertura desta instalação: não houve atualização, houve
+    // instalação. Só quem vinha de outra versão viu algo mudar.
+    if (lastSeen) setJustUpdatedFrom(lastSeen);
+    // Uma versão nova instalada apaga o 'depois' da anterior.
+    writeStored(DESKTOP_POSTPONED_VERSION_KEY, null);
+    setPostponed(null);
+  }, [updateState?.appVersion]);
 
   useEffect(() => {
     if (!justUpdatedFrom) return;
@@ -12182,7 +12236,10 @@ function DesktopUpdateNotice() {
             {notesButton}
             <button
               aria-label="Adiar atualização"
-              onClick={() => setPostponed(updateState.version)}
+              onClick={() => {
+                  setPostponed(updateState.version);
+                  writeStored(DESKTOP_POSTPONED_VERSION_KEY, updateState.version);
+                }}
             >
               Depois
             </button>
@@ -12209,15 +12266,33 @@ function DesktopUpdateNotice() {
 
   if (justUpdatedFrom)
     return (
-      <div className="update-banner update-banner-info" role="status">
-        <span>Atualizado para a versão {updateState?.version}.</span>
-        <button
-          aria-label="Fechar aviso de atualização"
-          onClick={() => setJustUpdatedFrom(null)}
-        >
-          <IconX size={18} />
-        </button>
-      </div>
+      <>
+        <div className="update-banner update-banner-info" role="status">
+          <span>Atualizado para a versão {__LILI_VERSION__}.</span>
+          <div className="update-banner-actions">
+            {/* As notas vêm empacotadas: depois de instalar, o atualizador não
+                tem mais o que dizer sobre a versão que já chegou. */}
+            {__LILI_RELEASE_NOTES__ && (
+              <button onClick={() => setNotesOpen(true)}>
+                Ver o que mudou
+              </button>
+            )}
+            <button
+              aria-label="Fechar aviso de atualização"
+              onClick={() => setJustUpdatedFrom(null)}
+            >
+              <IconX size={18} />
+            </button>
+          </div>
+        </div>
+        {notesOpen && (
+          <ReleaseNotesModal
+            version={__LILI_VERSION__}
+            notes={__LILI_RELEASE_NOTES__}
+            onClose={() => setNotesOpen(false)}
+          />
+        )}
+      </>
     );
 
   if (updateState?.status === "ready" && !dismissedReady)

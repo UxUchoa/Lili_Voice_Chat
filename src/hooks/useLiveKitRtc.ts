@@ -11,7 +11,13 @@ import {
 import { ensureDevice } from "../services/online/messages";
 import { setOnlineVoiceMediaState } from "../services/online/calls";
 import { CAMERA_MODES, cameraMode } from "./cameraModes";
-import { screenShareBitrate, screenTrackConstraints } from "./screenShare";
+import {
+  DEFAULT_SHARE_QUALITY,
+  screenPublishOptions,
+  screenShareBitrate,
+  screenTrackConstraints,
+  type ShareQuality,
+} from "./screenShare";
 import { supabase } from "../services/online/client";
 import { onlineConfig } from "../services/online/config";
 import { playSound } from "../services/sounds";
@@ -106,7 +112,7 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
     sessionId: string;
     deviceId: string;
   } | null>(null);
-  const screenQualityRef = useRef({ resolution: 1080, frameRate: 30 });
+  const screenQualityRef = useRef<ShareQuality>(DEFAULT_SHARE_QUALITY);
   const cameraQualityRef = useRef(1080);
   const publishDesiredTracks = useCallback((room: Room) => {
     const run = async () => {
@@ -138,16 +144,7 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
           ...(track.kind === "video"
             ? source === "screen"
               ? {
-                  // Conteúdo de tela precisa de nitidez: mantemos a resolução e
-                  // deixamos a taxa de quadros ceder quando a banda aperta.
-                  videoEncoding: {
-                    maxBitrate: screenShareBitrate(screenQualityRef.current),
-                    maxFramerate: screenQualityRef.current.frameRate,
-                    priority: "high",
-                  },
-                  degradationPreference: "maintain-resolution",
-                  simulcast: false,
-                  contentHint: "detail",
+                  ...screenPublishOptions(screenQualityRef.current),
                 }
               : {
                   // A câmera é publicada com o orçamento de bits da resolução
@@ -507,7 +504,7 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
    * mudar só o segundo deixa o teto de bits do tamanho antigo.
    */
   const setScreenQuality = useCallback(
-    (quality: { resolution: number; frameRate: number }) => {
+    (quality: ShareQuality) => {
       screenQualityRef.current = quality;
       const publication = roomRef.current?.localParticipant.getTrackPublication(
         Track.Source.ScreenShare,

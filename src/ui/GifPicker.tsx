@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { IconSearch } from "./icons";
+import { splitIntoColumns } from "../domain/gifColumns";
 import {
   GifNotConfiguredError,
   featuredGifs,
@@ -9,6 +10,9 @@ import {
   type GifResult,
 } from "../services/gifs";
 import { formatBytes } from "../domain/attachments";
+
+/** Colunas da grade. Duas, como no seletor do Discord. */
+const GIF_COLUMNS = 2;
 
 export function GifPicker({
   onPick,
@@ -144,16 +148,31 @@ export function GifPicker({
               : "Nenhum GIF encontrado."}
           </p>
         )}
-        {results.map((gif) => (
-          <button
-            key={gif.id}
-            disabled={busy}
-            title={`${gif.description} · ${formatBytes(gif.bytes)}`}
-            onClick={() => onPick(gif)}
-          >
-            <img src={gif.previewUrl} alt={gif.description} loading="lazy" />
-          </button>
-        ))}
+        {results.length > 0 &&
+          splitIntoColumns(results, GIF_COLUMNS).map((column, index) => (
+            // As colunas são montadas aqui, e não pelo `columns` do CSS:
+             // multi-coluna dentro de um container de altura limitada abre
+             // colunas para o lado em vez de continuar para baixo, e a lista
+             // virava um carrossel horizontal conforme o número de resultados.
+            <div className="gif-column" key={index}>
+              {column.map((gif) => (
+                <button
+                  key={gif.id}
+                  disabled={busy}
+                  title={`${gif.description} · ${formatBytes(gif.bytes)}`}
+                  onClick={() => onPick(gif)}
+                >
+                  <img
+                    src={gif.previewUrl}
+                    alt={gif.description}
+                    loading="lazy"
+                    width={gif.width}
+                    height={gif.height}
+                  />
+                </button>
+              ))}
+            </div>
+          ))}
       </div>
       {busy && <p className="gif-sending">Baixando e enviando o GIF…</p>}
     </div>

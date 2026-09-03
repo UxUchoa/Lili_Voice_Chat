@@ -2529,25 +2529,45 @@ label.check-setting {
   font-size: 12.5px;
   font-weight: 600;
 }
+/* Duas colunas de alturas livres, como no seletor do Discord — montadas em
+   `splitIntoColumns` e não pelo `columns` do CSS.
+
+   Multi-coluna num container de altura limitada não continua para baixo: ele
+   abre colunas novas para o lado, e a lista inteira virava um carrossel
+   horizontal. Pior, `overflow-y: auto` faz o `overflow-x: visible` computar
+   para `auto`, então a barra horizontal aparecia junto. Quanto mais
+   resultados a categoria trazia, mais colunas nasciam — era daí que vinha a
+   forma mudar conforme a categoria escolhida.
+
+   Com colunas de verdade, cada uma é uma pilha comum: só existe crescimento
+   para baixo, e `overflow-x: hidden` garante que nada mais empurre a lista
+   para o lado. */
 .gif-grid {
   flex: 1;
   min-height: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
   padding: 0 10px 10px;
   overflow-y: auto;
-  /* Duas colunas de alturas livres, como no seletor do Discord. */
-  columns: 2;
-  column-gap: 8px;
+  overflow-x: hidden;
+}
+.gif-column {
+  flex: 1 1 0;
+  /* Sem isto uma imagem larga estica a coluna e desequilibra a outra. */
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 .gif-grid button {
   display: block;
   width: 100%;
   min-height: 0;
-  margin-bottom: 8px;
   padding: 0;
   overflow: hidden;
   border-radius: 9px;
   background: var(--surface-2);
-  break-inside: avoid;
 }
 .gif-grid button:hover {
   outline: 2px solid var(--brand);
@@ -2561,7 +2581,8 @@ label.check-setting {
   height: auto;
 }
 .gif-grid .empty-copy {
-  column-span: all;
+  /* Mensagem ocupa a área toda: ela é irmã das colunas, não item de uma. */
+  flex: 1;
 }
 .gif-sending {
   margin: 0;

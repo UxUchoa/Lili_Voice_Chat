@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 
@@ -119,10 +120,46 @@ function cspPlugin(policy: string): Plugin {
   };
 }
 
+/**
+ * As notas da versão que este build está empacotando.
+ *
+ * Depois de instalar uma atualização, o `electron-updater` não tem mais nada a
+ * dizer: ele anuncia o que está por vir, não o que acabou de chegar. O aviso
+ * de "atualizado para a versão X" ficava sem como mostrar o que mudou —
+ * justamente no momento em que a pessoa quer saber.
+ *
+ * Recortar aqui resolve porque o texto passa a viajar dentro do próprio
+ * pacote: a versão instalada sempre sabe as próprias notas, sem rede e sem
+ * depender da release do GitHub. O corte é o mesmo de
+ * `scripts/release-notes.mjs`, que continua sendo a autoridade na publicação.
+ *
+ * Uma versão sem seção não derruba o build: aqui a ausência de notas é um
+ * aviso a menos, enquanto na publicação é um erro — lá a release nasceria sem
+ * dizer o que mudou.
+ */
+function releaseNotesFor(version: string): string {
+  try {
+    const lines = readFileSync("docs/CHANGELOG.md", "utf8").split(/\r?\n/);
+    const start = lines.findIndex(
+      (line) =>
+        line.trim() === `## ${version}` || line.trim() === `## v${version}`,
+    );
+    if (start < 0) return "";
+    const rest = lines.slice(start + 1);
+    const end = rest.findIndex((line) => /^## /.test(line));
+    return (end < 0 ? rest : rest.slice(0, end))
+      .join(String.fromCharCode(10))
+      .trim();
+  } catch {
+    return "";
+  }
+}
+
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const configured = Boolean(env.VITE_SUPABASE_URL?.trim());
   const forDesktop = env.LILI_DESKTOP_BUILD === "true";
+  const version = JSON.parse(readFileSync("package.json", "utf8")).version;
   const policy =
     command === "build" && configured
       ? productionCsp(env.VITE_SUPABASE_URL ?? "", env.VITE_LIVEKIT_URL ?? "")
@@ -135,6 +172,10 @@ export default defineConfig(({ command, mode }) => {
     // `rewrites` da Vercel serve o index.html em qualquer profundidade, e ali
     // um caminho relativo apontaria para fora de `/assets`.
     base: forDesktop ? "./" : "/",
+    define: {
+      __LILI_VERSION__: JSON.stringify(version),
+      __LILI_RELEASE_NOTES__: JSON.stringify(releaseNotesFor(version)),
+    },
     plugins: [react(), cspPlugin(policy)],
     server: {
       host: "127.0.0.1",

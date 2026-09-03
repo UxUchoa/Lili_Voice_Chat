@@ -1,3 +1,6 @@
+/** Versão empacotada e as notas dela, recortadas do CHANGELOG pelo build. */
+declare const __LILI_VERSION__: string;
+declare const __LILI_RELEASE_NOTES__: string;
 /// <reference types="vite/client" />
 
 interface Window {
@@ -31,6 +34,8 @@ interface LiliScreenSource {
 }
 
 interface LiliUpdateState {
+  /** A versão que está rodando agora. Não muda quando outra é anunciada. */
+  appVersion?: string;
   status:
     | "idle"
     | "development"

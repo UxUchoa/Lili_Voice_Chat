@@ -114,7 +114,11 @@ export const useAppStore = create<AppState>()(
       accessibility: { textScale: 1, zoom: 1, reducedMotion: false },
       voice: {
         noiseSuppression: DEFAULT_NOISE_SUPPRESSION,
-        shareSystemAudio: true,
+        // Desligado por padrão, e não por economia: no desktop o que o
+        // Chromium entrega é o loopback da saída inteira, não o som da janela
+        // escolhida. Ligado sem pedir, compartilhar um jogo levava junto
+        // Spotify, Discord e notificação. Quem quiser isso liga, sabendo.
+        shareSystemAudio: false,
       },
       hydrateOnline: (onlineState) => set(onlineState),
       updateProfile: (profileId, changes) =>
@@ -202,6 +206,30 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: "janja-ui-preferences-v2",
+      /**
+       * 1 — o áudio do compartilhamento deixa de vir ligado.
+       *
+       * A preferência é salva, e a fusão abaixo faz o valor guardado vencer o
+       * padrão do código. Sem esta migração, mudar o padrão não alcançaria
+       * ninguém que já tivesse aberto o aplicativo alguma vez — ou seja,
+       * praticamente todo mundo continuaria transmitindo o som do computador
+       * inteiro sem ter pedido isso.
+       *
+       * Só este campo é tocado: o resto das preferências de voz é escolha da
+       * pessoa e não tem por que ser desfeita.
+       */
+      version: 1,
+      migrate: (persisted, from) => {
+        const state = (persisted ?? {}) as {
+          accessibility?: AppState["accessibility"];
+          voice?: AppState["voice"];
+        };
+        if (from >= 1) return state as never;
+        return {
+          ...state,
+          voice: { ...state.voice, shareSystemAudio: false },
+        } as never;
+      },
       partialize: (state) => ({
         accessibility: state.accessibility,
         voice: state.voice,

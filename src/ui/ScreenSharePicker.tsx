@@ -1,22 +1,36 @@
 import { useEffect, useState } from "react";
 import { IconMonitor, IconSettings, IconWindow, IconX } from "./icons";
+import {
+  SHARE_PRESETS,
+  sharePreset,
+  type ShareFrameRate,
+  type ShareQuality,
+  type ShareResolution,
+} from "../hooks/screenShare";
 
-export type ShareResolution = 720 | 1080 | 1440;
-export type ShareFrameRate = 15 | 30 | 60;
+const RESOLUTIONS = [
+  ...new Set(SHARE_PRESETS.map((p) => p.resolution)),
+] as ShareResolution[];
+const FRAME_RATES = [
+  ...new Set(SHARE_PRESETS.map((p) => p.frameRate)),
+] as ShareFrameRate[];
 
-export interface ShareQuality {
-  resolution: ShareResolution;
-  frameRate: ShareFrameRate;
-}
+/**
+ * Os modos vêm de `hooks/screenShare`, que é quem os aplica na captura e no
+ * encoder. Declará-los aqui de novo foi como a interface passou a oferecer
+ * 1440p e 15 quadros que a transmissão não entregava.
+ */
+export type {
+  ShareResolution,
+  ShareFrameRate,
+  ShareQuality,
+} from "../hooks/screenShare";
 
 export interface ShareSelection extends ShareQuality {
   /** Presente apenas no desktop, onde escolhemos a fonte nós mesmos. */
   sourceId?: string;
   sourceName?: string;
 }
-
-const RESOLUTIONS: ShareResolution[] = [720, 1080, 1440];
-const FRAME_RATES: ShareFrameRate[] = [15, 30, 60];
 
 export function ScreenSharePicker({
   quality,
@@ -101,7 +115,11 @@ export function ScreenSharePicker({
               Tela inteira
             </button>
           </div>
-          <button className="icon-button" aria-label="Fechar" onClick={onCancel}>
+          <button
+            className="icon-button"
+            aria-label="Fechar"
+            onClick={onCancel}
+          >
             <IconX size={20} />
           </button>
         </header>
@@ -155,8 +173,8 @@ export function ScreenSharePicker({
           <div className="share-quality">
             <b>Personalizada</b>
             <span>
-              {quality.resolution}p · {quality.frameRate} fps ·{" "}
-              {systemAudio ? "com áudio" : "sem áudio"}
+              {sharePreset(quality).label} ·{" "}
+              {systemAudio ? "som do computador" : "sem áudio"}
             </span>
           </div>
           <button
@@ -176,7 +194,9 @@ export function ScreenSharePicker({
                   <button
                     key={resolution}
                     aria-pressed={quality.resolution === resolution}
-                    className={quality.resolution === resolution ? "active" : ""}
+                    className={
+                      quality.resolution === resolution ? "active" : ""
+                    }
                     onClick={() => onQualityChange({ ...quality, resolution })}
                   >
                     {resolution}p
@@ -196,15 +216,8 @@ export function ScreenSharePicker({
                   </button>
                 ))}
               </div>
-              <span className="device-menu-label">ÁUDIO DO COMPUTADOR</span>
+              <span className="device-menu-label">ÁUDIO</span>
               <div className="share-segmented" role="group">
-                <button
-                  aria-pressed={systemAudio}
-                  className={systemAudio ? "active" : ""}
-                  onClick={() => onSystemAudioChange(true)}
-                >
-                  Incluir
-                </button>
                 <button
                   aria-pressed={!systemAudio}
                   className={!systemAudio ? "active" : ""}
@@ -212,13 +225,22 @@ export function ScreenSharePicker({
                 >
                   Só a imagem
                 </button>
+                <button
+                  aria-pressed={systemAudio}
+                  className={systemAudio ? "active" : ""}
+                  onClick={() => onSystemAudioChange(true)}
+                >
+                  Computador inteiro
+                </button>
               </div>
-              {/* Em Windows o loopback pega a saída inteira, não a janela
-                  escolhida: quem for compartilhar precisa saber que uma
-                  notificação sonora também vai junto. */}
+              {/* O nome da opção diz o que ela faz porque o sistema não
+                  oferece melhor: o loopback do Windows é da saída de áudio,
+                  não da janela. Chamá-la de "incluir áudio" fazia parecer que
+                  o som viria do que está sendo compartilhado. */}
               <p className="share-quality-hint">
-                O som capturado é o da saída de áudio inteira, não só o da
-                janela escolhida.
+                {systemAudio
+                  ? "Vai o som de tudo o que estiver tocando no computador — inclusive música, notificações e outras conversas. O Windows não separa o áudio por janela."
+                  : "Só a imagem da fonte escolhida. É o padrão porque o Windows não sabe capturar apenas o som da janela compartilhada."}
               </p>
             </div>
           )}

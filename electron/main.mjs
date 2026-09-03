@@ -58,7 +58,19 @@ const updateTestResult = (() => {
 let mainWindow = null;
 let tray = null;
 let isQuitting = false;
-let updateState = { status: "idle", version: app.getVersion(), progress: 0 };
+/**
+ * `version` é a versão **anunciada** — vira a nova assim que uma é encontrada.
+ * `appVersion` é a que está rodando agora, e nunca muda enquanto o processo
+ * vive. Sem separar as duas, a interface não tinha como saber se acabou de ser
+ * atualizada: guardava a versão anunciada como "já vista" e, depois de instalar
+ * justamente aquela, concluía que não havia nada de novo para mostrar.
+ */
+let updateState = {
+  status: "idle",
+  version: app.getVersion(),
+  appVersion: app.getVersion(),
+  progress: 0,
+};
 
 const hasPackagedUpdateConfiguration = () =>
   existsSync(path.join(process.resourcesPath, "app-update.yml"));
