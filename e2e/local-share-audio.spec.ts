@@ -46,14 +46,33 @@ const unwrap = async <T>(
 };
 
 /**
+ * O que a fonte sintética entrega desta vez.
+ *
+ * Os três estados que o medidor do compartilhamento precisa distinguir, e que
+ * são exatamente as duas formas de ir mudo mais a normal: som de verdade, faixa
+ * de áudio sem som nenhum, e nenhuma faixa.
+ */
+type ShareAudioMode = "tom" | "mudo" | "sem";
+
+declare global {
+  interface Window {
+    __liliShareAudio?: ShareAudioMode;
+  }
+}
+
+/**
  * Troca a captura de tela por uma fonte sintética com áudio.
  *
  * Um canvas animado dá a faixa de vídeo; um oscilador dá a de áudio. O canvas
  * precisa mudar de quadro, senão o encoder não tem o que enviar e a track
  * chega parada do outro lado.
+ *
+ * O modo é lido no momento da captura, e não fixado aqui: assim um teste só
+ * percorre os três estados sem refazer login, sala e conexão para cada um.
  */
 async function stubDisplayMediaWithAudio(page: Page) {
   await page.addInitScript(() => {
+    window.__liliShareAudio = "tom";
     navigator.mediaDevices.getDisplayMedia = async () => {
       const canvas = document.createElement("canvas");
       canvas.width = 1280;
@@ -74,11 +93,17 @@ async function stubDisplayMediaWithAudio(page: Page) {
           captureStream: (fps: number) => MediaStream;
         }
       ).captureStream(60);
+      const mode = window.__liliShareAudio ?? "tom";
+      if (mode === "sem") return new MediaStream(video.getVideoTracks());
       const audioContext = new AudioContext();
       const oscillator = audioContext.createOscillator();
       const destination = audioContext.createMediaStreamDestination();
+      // Ganho zero é a falha que ninguém enxerga: a faixa existe, é publicada,
+      // atravessa o LiveKit e chega do outro lado — sem som nenhum dentro.
+      const gain = audioContext.createGain();
+      gain.gain.value = mode === "mudo" ? 0 : 1;
       oscillator.frequency.value = 440;
-      oscillator.connect(destination);
+      oscillator.connect(gain).connect(destination);
       oscillator.start();
       return new MediaStream([
         ...video.getVideoTracks(),
@@ -87,6 +112,20 @@ async function stubDisplayMediaWithAudio(page: Page) {
     };
   });
 }
+
+/** Escolhe o que a próxima captura vai entregar. */
+const setShareAudioMode = (page: Page, mode: ShareAudioMode) =>
+  page.evaluate((value: ShareAudioMode) => {
+    window.__liliShareAudio = value;
+  }, mode);
+
+/** O quanto a barra do medidor está preenchida agora, de 0 a 1. */
+const meterLevel = (page: Page) =>
+  page
+    .locator(".share-audio-track > i")
+    .evaluate(
+      (bar) => Number(/scaleX\(([\d.]+)\)/.exec(bar.style.transform)?.[1] ?? 0),
+    );
 
 async function login(page: Page, email: string, password: string) {
   await page.goto("/");
@@ -122,7 +161,7 @@ const trackCount = (page: Page, selector: string, kind: "audio" | "video") =>
 test("o áudio do compartilhamento chega junto do microfone", async ({
   browser,
 }) => {
-  test.setTimeout(180_000);
+  test.setTimeout(240_000);
   const admin = createClient(apiUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
@@ -239,6 +278,20 @@ test("o áudio do compartilhamento chega junto do microfone", async ({
       { timeout: 20_000 },
     );
 
+    // O medidor no tile de quem compartilha. Com um tom de verdade tocando, a
+    // barra tem que sair do chão: é a única prova que essa pessoa tem, porque o
+    // `<video>` da própria tela é mudo de propósito — tocá-lo realimentaria a
+    // captura.
+    await expect(ownerPage.locator(".share-audio-meter")).toBeVisible();
+    await expect
+      .poll(() => meterLevel(ownerPage), {
+        timeout: 20_000,
+        message: "o medidor ficou no chão com um tom de 440 Hz tocando",
+      })
+      .toBeGreaterThan(0.05);
+    // E, havendo som, nenhum aviso aparece — senão o aviso viraria paisagem.
+    await expect(ownerPage.locator(".share-audio-badge")).toHaveCount(0);
+
     // A tela chega com vídeo…
     await expect
       .poll(() => trackCount(memberPage, "video.remote-screen-video", "video"), {
@@ -293,6 +346,42 @@ test("o áudio do compartilhamento chega junto do microfone", async ({
         timeout: 30_000,
       })
       .toBe(1);
+
+    const share = () =>
+      ownerPage
+        .locator(".call-controls")
+        .getByRole("button", { name: "Compartilhar sua tela" })
+        .click();
+    const stopShare = () =>
+      ownerPage
+        .locator(".call-controls")
+        .getByRole("button", { name: "Parar compartilhamento" })
+        .click();
+
+    /*
+     * As duas formas de ir mudo, que o medidor existe para acusar.
+     *
+     * A primeira é a pior: faixa de áudio publicada, atravessando o LiveKit,
+     * chegando do outro lado — e sem som nenhum dentro. Contar faixas dá certo
+     * e a transmissão está muda. Foi assim que dois defeitos duraram uma versão
+     * inteira cada um.
+     */
+    await stopShare();
+    await setShareAudioMode(ownerPage, "mudo");
+    await share();
+    await expect(ownerPage.locator(".share-audio-badge")).toHaveText("SEM SOM", {
+      timeout: 30_000,
+    });
+
+    // A segunda é a falta da faixa. Aviso diferente de propósito: aqui o
+    // conserto está no som do Windows, não na fonte escolhida.
+    await stopShare();
+    await setShareAudioMode(ownerPage, "sem");
+    await share();
+    await expect(ownerPage.locator(".share-audio-badge")).toHaveText(
+      "SEM ÁUDIO",
+      { timeout: 20_000 },
+    );
   } finally {
     // Fechar os contextos primeiro faz os clientes saírem da sala; o
     // `delete_server` é o mesmo caminho dos outros testes e é ele que leva

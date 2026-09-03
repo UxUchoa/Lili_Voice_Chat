@@ -273,6 +273,7 @@ import {
   type ShareQuality,
   type ShareSelection,
 } from "./ui/ScreenSharePicker";
+import { ShareAudioMeter } from "./ui/ShareAudioMeter";
 import {
   IconArrowDown,
   IconArrowUp,
@@ -4753,6 +4754,16 @@ function CallView({
   const [micMuted, setMicMuted] = useState(true),
     [video, setVideo] = useState(false),
     [sharing, setSharing] = useState(false),
+    /**
+     * A transmissão em curso pediu o som do sistema?
+     *
+     * Não é a mesma coisa que a preferência: quem muda a caixa no meio de um
+     * compartilhamento muda o **próximo**, não este. O medidor precisa da
+     * pergunta do compartilhamento que está no ar, senão ele apareceria numa
+     * transmissão que nunca pediu áudio — e sumiria justamente daquela que
+     * pediu e não conseguiu.
+     */
+    [sharingWithAudio, setSharingWithAudio] = useState(false),
     [focused, setFocused] = useState<string | null>(null),
     [mediaRevision, setMediaRevision] = useState(0),
     [chatOpen, setChatOpen] = useState(false),
@@ -5136,6 +5147,7 @@ function CallView({
     // Estas dicas são o que ele aceita: abrir já na aba de janelas, esconder a
     // própria aba do Lili e permitir trocar de fonte sem reiniciar.
     const withSystemAudio = voiceRef.current.shareSystemAudio;
+    setSharingWithAudio(withSystemAudio);
     const captureViaBrowserPicker = (withAudio: boolean) =>
       navigator.mediaDevices.getDisplayMedia({
         video: {
@@ -5734,6 +5746,15 @@ function CallView({
                 ? `${tile.name} (você)`
                 : tile.name}
           </span>
+          {/* Só no tile de quem compartilha: os outros ouvem o resultado e não
+              precisam de prova nenhuma. Quem compartilha é a única pessoa que
+              não ouve, e era a única sem como saber que estava indo mudo. */}
+          {tile.type === "screen" && tile.self && (
+            <ShareAudioMeter
+              stream={displayStreamRef.current}
+              active={sharingWithAudio}
+            />
+          )}
         </div>
         {tile.type === "camera" && !tile.self && !compact && (
           <label

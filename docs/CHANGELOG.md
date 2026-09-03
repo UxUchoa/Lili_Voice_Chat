@@ -71,6 +71,17 @@ mudou.
   "Ver o que mudou" e "Depois" eram texto clicável ao lado de um botão
   vermelho, e ninguém os encontrava. Continuam secundários — só uma das ações é
   a recomendada — mas agora parecem clicáveis.
+- **Dá para ver se o compartilhamento está mesmo levando som.** No tile da sua
+  própria tela, ao lado de "Sua tela", há um medidor: barra viva é som saindo.
+  Se a transmissão nasce sem faixa de áudio, ele diz "SEM ÁUDIO" na hora; se a
+  faixa existe mas nada toca por oito segundos, diz "SEM SOM". O `<video>` da
+  própria tela é mudo de propósito — tocá-lo realimentaria a captura —, então
+  quem compartilha era a única pessoa sem como saber que estava indo mudo, que é
+  exatamente como dois defeitos duraram uma versão inteira cada um.
+- **O aviso de "sem áudio" passa a apontar o lugar certo.** Ele culpava a fonte
+  escolhida em qualquer caso. Quando o Windows recusa capturar o som da saída
+  padrão — o que acontece quando ela está em mais de dois canais ou em 24 bits —
+  o conserto está no som do Windows, e é isso que a mensagem agora diz.
 
 ## 0.2.0
 

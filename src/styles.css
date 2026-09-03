@@ -4727,6 +4727,48 @@ a:focus-visible,
   font-weight: 700;
   letter-spacing: 0.06em;
 }
+/* Medidor de som do próprio compartilhamento. Mora no overlay do tile, ao lado
+   do nome, porque é ali que quem compartilha já olha para conferir o que está
+   transmitindo — e era ali que faltava a metade sonora da prova. */
+.share-audio-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.62);
+  color: var(--secondary);
+  flex: none;
+}
+.share-audio-meter.warn {
+  color: var(--yellow);
+}
+.share-audio-track {
+  width: 42px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  overflow: hidden;
+}
+.share-audio-track > i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--primary);
+  transform: scaleX(0);
+  transform-origin: left center;
+}
+.share-audio-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+/* Na faixa inferior o tile tem 178px: a barra não cabe junto do nome, e o que
+   importa ali é o aviso, não o nível. */
+.tile-strip .share-audio-track {
+  display: none;
+}
 .focused-area {
   flex: 1;
   min-height: 0;
