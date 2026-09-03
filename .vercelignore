@@ -6,7 +6,14 @@ release-*/
 electron/
 e2e/
 infra/
-docs/
+# `docs/*` e não `docs/`: excluir o diretório impede reincluir qualquer coisa
+# de dentro dele, e o changelog **precisa** chegar ao build. `vite.config.ts`
+# recorta dele as notas da versão que o aplicativo mostra em "novidades" — e,
+# desde que o desktop passou a carregar o site publicado, é este build que
+# chega a quem instala. Com `docs/` inteiro fora, a tela de novidades ficava
+# vazia em produção, sem erro nenhum.
+docs/*
+!docs/CHANGELOG.md
 patches/
 test-results/
 playwright-report/

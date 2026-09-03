@@ -136,23 +136,40 @@ function cspPlugin(policy: string): Plugin {
  * Uma versão sem seção não derruba o build: aqui a ausência de notas é um
  * aviso a menos, enquanto na publicação é um erro — lá a release nasceria sem
  * dizer o que mudou.
+ *
+ * **O changelog sumir é outra coisa, e derruba.** O `catch` devolvia a mesma
+ * string vazia para "esta versão não tem seção" e para "o arquivo não existe
+ * aqui", e a segunda aconteceu em produção sem ninguém ver: `.vercelignore`
+ * excluía `docs/` inteiro, então todo build da Vercel embarcava notas vazias.
+ * Como o desktop passou a carregar o site publicado, era esse build o que
+ * chegava a quem instalava — e a tela de novidades ficou vazia para todo mundo,
+ * em silêncio, exatamente o modo de falha que este projeto já pagou caro três
+ * vezes. Ler o arquivo é condição do build de produção, não uma tentativa.
  */
-function releaseNotesFor(version: string): string {
+function releaseNotesFor(version: string, required: boolean): string {
+  let changelog: string;
   try {
-    const lines = readFileSync("docs/CHANGELOG.md", "utf8").split(/\r?\n/);
-    const start = lines.findIndex(
-      (line) =>
-        line.trim() === `## ${version}` || line.trim() === `## v${version}`,
-    );
-    if (start < 0) return "";
-    const rest = lines.slice(start + 1);
-    const end = rest.findIndex((line) => /^## /.test(line));
-    return (end < 0 ? rest : rest.slice(0, end))
-      .join(String.fromCharCode(10))
-      .trim();
-  } catch {
+    changelog = readFileSync("docs/CHANGELOG.md", "utf8");
+  } catch (caught) {
+    if (required)
+      throw new Error(
+        "docs/CHANGELOG.md não foi encontrado neste build. Sem ele o " +
+          "aplicativo instalado abre a tela de novidades vazia. Confira se " +
+          `o arquivo chegou ao contexto do build (${String(caught)}).`,
+      );
     return "";
   }
+  const lines = changelog.split(/\r?\n/);
+  const start = lines.findIndex(
+    (line) =>
+      line.trim() === `## ${version}` || line.trim() === `## v${version}`,
+  );
+  if (start < 0) return "";
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex((line) => /^## /.test(line));
+  return (end < 0 ? rest : rest.slice(0, end))
+    .join(String.fromCharCode(10))
+    .trim();
 }
 
 export default defineConfig(({ command, mode }) => {
@@ -174,7 +191,9 @@ export default defineConfig(({ command, mode }) => {
     base: forDesktop ? "./" : "/",
     define: {
       __LILI_VERSION__: JSON.stringify(version),
-      __LILI_RELEASE_NOTES__: JSON.stringify(releaseNotesFor(version)),
+      __LILI_RELEASE_NOTES__: JSON.stringify(
+        releaseNotesFor(version, command === "build"),
+      ),
     },
     plugins: [react(), cspPlugin(policy)],
     server: {

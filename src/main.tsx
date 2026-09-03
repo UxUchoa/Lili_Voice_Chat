@@ -9766,7 +9766,17 @@ function ProfilePanel({
     [newPassword, setNewPassword] = useState(""),
     [securityNotice, setSecurityNotice] = useState(""),
     [updateState, setUpdateState] = useState<LiliUpdateState | null>(null),
-    [updateNotesOpen, setUpdateNotesOpen] = useState(false);
+    [updateNotesOpen, setUpdateNotesOpen] = useState(false),
+    /**
+     * As notas da versão **instalada**, que são outras que as do updater.
+     *
+     * O updater só fala do que está por vir: depois de instalar, ele não tem
+     * mais nada a dizer sobre a versão que chegou. Até aqui o "o que mudou"
+     * dela existia só no aviso que aparece na primeira abertura e some sozinho
+     * em oito segundos — perdeu, não vê mais. As notas viajam dentro do pacote;
+     * faltava um caminho até elas.
+     */
+    [installedNotesOpen, setInstalledNotesOpen] = useState(false);
   useEffect(() => {
     void (async () => {
       try {
@@ -10430,6 +10440,23 @@ function ProfilePanel({
                 >
                   Ver o que mudou na {updateState.version}
                 </button>
+              )}
+              {/* O de cima é sobre a versão anunciada e só existe quando há
+                  uma; este é sobre a que está rodando, e existe sempre. */}
+              {__LILI_RELEASE_NOTES__ && (
+                <button
+                  className="outline-button"
+                  onClick={() => setInstalledNotesOpen(true)}
+                >
+                  Ver o que mudou na {__LILI_VERSION__} (instalada)
+                </button>
+              )}
+              {installedNotesOpen && (
+                <ReleaseNotesModal
+                  version={__LILI_VERSION__}
+                  notes={__LILI_RELEASE_NOTES__}
+                  onClose={() => setInstalledNotesOpen(false)}
+                />
               )}
               {/* Sai do updater e vai para a página da release: é a saída de
                   quem está com o canal de atualização quebrado, que é
