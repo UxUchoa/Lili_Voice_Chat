@@ -72,7 +72,10 @@ async function stubGifs(page: Page) {
 
 /** O que precisa ser verdade em qualquer categoria e em qualquer busca. */
 async function assertVerticalGrid(page: Page, momento: string) {
-  const grid = page.locator(".gif-grid");
+  // Quem rola é a área inteira — categorias e grade juntas. Medir só a grade
+  // escondia o sintoma real: com categoria na tela, sobrava uma faixa de
+  // poucos pixels para dezenas de GIFs, e rolar ali não levava a lugar nenhum.
+  const grid = page.locator(".gif-scroll");
   await expect(grid.locator("button").first()).toBeVisible({ timeout: 15_000 });
   const medida = await grid.evaluate((element) => ({
     scrollWidth: element.scrollWidth,
@@ -141,20 +144,20 @@ test("a lista de GIFs rola na vertical em qualquer categoria", async ({
   // e medir antes disso mediria a lista anterior.
   await page.locator(".gif-categories button").nth(3).click();
   await expect
-    .poll(() => page.locator(".gif-grid button").count(), { timeout: 15_000 })
+    .poll(() => page.locator(".gif-scroll button").count(), { timeout: 15_000 })
     .not.toBe(inicial.itens);
   await assertVerticalGrid(page, "categoria");
 
   // Busca digitada, com outra quantidade de resultados ainda.
-  const antes = await page.locator(".gif-grid button").count();
+  const antes = await page.locator(".gif-scroll button").count();
   await page.getByLabel("Buscar GIFs").fill("gatinhos correndo");
   await expect
-    .poll(() => page.locator(".gif-grid button").count(), { timeout: 15_000 })
+    .poll(() => page.locator(".gif-scroll button").count(), { timeout: 15_000 })
     .not.toBe(antes);
   await assertVerticalGrid(page, "busca");
 
   // E a rolagem chega ao fim de verdade, não só na última linha.
-  const grid = page.locator(".gif-grid");
+  const grid = page.locator(".gif-scroll");
   await grid.evaluate((element) => element.scrollTo(0, element.scrollHeight));
   const fim = await grid.evaluate((element) => ({
     topo: element.scrollTop,

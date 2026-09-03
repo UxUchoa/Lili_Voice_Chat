@@ -97,8 +97,8 @@ export function GifPicker({
           funções do Supabase.
         </p>
         <p className="gif-picker-note">
-          Enquanto isso, dá para enviar um GIF pelo botão de anexo — ele segue
-          o mesmo caminho.
+          Enquanto isso, dá para enviar um GIF pelo botão de anexo — ele segue o
+          mesmo caminho.
         </p>
       </div>
     );
@@ -120,59 +120,65 @@ export function GifPicker({
           {error}
         </p>
       )}
-      {!debounced && categories.length > 0 && (
-        <div className="gif-categories">
-          {categories.slice(0, 8).map((category) => (
-            <button
-              key={category.searchTerm}
-              onClick={() => setQuery(category.searchTerm)}
-              style={
-                category.imageUrl
-                  ? { backgroundImage: `url(${category.imageUrl})` }
-                  : undefined
-              }
-            >
-              <span>{category.label}</span>
-            </button>
-          ))}
+      {/* Categorias e grade rolam juntas, numa área só. Separadas, as
+          categorias ocupavam altura fixa no topo e a grade ficava com a faixa
+          que sobrasse — poucos pixels quando havia categoria, o que fazia a
+          rolagem parecer quebrada mesmo funcionando. */}
+      <div className="gif-scroll">
+        {!debounced && categories.length > 0 && (
+          <div className="gif-categories">
+            {categories.slice(0, 8).map((category) => (
+              <button
+                key={category.searchTerm}
+                onClick={() => setQuery(category.searchTerm)}
+                style={
+                  category.imageUrl
+                    ? { backgroundImage: `url(${category.imageUrl})` }
+                    : undefined
+                }
+              >
+                <span>{category.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="gif-grid">
+          {loading && results.length === 0 && (
+            <p className="empty-copy">Carregando…</p>
+          )}
+          {!loading && results.length === 0 && !error && (
+            <p className="empty-copy">
+              {imageless
+                ? "O provedor respondeu, mas sem endereço de imagem em nenhum item — a função `gifs` publicada está desatualizada. Publique-a de novo."
+                : "Nenhum GIF encontrado."}
+            </p>
+          )}
+          {results.length > 0 &&
+            splitIntoColumns(results, GIF_COLUMNS).map((column, index) => (
+              // As colunas são montadas aqui, e não pelo `columns` do CSS:
+              // multi-coluna dentro de um container de altura limitada abre
+              // colunas para o lado em vez de continuar para baixo, e a lista
+              // virava um carrossel horizontal conforme o número de resultados.
+              <div className="gif-column" key={index}>
+                {column.map((gif) => (
+                  <button
+                    key={gif.id}
+                    disabled={busy}
+                    title={`${gif.description} · ${formatBytes(gif.bytes)}`}
+                    onClick={() => onPick(gif)}
+                  >
+                    <img
+                      src={gif.previewUrl}
+                      alt={gif.description}
+                      loading="lazy"
+                      width={gif.width}
+                      height={gif.height}
+                    />
+                  </button>
+                ))}
+              </div>
+            ))}
         </div>
-      )}
-      <div className="gif-grid">
-        {loading && results.length === 0 && (
-          <p className="empty-copy">Carregando…</p>
-        )}
-        {!loading && results.length === 0 && !error && (
-          <p className="empty-copy">
-            {imageless
-              ? "O provedor respondeu, mas sem endereço de imagem em nenhum item — a função `gifs` publicada está desatualizada. Publique-a de novo."
-              : "Nenhum GIF encontrado."}
-          </p>
-        )}
-        {results.length > 0 &&
-          splitIntoColumns(results, GIF_COLUMNS).map((column, index) => (
-            // As colunas são montadas aqui, e não pelo `columns` do CSS:
-             // multi-coluna dentro de um container de altura limitada abre
-             // colunas para o lado em vez de continuar para baixo, e a lista
-             // virava um carrossel horizontal conforme o número de resultados.
-            <div className="gif-column" key={index}>
-              {column.map((gif) => (
-                <button
-                  key={gif.id}
-                  disabled={busy}
-                  title={`${gif.description} · ${formatBytes(gif.bytes)}`}
-                  onClick={() => onPick(gif)}
-                >
-                  <img
-                    src={gif.previewUrl}
-                    alt={gif.description}
-                    loading="lazy"
-                    width={gif.width}
-                    height={gif.height}
-                  />
-                </button>
-              ))}
-            </div>
-          ))}
       </div>
       {busy && <p className="gif-sending">Baixando e enviando o GIF…</p>}
     </div>

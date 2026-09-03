@@ -2542,15 +2542,20 @@ label.check-setting {
    Com colunas de verdade, cada uma é uma pilha comum: só existe crescimento
    para baixo, e `overflow-x: hidden` garante que nada mais empurre a lista
    para o lado. */
-.gif-grid {
+/* A área que rola é esta, e ela contém as categorias **e** a grade. Com a
+   rolagem na grade sozinha, as categorias ficavam presas no topo comendo a
+   altura útil, e sobrava uma faixa de poucos pixels para dezenas de GIFs. */
+.gif-scroll {
   flex: 1;
   min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.gif-grid {
   display: flex;
   align-items: flex-start;
   gap: 8px;
   padding: 0 10px 10px;
-  overflow-y: auto;
-  overflow-x: hidden;
 }
 .gif-column {
   flex: 1 1 0;
