@@ -14,6 +14,15 @@ interface Window {
     close: () => void;
     notify: (title: string, body: string) => void;
     listScreenSources: () => Promise<LiliScreenSource[]>;
+    /**
+     * Registra no processo principal a fonte que será capturada em seguida.
+     * Devolve se o áudio do sistema estará disponível — só o Windows tem
+     * loopback.
+     */
+    prepareScreenShare: (
+      sourceId: string,
+      audio: boolean,
+    ) => Promise<{ audioAvailable: boolean }>;
     secretStatus: () => Promise<{ available: boolean; backend: string }>;
     wrapSecret: (plaintext: string) => Promise<string>;
     unwrapSecret: (wrapped: string) => Promise<string>;

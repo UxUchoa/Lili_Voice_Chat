@@ -7,10 +7,12 @@ import {
   nativeImage,
   Notification,
   safeStorage,
+  session,
   shell,
   Tray,
 } from "electron";
 import electronUpdater from "electron-updater";
+import { createDisplayMediaBridge } from "./displayMedia.mjs";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -412,6 +414,9 @@ app
   .then(() => {
     app.setAppUserModelId("chat.lili.desktop");
     recordUpdateTest("startup");
+    // Antes da janela: o handler vive na sessão, e um `getDisplayMedia` que
+    // chegasse antes dele seria negado pelo padrão do Electron.
+    displayMedia.register(isMainFrameRequest);
     createWindow();
     setupAutoUpdater();
     tray = new Tray(
@@ -513,6 +518,21 @@ ipcMain.handle("screen:sources", async (event) => {
       thumbnail: source.thumbnail.toDataURL(),
       icon: source.appIcon?.isEmpty() ? undefined : source.appIcon?.toDataURL(),
     }));
+});
+
+/**
+ * A ponte de captura de tela. A lógica e o porquê estão em `displayMedia.mjs`,
+ * que fica fora daqui para poder ser exercitada por um Electron de teste.
+ */
+const displayMedia = createDisplayMediaBridge({ desktopCapturer, session });
+
+/** Só o quadro principal da janela da aplicação pode capturar a tela. */
+const isMainFrameRequest = (request) =>
+  Boolean(mainWindow) && request?.frame?.top === mainWindow.webContents.mainFrame;
+
+ipcMain.handle("screen:share", (event, input) => {
+  if (event.sender !== mainWindow?.webContents) throw new Error("Acesso negado.");
+  return displayMedia.select(input?.sourceId, input?.audio);
 });
 
 ipcMain.handle("secret:status", (event) => {

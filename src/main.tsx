@@ -5136,7 +5136,7 @@ function CallView({
     // Estas dicas são o que ele aceita: abrir já na aba de janelas, esconder a
     // própria aba do Lili e permitir trocar de fonte sem reiniciar.
     const withSystemAudio = voiceRef.current.shareSystemAudio;
-    const captureViaBrowserPicker = () =>
+    const captureViaBrowserPicker = (withAudio: boolean) =>
       navigator.mediaDevices.getDisplayMedia({
         video: {
           displaySurface: "window",
@@ -5148,11 +5148,13 @@ function CallView({
         // O tratamento de voz **precisa** ficar fora daqui: um jogo ou um
         // vídeo passando por cancelamento de eco e ganho automático chega do
         // outro lado abafado e com o volume oscilando.
-        audio: {
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-        },
+        audio: withAudio
+          ? {
+              echoCancellation: false,
+              noiseSuppression: false,
+              autoGainControl: false,
+            }
+          : false,
         selfBrowserSurface: "exclude",
         surfaceSwitching: "include",
         /**
@@ -5164,69 +5166,90 @@ function CallView({
          * decisão defensável enquanto o áudio vinha desligado; com ele ligado,
          * significaria oferecer uma opção e não cumprir.
          */
-        systemAudio: withSystemAudio ? "include" : "exclude",
+        systemAudio: withAudio ? "include" : "exclude",
       } as DisplayMediaStreamOptions);
     /**
-     * Captura pelo id do desktopCapturer, com o áudio do sistema junto.
+     * Captura a fonte que o nosso seletor escolheu, no desktop.
      *
-     * No Chromium o loopback de áudio só existe como `chromeMediaSource:
-     * "desktop"` **na mesma chamada** que pede o vídeo: pedir só o áudio é
-     * recusado. Por isso a tentativa é feita duas vezes — com e sem áudio — em
-     * vez de capturar as duas coisas em separado. Em Windows o loopback é do
-     * dispositivo de saída inteiro, não da janela escolhida.
+     * Era `getUserMedia` com as restrições legadas `chromeMediaSource:
+     * "desktop"`, pedindo vídeo e áudio na mesma chamada. O vídeo vinha; o
+     * áudio parou de vir. Essa via deixou de conceder loopback nas versões
+     * recentes do Chromium, e falhava do pior jeito: a tentativa com áudio
+     * lançava, o código repetia sem áudio, e a transmissão subia muda — sem
+     * erro, sem aviso, e invisível justamente para quem compartilha.
+     *
+     * Agora quem decide a fonte é o processo principal, pelo
+     * `setDisplayMediaRequestHandler`: o seletor marca a escolha, o
+     * `getDisplayMedia` abaixo a consome, e o áudio vem como `loopback`.
+     *
+     * As restrições de tamanho e quadros continuam aqui — o handler diz *o
+     * quê* capturar, não *como*.
      */
-    const captureViaSourceId = async (sourceId: string, withAudio: boolean) =>
-      navigator.mediaDevices.getUserMedia({
+    const captureViaSourceId = async (sourceId: string, withAudio: boolean) => {
+      const desktop = window.janjaDesktop;
+      if (!desktop?.prepareScreenShare)
+        throw new Error("Esta versão do aplicativo não sabe capturar a tela.");
+      await desktop.prepareScreenShare(sourceId, withAudio);
+      return navigator.mediaDevices.getDisplayMedia({
+        video: { ...screenTrackConstraints(selection) },
+        // O tratamento de voz fica fora: um jogo ou um vídeo passando por
+        // cancelamento de eco e ganho automático chega abafado do outro lado.
         audio: withAudio
-          ? // Restrição específica do Chromium/Electron: não existe no tipo
-            // padrão de MediaTrackConstraints.
-            ({
-              mandatory: { chromeMediaSource: "desktop" },
-            } as unknown as MediaTrackConstraints)
+          ? {
+              echoCancellation: false,
+              noiseSuppression: false,
+              autoGainControl: false,
+            }
           : false,
-        video: {
-          // @ts-expect-error restrições específicas do Chromium/Electron
-          mandatory: {
-            chromeMediaSource: "desktop",
-            chromeMediaSourceId: sourceId,
-            maxWidth: width,
-            maxHeight: height,
-            maxFrameRate: selection.frameRate,
-          },
-        },
-      });
+      } as DisplayMediaStreamOptions);
+    };
     try {
-      let stream: MediaStream;
-      if (selection.sourceId) {
-        // No desktop a fonte já foi escolhida no nosso seletor e capturamos
-        // direto pelo id do desktopCapturer.
+      /**
+       * Pedir com áudio e, se isso derrubar a captura, pedir sem.
+       *
+       * Vale para os dois caminhos, e não só para o do desktop. O do navegador
+       * não tinha rede nenhuma: bastava o pedido de áudio desagradar ao
+       * navegador — placa sem loopback, superfície que não entrega som, uma
+       * combinação de opções que ele recusa — para o compartilhamento inteiro
+       * morrer, quando o certo é ir sem som e dizer isso.
+       *
+       * A recusa por permissão passa direto: quem cancelou o diálogo cancelou,
+       * e insistir abriria um segundo diálogo do nada.
+       */
+      const captureWithAudioFallback = async (
+        capture: (withAudio: boolean) => Promise<MediaStream>,
+      ) => {
         try {
-          try {
-            stream = await captureViaSourceId(
-              selection.sourceId,
-              withSystemAudio,
-            );
-          } catch (audioFailure) {
-            // Placa sem loopback, saída exclusiva, driver que recusa: o vídeo
-            // não pode cair junto. Repete sem o áudio e avisa depois.
-            if (!withSystemAudio) throw audioFailure;
-            console.warn(
-              "Áudio do sistema indisponível; compartilhando só o vídeo",
-              audioFailure,
-            );
-            stream = await captureViaSourceId(selection.sourceId, false);
-          }
+          return await capture(withSystemAudio);
         } catch (caught) {
-          // Se o Chromium embutido recusar a captura por id, é melhor cair no
-          // seletor nativo do que deixar o usuário sem compartilhamento.
+          if (!withSystemAudio || errorName(caught) === "NotAllowedError")
+            throw caught;
           console.warn(
-            "Captura direta da fonte indisponível; usando o seletor do sistema",
+            "[share] o áudio derrubou a captura; repetindo só com vídeo",
             caught,
           );
-          stream = await captureViaBrowserPicker();
+          return capture(false);
+        }
+      };
+      let stream: MediaStream;
+      if (selection.sourceId) {
+        // No desktop a fonte já foi escolhida no nosso seletor.
+        try {
+          stream = await captureWithAudioFallback((withAudio) =>
+            captureViaSourceId(selection.sourceId!, withAudio),
+          );
+        } catch (caught) {
+          // Se a captura da fonte escolhida falhar, é melhor cair no seletor
+          // do sistema do que deixar a pessoa sem compartilhamento.
+          if (errorName(caught) === "NotAllowedError") throw caught;
+          console.warn(
+            "[share] captura direta indisponível; usando o seletor do sistema",
+            caught,
+          );
+          stream = await captureWithAudioFallback(captureViaBrowserPicker);
         }
       } else {
-        stream = await captureViaBrowserPicker();
+        stream = await captureWithAudioFallback(captureViaBrowserPicker);
       }
       displayStreamRef.current = stream;
       stream
@@ -5261,10 +5284,20 @@ function CallView({
               : " · sem áudio."),
       );
     } catch (error) {
+      // O nome e a mensagem do erro vão para a tela, e não só para o console:
+      // "não foi possível" não diz se faltou permissão, se a fonte sumiu ou se
+      // o navegador recusou a combinação pedida — e sem isso não há o que
+      // tentar diferente.
+      console.error("[share] falha ao iniciar o compartilhamento", error);
+      const name = errorName(error);
+      const detail =
+        error instanceof Error && error.message ? ` (${error.message})` : "";
       setMediaNotice(
-        errorName(error) === "NotAllowedError"
+        name === "NotAllowedError"
           ? "Compartilhamento cancelado."
-          : "Não foi possível iniciar o compartilhamento.",
+          : name === "NotFoundError"
+            ? "A fonte escolhida não está mais disponível."
+            : `Não foi possível iniciar o compartilhamento${detail}`,
       );
     }
   };

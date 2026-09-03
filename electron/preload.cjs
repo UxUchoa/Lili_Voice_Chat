@@ -11,6 +11,10 @@ contextBridge.exposeInMainWorld(
     notify: (title, body) =>
       ipcRenderer.send("notification:show", { title, body }),
     listScreenSources: () => ipcRenderer.invoke("screen:sources"),
+    // Marca a fonte escolhida no processo principal. O `getDisplayMedia`
+    // seguinte a consome; e o principal que decide o que sera capturado.
+    prepareScreenShare: (sourceId, audio) =>
+      ipcRenderer.invoke("screen:share", { sourceId, audio }),
     secretStatus: () => ipcRenderer.invoke("secret:status"),
     wrapSecret: (plaintext) => ipcRenderer.invoke("secret:wrap", plaintext),
     unwrapSecret: (wrapped) => ipcRenderer.invoke("secret:unwrap", wrapped),

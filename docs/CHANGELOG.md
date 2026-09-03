@@ -24,10 +24,16 @@ mudou.
   ao ar. O timbre metálico vinha do mesmo lugar: uma voz somada a uma cópia
   atrasada de si mesma vira um filtro pente, que soa como lata. Agora existe
   uma captura por vez, sempre.
-- **O compartilhamento de tela ia mudo.** O áudio vinha desligado por padrão, e
-  quem compartilha é justamente quem não percebe. Volta ligado: jogo, vídeo e
-  aba compartilhada levam o som junto, e o aviso na tela diz o que realmente
-  foi capturado, não o que foi pedido.
+- **O compartilhamento de tela ia mudo.** Duas causas somadas. O áudio vinha
+  desligado por padrão — e quem compartilha é justamente quem não percebe.
+  E, no aplicativo instalado, a via que pedia o som do sistema tinha deixado de
+  funcionar: o Chromium parou de conceder o áudio por ali, a tentativa falhava
+  em silêncio e a transmissão subia só com imagem. As duas foram corrigidas, e
+  agora existe um teste que reprova a versão muda antes de ela sair.
+- **Compartilhar pelo navegador podia falhar por causa do áudio.** Se o pedido
+  de som desagradasse ao navegador, o compartilhamento inteiro morria em vez de
+  ir sem som. Agora ele vai sem som e diz isso — e, quando falha de verdade, a
+  mensagem conta o motivo em vez de "não foi possível".
 - **Os controles da chamada ficavam colados na borda de baixo.** A barra estava
   travada em 70px de altura enquanto os botões pediam mais que isso, então eles
   transbordavam a caixa e encostavam na borda. A barra passa a medir o que tem
