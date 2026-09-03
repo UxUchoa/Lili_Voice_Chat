@@ -96,6 +96,15 @@ app.whenReady().then(async () => {
       bridge.select(source.id, true);
       const comAudio = await capture(win, true);
       check(comAudio.ok, "a captura foi concedida", comAudio.name ?? "");
+      // `NotReadableError` aqui não é falha do código: é o Windows recusando
+      // abrir o loopback na saída padrão. Acontece quando ela está em mais de
+      // dois canais ou em 24 bits — `IAudioClient::Initialize` devolve
+      // `AUDCLNT_E_UNSUPPORTED_FORMAT`. Sem esta linha, o teste reprova sem
+      // dizer onde mexer, e o lugar não é o projeto.
+      if (comAudio.name === "NotReadableError")
+        log(
+          "  nota  a saída padrão do Windows recusou o loopback; deixe-a em 2 canais, 16 bits, 48000 Hz",
+        );
       check(comAudio.video === 1, "veio uma faixa de vídeo", `veio ${comAudio.video}`);
       if (windows)
         // A asserção que faltava. Durante a 0.2.0 isto era zero, e nada no

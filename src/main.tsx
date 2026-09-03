@@ -5216,6 +5216,7 @@ function CallView({
        * A recusa por permissão passa direto: quem cancelou o diálogo cancelou,
        * e insistir abriria um segundo diálogo do nada.
        */
+      let audioFailure: unknown = null;
       const captureWithAudioFallback = async (
         capture: (withAudio: boolean) => Promise<MediaStream>,
       ) => {
@@ -5224,6 +5225,7 @@ function CallView({
         } catch (caught) {
           if (!withSystemAudio || errorName(caught) === "NotAllowedError")
             throw caught;
+          audioFailure = caught;
           console.warn(
             "[share] o áudio derrubou a captura; repetindo só com vídeo",
             caught,
@@ -5273,15 +5275,30 @@ function CallView({
         track.contentHint = "music";
       });
       const audioShared = audioTracks.length > 0;
+      /**
+       * Sem som, o aviso precisa dizer *qual* das duas coisas falhou.
+       *
+       * "Esta fonte não entrega som" era a única explicação oferecida, e ela
+       * está errada no caso mais comum aqui: o Windows recusa abrir o loopback
+       * quando a saída padrão está num formato que ele não aceita capturar —
+       * mais de dois canais ou 24 bits. `NotReadableError` é como isso chega, e
+       * a diferença importa porque o conserto está no som do Windows, não na
+       * janela escolhida. Mandar a pessoa trocar de fonte não resolveria nada.
+       */
+      const audioProblem = !audioShared &&
+        withSystemAudio &&
+        (errorName(audioFailure) === "NotReadableError"
+          ? " · sem áudio: o Windows recusou capturar o som da saída padrão. No som do Windows, deixe a saída em 2 canais, 16 bits, 48000 Hz — ou escolha outra saída."
+          : audioFailure
+            ? ` · sem áudio: ${errorName(audioFailure)}.`
+            : " · sem áudio: esta fonte não entrega som. Uma aba do navegador entrega.");
       setMediaNotice(
         `Compartilhando ${selection.sourceName ?? "sua tela"} em ${preset.label}` +
           (audioShared
             ? withSystemAudio
               ? " · com o som do computador inteiro."
               : " · com o som da aba escolhida."
-            : withSystemAudio
-              ? " · sem áudio: esta fonte não entrega som. Uma aba do navegador entrega."
-              : " · sem áudio."),
+            : audioProblem || " · sem áudio."),
       );
     } catch (error) {
       // O nome e a mensagem do erro vão para a tela, e não só para o console:
