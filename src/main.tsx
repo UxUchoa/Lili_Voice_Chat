@@ -274,6 +274,7 @@ import {
   type ShareSelection,
 } from "./ui/ScreenSharePicker";
 import { ShareAudioMeter } from "./ui/ShareAudioMeter";
+import { summarizeUpdate } from "./domain/updateStatus";
 import {
   IconArrowDown,
   IconArrowUp,
@@ -9777,6 +9778,7 @@ function ProfilePanel({
      * faltava um caminho até elas.
      */
     [installedNotesOpen, setInstalledNotesOpen] = useState(false);
+  const updateSummary = summarizeUpdate(updateState);
   useEffect(() => {
     void (async () => {
       try {
@@ -10401,13 +10403,15 @@ function ProfilePanel({
           <details className="security-details">
             <summary>Atualizações do aplicativo</summary>
             <div>
+              {/* A versão que manda na frase é a instalada. A anunciada vira
+                  uma linha à parte, e só quando é outra — juntas num número só
+                  elas produziam uma tela que parecia mentir. */}
               <span>
-                Versão {updateState?.version ?? "…"} · estado{" "}
-                {updateState?.status ?? "idle"}
-                {updateState?.status === "downloading"
-                  ? ` (${updateState.progress}%)`
-                  : ""}
+                Versão {updateSummary.installed} · {updateSummary.state}
               </span>
+              {updateSummary.announcement && (
+                <span>{updateSummary.announcement}</span>
+              )}
               {updateState?.error && <small>{updateState.error}</small>}
               {updateState?.status === "ready" ? (
                 <button onClick={() => window.janjaDesktop?.installUpdate()}>
@@ -10442,13 +10446,16 @@ function ProfilePanel({
                 </button>
               )}
               {/* O de cima é sobre a versão anunciada e só existe quando há
-                  uma; este é sobre a que está rodando, e existe sempre. */}
+                  uma; este é sobre a que está aberta agora, e existe sempre.
+                  Sem o rótulo "instalada": desde que a casca passou a carregar
+                  o site, este número é o do front publicado, que pode estar à
+                  frente do instalador que a pessoa tem. */}
               {__LILI_RELEASE_NOTES__ && (
                 <button
                   className="outline-button"
                   onClick={() => setInstalledNotesOpen(true)}
                 >
-                  Ver o que mudou na {__LILI_VERSION__} (instalada)
+                  Ver o que mudou na {__LILI_VERSION__}
                 </button>
               )}
               {installedNotesOpen && (
