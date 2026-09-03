@@ -71,7 +71,12 @@ export const SHARE_PRESETS: readonly SharePreset[] = [
     frameRate: 60,
     width: 1280,
     height: 720,
-    bitrate: 2_300_000,
+    // 2,3 → 2,2 Mb/s. Quatro por cento, de propósito: o 720p60 já estava bom e
+    // o que se via eram picos ocasionais, não uma transmissão ruim. Quatro por
+    // cento não se enxerga num quadro parado e devolve ~100 kb/s de folga para
+    // o controle de congestionamento absorver um pico sem precisar cortar.
+    // Cortar mais seria pagar em nitidez por um problema que não existe.
+    bitrate: 2_200_000,
     label: "720p · 60 fps",
   },
   {
@@ -87,7 +92,20 @@ export const SHARE_PRESETS: readonly SharePreset[] = [
     frameRate: 60,
     width: 1920,
     height: 1080,
-    bitrate: 4_000_000,
+    /**
+     * 4,0 → 3,5 Mb/s. Doze e meio por cento — mais que no 720p60, e ainda
+     * assim conservador.
+     *
+     * A diferença de tratamento é a diferença de sintoma. O 720p60 tinha
+     * picos; o 1080p60 engasgava o tempo todo, e 4 Mb/s eram mais do que a
+     * instância entrega de forma sustentada. Quando o pedido nasce acima do
+     * que cabe, o controle de congestionamento corta em ciclos — e cada corte
+     * é um engasgo visível.
+     *
+     * O que **não** muda: continuam 1920×1080 e 60 quadros. Baixar para 30
+     * resolveria o número e destruiria a coisa que se está transmitindo.
+     */
+    bitrate: 3_500_000,
     label: "1080p · 60 fps",
   },
 ] as const;

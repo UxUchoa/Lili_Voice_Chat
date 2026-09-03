@@ -12,6 +12,17 @@ import { ensureDevice } from "../services/online/messages";
 import { setOnlineVoiceMediaState } from "../services/online/calls";
 import { CAMERA_MODES, cameraMode } from "./cameraModes";
 import {
+  planPublications,
+  type LocalTrackOrigin,
+  type PlannedTrack,
+} from "./publishPlan";
+import {
+  describeShareStats,
+  summarizeOutboundVideo,
+  type OutboundSample,
+  type ShareStats,
+} from "./screenShareStats";
+import {
   DEFAULT_SHARE_QUALITY,
   screenPublishOptions,
   screenShareBitrate,
@@ -93,9 +104,7 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
   });
   const roomRef = useRef<Room | null>(null);
   const leaveSessionRef = useRef<() => Promise<void>>(async () => {});
-  const desiredTracksRef = useRef(
-    new Map<string, { track: MediaStreamTrack; source: "camera" | "screen" }>(),
-  );
+  const desiredTracksRef = useRef(new Map<string, PlannedTrack>());
   // Serializa publicação/despublicação: chamadas concorrentes (reconexão +
   // toggle do usuário) corrompiam o conjunto publicado.
   const publishQueueRef = useRef<Promise<void>>(Promise.resolve());
@@ -104,6 +113,7 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
   const [connectionState, setConnectionState] =
     useState<RtcConnectionState>("idle");
   const [connectionError, setConnectionError] = useState("");
+  const [shareStats, setShareStats] = useState<ShareStats | null>(null);
 
   // Sessão e dispositivo desta chamada, para publicar o que está no ar. Vive
   // num ref porque quem precisa disso é `publishDesiredTracks`, que roda fora
@@ -130,19 +140,19 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
           .map((publication) => publication.track?.mediaStreamTrack?.id)
           .filter(Boolean),
       );
-      for (const { track, source } of desired.values()) {
+      for (const { track, origin, slot } of desired.values()) {
         if (published.has(track.id)) continue;
         await room.localParticipant.publishTrack(track, {
           source:
-            source === "screen"
-              ? track.kind === "audio"
+            slot === "screen"
+              ? Track.Source.ScreenShare
+              : slot === "screen-audio"
                 ? Track.Source.ScreenShareAudio
-                : Track.Source.ScreenShare
-              : track.kind === "audio"
-                ? Track.Source.Microphone
-                : Track.Source.Camera,
+                : slot === "camera"
+                  ? Track.Source.Camera
+                  : Track.Source.Microphone,
           ...(track.kind === "video"
-            ? source === "screen"
+            ? origin === "screen"
               ? {
                   ...screenPublishOptions(screenQualityRef.current),
                 }
@@ -172,7 +182,7 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
       const identity = voiceIdentityRef.current;
       if (identity) {
         const sources = [...desiredTracksRef.current.values()].map(
-          (entry) => entry.source,
+          (entry) => entry.origin,
         );
         await setOnlineVoiceMediaState({
           ...identity,
@@ -267,7 +277,29 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
             maxFramerate: CAMERA_MODES[720].frameRate,
           },
           degradationPreference: "maintain-resolution",
-          dtx: true,
+          /**
+           * DTX desligado, RED ligado.
+           *
+           * As duas tratam do mesmo trecho — o silêncio entre as palavras — e
+           * puxam para lados opostos quando há um supressor neural antes.
+           *
+           * DTX para de transmitir no silêncio e manda o outro lado sintetizar
+           * ruído de conforto no lugar. A economia depende de o silêncio ser
+           * parecido com o ruído sintetizado; depois do GTC RN o silêncio é
+           * digital, quase zero, e o que o decodificador põe ali é um chiado
+           * que não estava lá. A cada início de palavra o chiado sai e a voz
+           * entra: é o "liga-desliga" que se ouve como voz artificial, e ele
+           * nasce justamente de a supressão ter funcionado bem.
+           *
+           * Custa pouco desligar. A track de voz é da ordem de 40 kb/s contra
+           * os 2,2 Mb/s do compartilhamento de tela — a economia do DTX estava
+           * na terceira casa decimal do orçamento total.
+           *
+           * RED fica: ele manda cada quadro junto do anterior e é o que faz um
+           * pacote perdido não virar um buraco na frase. É redundância no
+           * tempo, não substituição do sinal, e não interage com o supressor.
+           */
+          dtx: false,
           red: true,
         },
       });
@@ -490,6 +522,59 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
   }, [currentUserId, enabled, participantName, publishDesiredTracks, roomId]);
 
   /**
+   * Mede o que a transmissão de tela está realmente entregando.
+   *
+   * Sem isto, ajustar o orçamento de bits era palpite: "engasgou" é o mesmo
+   * sintoma para encoder sem CPU, banda que não cabe e fonte entregando menos
+   * quadros do que se pediu, e as três pedem correções diferentes. As duas
+   * leituras servem porque bitrate e quadros por segundo são taxas — não
+   * existem numa amostra só.
+   *
+   * Dois segundos entre leituras: `getStats()` percorre a sessão inteira, e
+   * fazer isso a cada quadro seria gastar no diagnóstico a CPU que falta ao
+   * encoder. Só roda enquanto há tela publicada.
+   */
+  useEffect(() => {
+    if (connectionState !== "connected") {
+      setShareStats(null);
+      return;
+    }
+    let previous: OutboundSample[] | null = null;
+    let cancelled = false;
+    const sample = async () => {
+      const publication =
+        roomRef.current?.localParticipant.getTrackPublication(
+          Track.Source.ScreenShare,
+        );
+      const sender = publication?.track?.sender;
+      if (!sender) {
+        previous = null;
+        setShareStats(null);
+        return;
+      }
+      const report = await sender.getStats();
+      if (cancelled) return;
+      const current = [...report.values()] as OutboundSample[];
+      const summary = summarizeOutboundVideo(current, previous);
+      previous = current;
+      if (summary) {
+        setShareStats(summary);
+        // O console é onde se depura uma transmissão: a linha fica gravada
+        // junto do resto do que aconteceu, e não some com o próximo render.
+        console.debug("[share]", describeShareStats(summary));
+      }
+    };
+    const timer = window.setInterval(
+      () => void sample().catch(() => undefined),
+      2_000,
+    );
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [connectionState]);
+
+  /**
    * Muda a qualidade do compartilhamento, inclusive o que já está no ar.
    *
    * Guardar a escolha num ref bastava enquanto ela só era lida na publicação
@@ -547,15 +632,13 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
     (
       streams: Array<{
         stream: MediaStream;
-        source: "camera" | "screen";
+        source: LocalTrackOrigin;
       }>,
     ) => {
-      desiredTracksRef.current = new Map(
-        streams.flatMap(({ stream, source }) =>
-          stream
-            .getTracks()
-            .map((track) => [track.id, { track, source }] as const),
-        ),
+      // O plano recusa uma segunda track para a mesma vaga. Ver `publishPlan`:
+      // duas capturas do mesmo microfone publicadas juntas eram a voz fantasma.
+      desiredTracksRef.current = planPublications(
+        streams.map(({ stream, source }) => ({ stream, origin: source })),
       );
       const room = roomRef.current;
       if (!room) return;
@@ -608,6 +691,7 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
     setLocalTrackMuted,
     connectionState,
     connectionError,
+    shareStats,
     leaveRoom,
   };
 }

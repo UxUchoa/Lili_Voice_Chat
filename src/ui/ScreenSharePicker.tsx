@@ -174,7 +174,7 @@ export function ScreenSharePicker({
             <b>Personalizada</b>
             <span>
               {sharePreset(quality).label} ·{" "}
-              {systemAudio ? "som do computador" : "sem áudio"}
+              {systemAudio ? "com o som do computador" : "sem áudio"}
             </span>
           </div>
           <button
@@ -239,8 +239,8 @@ export function ScreenSharePicker({
                   o som viria do que está sendo compartilhado. */}
               <p className="share-quality-hint">
                 {systemAudio
-                  ? "Vai o som de tudo o que estiver tocando no computador — inclusive música, notificações e outras conversas. O Windows não separa o áudio por janela."
-                  : "Só a imagem da fonte escolhida. É o padrão porque o Windows não sabe capturar apenas o som da janela compartilhada."}
+                  ? "Vai o som de tudo o que estiver tocando no computador — inclusive música, notificações e outras conversas. O Windows não separa o áudio por janela. Se estiver no alto-falante, quem está na chamada vai se ouvir de volta."
+                  : "Só a imagem. Um jogo ou um vídeo chega mudo do outro lado, e você não tem como perceber daqui."}
               </p>
             </div>
           )}

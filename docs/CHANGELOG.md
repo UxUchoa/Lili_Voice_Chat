@@ -6,6 +6,66 @@ Uma seção por versão publicada. O texto daqui é o corpo da release no GitHub
 publicação de propósito — release sem notas é release que ninguém sabe o que
 mudou.
 
+## 0.2.1
+
+### Correções
+
+- **GIFs e imagens não apareciam no chat aberto durante a chamada.** A mensagem
+  chegava, a legenda aparecia e a mídia não — e ela voltava inteira assim que
+  você saía da chamada, o que fazia parecer atraso de sincronização. Nada estava
+  sendo perdido: o painel de chat da chamada era uma segunda implementação, que
+  só sabia desenhar texto. Agora ele é a mesma conversa da tela cheia — anexo,
+  GIF, imagem, reação, resposta, menção e markdown, tudo em tempo real, sem
+  precisar sair e voltar.
+- **A voz chegava duplicada, como se duas pessoas falassem juntas com alguns
+  milissegundos de diferença.** Ligar o microfone leva um tempo — o filtro de
+  ruído precisa carregar — e nesse intervalo o botão continuava mostrando
+  "silenciado". Quem clicava de novo abria uma segunda captura, e as duas iam
+  ao ar. O timbre metálico vinha do mesmo lugar: uma voz somada a uma cópia
+  atrasada de si mesma vira um filtro pente, que soa como lata. Agora existe
+  uma captura por vez, sempre.
+- **O compartilhamento de tela ia mudo.** O áudio vinha desligado por padrão, e
+  quem compartilha é justamente quem não percebe. Volta ligado: jogo, vídeo e
+  aba compartilhada levam o som junto, e o aviso na tela diz o que realmente
+  foi capturado, não o que foi pedido.
+- **Os controles da chamada ficavam colados na borda de baixo.** A barra estava
+  travada em 70px de altura enquanto os botões pediam mais que isso, então eles
+  transbordavam a caixa e encostavam na borda. A barra passa a medir o que tem
+  dentro, com o mesmo respiro em cima e embaixo.
+- **O X das notas da versão nascia por baixo do aviso amarelo de atualização** —
+  literalmente invisível, junto com o topo do card. Os dois falam da mesma
+  atualização e aparecem juntos por definição; agora o card desce até abaixo do
+  aviso.
+
+### Melhorias
+
+- **GTC RN é a supressão de ruído padrão.** Os dois modelos rodam nesta máquina
+  e custam CPU parecida; a diferença está no que sobra da voz. O RNNoise decide
+  um ganho por banda de frequência, e quando erra apaga a banda inteira — é o
+  que se ouve como voz de rádio velho. Quem estava no padrão antigo é movido
+  junto; quem tinha escolhido outra coisa fica onde está.
+- **O silêncio entre as palavras volta a ser silêncio.** A transmissão de voz
+  parava de enviar nas pausas e o outro lado sintetizava um chiado no lugar —
+  com a supressão funcionando bem, esse chiado é justamente o que não estava
+  lá, e o liga-desliga a cada palavra soava artificial. A economia era da ordem
+  de um centésimo do que o compartilhamento de tela usa.
+- **720p a 60 quadros: mesma imagem, um pouco mais de folga.** O teto de banda
+  cai de 2,3 para 2,2 Mb/s. Quatro por cento não se enxerga num quadro e devolve
+  margem para absorver um pico sem cortar nada.
+- **1080p a 60 quadros engasgava menos.** O teto cai de 4,0 para 3,5 Mb/s —
+  4 Mb/s era mais do que a nossa infraestrutura sustenta, e um pedido que não
+  cabe é cortado em ciclos, cada corte um engasgo. Continuam 1920×1080 e 60
+  quadros: derrubar a fluidez resolveria o número e estragaria justamente o que
+  se está transmitindo.
+- **Dá para ver o que a transmissão está realmente fazendo.** Em "Privacidade",
+  durante um compartilhamento, aparecem a resolução e os quadros reais, a banda
+  medida, o codec e o que está limitando a qualidade — CPU do encoder ou banda
+  disponível. São coisas diferentes e pedem correções opostas.
+- **As ações do aviso de atualização e das notas viraram botões de verdade.**
+  "Ver o que mudou" e "Depois" eram texto clicável ao lado de um botão
+  vermelho, e ninguém os encontrava. Continuam secundários — só uma das ações é
+  a recomendada — mas agora parecem clicáveis.
+
 ## 0.2.0
 
 ### Novidades

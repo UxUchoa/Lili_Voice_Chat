@@ -25,6 +25,42 @@
      configuracoes precisa comecar abaixo dela: `inset: 0` cobria a janela
      inteira e o X do painel nascia embaixo do X da janela. */
   --titlebar-height: 54px;
+  /* Cabeçalho da chamada. O painel de chat encosta embaixo dele, e a medida
+     estava copiada à mão em dois lugares — com valores diferentes, o que
+     fazia o painel cobrir os últimos pixels do cabeçalho. */
+  --call-header-height: 67px;
+  /* Respiro vertical da barra de controles da chamada, dos dois lados.
+     `padding-block` simétrico sai daqui, e a altura total da barra também —
+     é o que o painel de chat usa para saber onde parar. */
+  --call-controls-gutter: 18px;
+  /* O item mais alto da barra: o botão de desconectar e o grupo de controles
+     empatam em 52px. Sai de uma variável porque encolhe em tela estreita, e a
+     altura da barra — de que o painel de chat depende para saber onde parar —
+     tem que encolher junto.
+
+     A altura derivada **não** mora aqui: um `var()` dentro de uma custom
+     property é substituído no elemento onde a property é declarada, então uma
+     altura calculada no `:root` ficaria congelada nos valores do `:root` e
+     ignoraria a media query que redefine estes dois mais abaixo. Ela é
+     declarada em `.call-view`, que é o mesmo elemento que a media query
+     ajusta. */
+  --call-control-tallest: 52px;
+  /*
+   * O aviso de atualização é `position: fixed` e passa por cima de tudo, e as
+   * notas da versão são justamente a tela que aparece junto com ele. Sem uma
+   * medida declarada, o X do painel nascia embaixo do aviso.
+   *
+   * A altura é do aviso de uma linha: 12px de padding em cima e embaixo, as
+   * ações de 36px no meio e o fio. Ele pode crescer numa janela muito estreita
+   * — abaixo de 600px o layout inteiro já é outro — e por isso é `min-height`
+   * lá embaixo, não `height`: a medida vale como piso, e o piso é o que o
+   * painel precisa respeitar.
+   */
+  --update-banner-top: 62px;
+  --update-banner-height: 62px;
+  --update-banner-safe-top: calc(
+    var(--update-banner-top) + var(--update-banner-height) + 16px
+  );
 }
 html {
   font-size: calc(16px * var(--text-scale, 1));
@@ -122,7 +158,8 @@ a:focus-visible,
 .update-banner {
   position: fixed;
   z-index: 10001;
-  top: 62px;
+  top: var(--update-banner-top);
+  min-height: var(--update-banner-height);
   left: 50%;
   width: min(560px, calc(100vw - 32px));
   display: flex;
@@ -141,22 +178,46 @@ a:focus-visible,
   border-color: rgba(35, 196, 131, 0.55);
   background: #0c2417;
 }
+/* As ações do aviso usam as variantes do sistema — preenchido para a ação
+   recomendada, contorno para as outras duas. A regra antiga pintava de vermelho
+   "o primeiro botão, seja ele qual for": no aviso de "já atualizado", onde a
+   primeira ação é só "ver o que mudou", isso dava um botão de urgência para
+   uma informação. */
 .update-banner-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  /* 12px, e não 8: com três alvos de 36px lado a lado, oito pixels deixavam
+     os três parecendo um controle segmentado só. */
+  gap: 12px;
   flex: 0 0 auto;
+  flex-wrap: wrap;
 }
-.update-banner-actions button:first-child {
-  padding: 6px 12px;
-  border-radius: 6px;
-  background: var(--brand);
-  color: #fff;
+.update-banner-actions .outline-button {
+  /* Sobre o fundo escuro do aviso, o contorno padrão some. */
+  border-color: rgba(255, 255, 255, 0.28);
+  color: var(--primary);
 }
+.update-banner-actions .outline-button:hover {
+  border-color: var(--yellow);
+  color: var(--yellow);
+}
+.update-banner-close,
 .update-banner > button {
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  border-radius: 8px;
   background: transparent;
-  font-size: 20px;
+  color: var(--secondary);
+}
+.update-banner-close:hover,
+.update-banner > button:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--primary);
 }
 .titlebar {
   height: var(--titlebar-height);
@@ -985,8 +1046,8 @@ a:focus-visible,
 }
 .conversation-header,
 .call-header {
-  height: 67px;
-  flex: 0 0 67px;
+  height: var(--call-header-height);
+  flex: 0 0 var(--call-header-height);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1748,8 +1809,6 @@ a:focus-visible,
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
 }
 .call-controls {
-  height: 70px;
-  flex: 0 0 70px;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -2940,11 +2999,32 @@ a:focus-visible,
    O painel segue a mesma moldura do de ajuda: mesma largura, mesmo fio, mesmo
    botão de fechar no canto.
    ============================================================ */
+/*
+ * O painel desce até abaixo do aviso amarelo.
+ *
+ * Os dois falam da mesma atualização e por isso aparecem juntos — não é um
+ * encontro raro, é a regra. Com o aviso em `position: fixed` e z-index acima de
+ * tudo, quem cede é o painel. `max` e não um valor fixo: quando não há aviso a
+ * conta não deve empurrar o painel para baixo mais do que o padrão do
+ * `.modal-backdrop` já faz.
+ */
+.release-notes-backdrop {
+  padding-top: max(var(--update-banner-safe-top), clamp(16px, 8vh, 96px));
+}
 .release-notes-panel {
   width: min(560px, calc(100vw - 32px));
-  max-height: min(72vh, 640px);
+  /* A altura desconta a faixa reservada em cima e o respiro embaixo: sem isso,
+     numa janela baixa, o painel empurrado para baixo terminava fora da tela e
+     as ações ficavam inalcançáveis. */
+  max-height: min(
+    640px,
+    calc(100vh - var(--update-banner-safe-top) - 40px)
+  );
   overflow-y: auto;
-  padding: 30px;
+  /* 30px de respiro nas laterais e embaixo; 26px em cima porque ali existe
+     mais uma coisa ocupando espaço — o X, que precisa de distância da borda
+     sem empurrar o título para o meio do painel. */
+  padding: 26px 30px 30px;
   position: relative;
   border: 1px solid #3b3034;
   border-radius: 14px;
@@ -2953,8 +3033,17 @@ a:focus-visible,
 }
 .release-notes-panel .close-settings {
   position: absolute;
-  top: 16px;
-  right: 16px;
+  top: 14px;
+  right: 14px;
+}
+/* O X é o vizinho do sobretítulo, não do texto: sem esta reserva, uma linha
+   longa passava por baixo dele. */
+.release-notes-panel > .eyebrow {
+  display: block;
+  padding-right: 44px;
+}
+.release-notes-panel h2 {
+  padding-right: 44px;
 }
 .release-notes-panel h2 {
   margin: 10px 0 14px;
@@ -3002,19 +3091,28 @@ a:focus-visible,
 .release-notes-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-top: 18px;
-  padding-top: 14px;
+  /* 12px eram o gap de uma linha de texto; com dois alvos de 36px encostados,
+     a fronteira entre "baixar" e "abrir a página" some — e são ações bem
+     diferentes para se errar por um pixel. */
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+  padding-top: 16px;
   border-top: 1px solid var(--line);
   font-size: 12px;
 }
-.release-notes-actions a,
+/* O link vira botão secundário: `.outline-button` cuida da caixa, e isto
+   devolve o alinhamento que um `<a>` não tem. */
+.release-notes-actions .outline-button {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
 .release-link {
   color: var(--muted);
   text-decoration: none;
   font-size: 12px;
 }
-.release-notes-actions a:hover,
 .release-link:hover {
   color: var(--primary);
   text-decoration: underline;
@@ -3887,14 +3985,24 @@ a:focus-visible,
 }
 .call-view {
   position: relative;
+  /* Declarada aqui, e não no `:root`, para que a media query estreita — que
+     redefine a goteira e a altura do controle neste mesmo elemento — chegue
+     a esta conta. Ver o comentário dos tokens. */
+  --call-controls-height: calc(
+    var(--call-control-tallest) + var(--call-controls-gutter) * 2 + 1px
+  );
 }
 .voice-text-panel {
   width: min(360px, 42vw);
   position: absolute;
   z-index: 25;
-  top: 50px;
+  /* Pelos tokens, e não por dois números escritos à mão: o `top: 50px` de
+     antes cobria os últimos 17px do cabeçalho de 67px, e o `bottom: 102px`
+     ficava pendurado numa barra de controles que agora mede o que tem
+     dentro. */
+  top: var(--call-header-height);
   right: 0;
-  bottom: 102px;
+  bottom: var(--call-controls-height);
   display: flex;
   flex-direction: column;
   border-left: 1px solid var(--line);
@@ -3917,32 +4025,57 @@ a:focus-visible,
   background: transparent;
   font-size: 18px;
 }
-.voice-message-list {
-  flex: 1;
-  overflow: auto;
-  padding: 10px;
-}
-.voice-message-list article {
-  display: flex;
-  gap: 8px;
-  padding: 8px;
-}
-.voice-message-list article > div {
-  min-width: 0;
-}
-.voice-message-list p {
-  margin: 3px 0 0;
-  color: var(--secondary);
-  overflow-wrap: anywhere;
-}
+/* O chat da chamada é a mesma conversa da tela cheia, num container de 360px.
+   As regras abaixo tratam só disso — largura — e por isso são todas de
+   espaçamento e tamanho. Nada aqui muda o que a mensagem é capaz de mostrar:
+   anexo, GIF, reação e resposta são os mesmos componentes, e foi justamente
+   por existirem duas renderizações diferentes que a mídia não aparecia
+   durante a chamada. */
 .voice-text-panel {
-  --composer-gutter: 8px;
+  --composer-gutter: 10px;
 }
 .voice-text-panel .composer-wrap {
   /* A goteira lateral vem do token; o respiro vertical é próprio deste painel,
      que é estreito e não tem o mesmo ar da conversa cheia. */
   padding-top: 8px;
   padding-bottom: 8px;
+}
+.message-list-compact {
+  padding: 10px var(--composer-gutter);
+}
+.message-list-compact .message {
+  min-height: 0;
+  column-gap: 9px;
+  padding: 7px 8px;
+  margin: 0 -8px;
+}
+/* A coluna do avatar come um sexto da largura útil num painel estreito. */
+.message-list-compact .message-author-avatar .avatar {
+  width: 30px;
+  height: 30px;
+  font-size: 12px;
+}
+.message-list-compact .message-meta {
+  gap: 6px;
+  font-size: 11px;
+}
+/* As ações de hover flutuam sobre a mensagem; nesta largura elas encostam mais
+   na borda para não cobrir o texto. O tamanho dos botões fica como está — 32px
+   é a área de toque mínima, e apertar um painel não é motivo para abrir mão
+   dela. */
+.message-list-compact .message-actions {
+  right: 2px;
+  padding: 2px;
+}
+/* Imagem e vídeo ocupam a largura do painel em vez do teto da conversa
+   cheia — o que importa aqui é caber, e caber inteiro. */
+.message-list-compact .attachment-media img,
+.message-list-compact .attachment-media video {
+  max-width: 100%;
+  max-height: 220px;
+}
+.message-list-compact .reply-reference span {
+  max-width: 190px;
 }
 .recent-calls > button {
   display: flex;
@@ -4620,12 +4753,30 @@ a:focus-visible,
 /* Barra de controles no padrão do Discord: botões quadrados arredondados
    agrupados em clusters, com chevron de dispositivos anexado ao microfone e
    à câmera. */
+/**
+ * A barra respira, e o motivo de não respirar não era o padding.
+ *
+ * Os controles pareciam colados na borda de baixo, e o padding dizia o
+ * contrário: 14px em cima, 22px embaixo. O que anulava os dois era uma regra
+ * antiga travando a barra em `height: 70px`. Com `border-box`, 70px menos 36px
+ * de padding e 1px de fio deixam 33px de caixa de conteúdo para botões de 44 e
+ * 52px: os botões transbordavam o padding nos dois sentidos e encostavam na
+ * borda. O `flex-wrap` era decorativo pelo mesmo motivo — uma segunda linha não
+ * teria onde caber e sairia cortada.
+ *
+ * Sem a altura travada, a barra passa a medir o que ela tem dentro e o
+ * `padding-block` volta a valer. Simétrico, e não 14/22: a assimetria era uma
+ * compensação para o transbordo, e com ele resolvido ela só desalinha.
+ */
 .call-controls {
+  height: auto;
+  flex: 0 0 auto;
   display: flex;
   justify-content: center;
   align-items: center;
   gap: 10px;
-  padding: 14px 16px 22px;
+  padding-block: var(--call-controls-gutter);
+  padding-inline: 16px;
   flex-wrap: wrap;
 }
 .control-cluster {
@@ -4692,7 +4843,7 @@ a:focus-visible,
 .leave-control {
   width: 62px;
   min-width: 62px;
-  height: 52px;
+  height: var(--call-control-tallest);
   border-radius: 14px;
   background: var(--brand);
   color: #fff;
@@ -5510,15 +5661,35 @@ button svg,
 }
 
 @media (max-width: 700px) {
+  /* A barra encolhe, e com ela a altura de onde o painel de chat para. Sem
+     mexer no token, o painel continuaria descontando 52px de uma barra que
+     agora tem 48 — e sobraria uma faixa vazia entre os dois. */
+  .call-view {
+    --call-control-tallest: 48px;
+    --call-controls-gutter: 14px;
+  }
+  .call-control,
+  /* O chevron encolhe junto. Sozinho ele passava a ser o item mais alto do
+     grupo e a barra media 4px a mais do que o token dizia — e o painel de
+     chat, que para pelo token, cobria essa faixa. */
+  .control-chevron {
+    height: 40px;
+  }
   .call-control {
     width: 44px;
     min-width: 44px;
-    height: 40px;
   }
   .leave-control {
     width: 56px;
     min-width: 56px;
-    height: 48px;
+  }
+  /* Nesta largura, 42vw são pouco mais de 290px: a conversa caberia, mas
+     espremida ao lado de um palco igualmente espremido. O painel passa a
+     ocupar a coluna inteira — quem abriu o chat quer ler o chat, e o vídeo
+     continua rodando atrás. */
+  .voice-text-panel {
+    width: 100%;
+    border-left: 0;
   }
   .friends-header {
     align-items: flex-start;

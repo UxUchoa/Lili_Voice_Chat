@@ -97,6 +97,24 @@ export function ReleaseNotes({ notes }: { notes: string }) {
  * As ações são de quem chama: baixar, reiniciar e instalar, ou abrir a página
  * da release. Este componente não conhece o `electron-updater` — ele mostra o
  * texto e os botões que recebe.
+ *
+ * ---
+ *
+ * Duas coisas que não eram de estilo, mas pareciam:
+ *
+ * O X ficava embaixo do aviso amarelo de atualização. Não é coincidência: as
+ * duas telas falam da mesma atualização e aparecem juntas por definição. O
+ * aviso é `position: fixed` e passa por cima de tudo, então quem tinha que
+ * sair da frente era este painel — daí o `release-notes-backdrop`, que reserva
+ * a faixa do aviso antes de centralizar o resto.
+ *
+ * E "Abrir a página da release" era um `<a>` cru dentro de um rodapé de
+ * botões. Num tema escuro, um link cinza ao lado de um botão vermelho não
+ * parece uma alternativa: parece uma nota de rodapé. É a saída de quem está
+ * com o atualizador quebrado, ou seja exatamente de quem não pode contar com o
+ * botão de cima — a ação que menos podia parecer decorativa era a que mais
+ * parecia. Vira botão secundário de verdade; a hierarquia continua clara
+ * porque só um dos dois é preenchido.
  */
 export function ReleaseNotesModal({
   version,
@@ -113,7 +131,10 @@ export function ReleaseNotesModal({
 }) {
   return (
     <ModalPortal>
-      <div className="modal-backdrop" onClick={onClose}>
+      <div
+        className="modal-backdrop release-notes-backdrop"
+        onClick={onClose}
+      >
         <section
           className="release-notes-panel"
           role="dialog"
@@ -136,7 +157,12 @@ export function ReleaseNotesModal({
           <footer className="release-notes-actions">
             {actions}
             {releaseUrl && (
-              <a href={releaseUrl} target="_blank" rel="noreferrer">
+              <a
+                className="outline-button"
+                href={releaseUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
                 Abrir a página da release
               </a>
             )}

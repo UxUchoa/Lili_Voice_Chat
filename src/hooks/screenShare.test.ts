@@ -65,29 +65,59 @@ describe("o preset padrão", () => {
     });
   });
 
-  it("tem 2,3 Mb/s como teto", () => {
-    expect(screenShareBitrate(DEFAULT_SHARE_QUALITY)).toBe(2_300_000);
+  it("tem 2,2 Mb/s como teto", () => {
+    expect(screenShareBitrate(DEFAULT_SHARE_QUALITY)).toBe(2_200_000);
   });
 });
 
 describe("o orçamento de bits", () => {
   it("segue a tabela combinada com a infraestrutura", () => {
     expect(screenShareBitrate({ resolution: 720, frameRate: 30 })).toBe(1_500_000);
-    expect(screenShareBitrate({ resolution: 720, frameRate: 60 })).toBe(2_300_000);
+    expect(screenShareBitrate({ resolution: 720, frameRate: 60 })).toBe(2_200_000);
     expect(screenShareBitrate({ resolution: 1080, frameRate: 30 })).toBe(2_500_000);
-    expect(screenShareBitrate({ resolution: 1080, frameRate: 60 })).toBe(4_000_000);
+    expect(screenShareBitrate({ resolution: 1080, frameRate: 60 })).toBe(3_500_000);
   });
 
   it("nunca chega perto dos dez megabits de antes", () => {
     // 1080p60 pedia 10,2 Mb/s. O controle de congestionamento cortava isso em
     // segundos, e o corte aparecia como queda de quadros.
     for (const preset of SHARE_PRESETS)
-      expect(preset.bitrate).toBeLessThanOrEqual(4_000_000);
+      expect(preset.bitrate).toBeLessThanOrEqual(3_500_000);
   });
 
   it("dá um valor diferente para cada modo", () => {
     const valores = new Set(SHARE_PRESETS.map((preset) => preset.bitrate));
     expect(valores.size).toBe(SHARE_PRESETS.length);
+  });
+});
+
+describe("o ajuste de bits desta rodada", () => {
+  it("mexe no bitrate e não na resolução nem nos quadros", () => {
+    // A regra da rodada: quando é preciso caber, o que cede é o orçamento de
+    // bits. Transformar 1080p60 em 1080p30 resolveria o número da banda e
+    // destruiria justamente o que se está transmitindo — jogo, vídeo,
+    // animação são lidos pela fluidez.
+    const p720 = sharePreset({ resolution: 720, frameRate: 60 });
+    const p1080 = sharePreset({ resolution: 1080, frameRate: 60 });
+    expect([p720.width, p720.height, p720.frameRate]).toEqual([1280, 720, 60]);
+    expect([p1080.width, p1080.height, p1080.frameRate]).toEqual([
+      1920, 1080, 60,
+    ]);
+  });
+
+  it("corta pouco no 720p60 e um pouco mais no 1080p60", () => {
+    // O 720p60 tinha picos ocasionais; o 1080p60 engasgava o tempo todo. O
+    // corte acompanha o sintoma, e nos dois casos fica na casa de um dígito
+    // para o primeiro e pouco mais que dez por cento para o segundo.
+    const queda = (antes: number, agora: number) => (antes - agora) / antes;
+    expect(queda(2_300_000, screenShareBitrate({ resolution: 720, frameRate: 60 })))
+      .toBeLessThan(0.08);
+    const queda1080 = queda(
+      4_000_000,
+      screenShareBitrate({ resolution: 1080, frameRate: 60 }),
+    );
+    expect(queda1080).toBeGreaterThan(0.08);
+    expect(queda1080).toBeLessThan(0.2);
   });
 });
 
@@ -111,7 +141,7 @@ describe("sharePreset", () => {
     expect(sharePreset(antigo)).toMatchObject({
       resolution: 720,
       frameRate: 60,
-      bitrate: 2_300_000,
+      bitrate: 2_200_000,
     });
   });
 });
@@ -129,7 +159,7 @@ describe("as opções de publicação da tela", () => {
     expect(
       screenPublishOptions({ resolution: 720, frameRate: 60 })
         .screenShareEncoding,
-    ).toMatchObject({ maxFramerate: 60, maxBitrate: 2_300_000 });
+    ).toMatchObject({ maxFramerate: 60, maxBitrate: 2_200_000 });
     expect(
       screenPublishOptions({ resolution: 1080, frameRate: 30 })
         .screenShareEncoding,

@@ -44,7 +44,33 @@
 4. Na conta proprietária, pesquise um cargo, altere seu ícone Unicode e salve.
 5. Teste notificações GLOBAL/SERVER/CHANNEL e silêncio temporário.
 
-## 5. Resultado esperado e parada
+## 5. O que só se confere com ouvido e olho
+
+Estes quatro itens têm teste automatizado do que dá para automatizar — a faixa
+existe, o número está certo, o elemento renderizou. O que falta é a parte que
+nenhum teste vê. Sem isso, "passou" quer dizer só que o encanamento está no
+lugar.
+
+1. **A voz.** Entre em chamada com as duas contas e fale por trinta segundos
+   seguidos, depois em frases curtas, depois em silêncio com ruído de fundo
+   (ventilador, teclado). O que se procura: nada de você repetido alguns
+   milissegundos depois, e nada de timbre de lata. O padrão é o GTC RN — ele
+   aparece como *recomendado* em Configurações → Voz.
+2. **O RNNoise.** Troque o modo no meio da chamada e repita o item acima. A
+   troca recaptura o microfone; o outro lado não pode ouvir duas vozes durante
+   a transição.
+3. **O som do compartilhamento.** Compartilhe um jogo ou um vídeo com som e
+   confirme do outro lado que ele chega — e que a sua voz continua chegando ao
+   mesmo tempo. Se você estiver no alto-falante, os outros vão se ouvir de
+   volta: é o loopback do Windows, não é defeito.
+4. **1080p a 60 quadros.** Compartilhe algo em movimento e abra
+   **Privacidade** no cabeçalho da chamada. Ali estão a resolução e os quadros
+   reais, a banda medida e o motivo da limitação. `limitado por CPU` com mais
+   de 16 ms por quadro é o encoder; `limitado por banda` com a resolução real
+   abaixo da escolhida é a rede. São problemas diferentes e a correção de um
+   não serve para o outro.
+
+## 6. Resultado esperado e parada
 
 - Qualquer falha assíncrona deve aparecer em uma faixa vermelha no topo; tire uma captura antes de fechá-la.
 - O estado deve sincronizar sozinho; não use F5 como parte do fluxo normal.

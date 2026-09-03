@@ -3,6 +3,9 @@ import {
   DEFAULT_NOISE_SUPPRESSION,
   NOISE_SUPPRESSION_MODES,
   captureConstraints,
+  createMicPipeline,
+  livePipelineCount,
+  stopMicPipeline,
   type NoiseSuppressionMode,
 } from "./noiseSuppression";
 
@@ -55,5 +58,43 @@ describe("NOISE_SUPPRESSION_MODES", () => {
 
   it("o modo padrão é um dos modos oferecidos", () => {
     expect(MODES).toContain(DEFAULT_NOISE_SUPPRESSION);
+  });
+
+  it("o padrão é o GTC RN", () => {
+    // Não é preferência de gosto: o RNNoise decide um ganho por banda de Bark,
+    // e quando erra apaga a banda inteira — é o que se ouve como voz de lata.
+    expect(DEFAULT_NOISE_SUPPRESSION).toBe("gtcrn");
+  });
+
+  it("marca o GTC RN como o recomendado na lista", () => {
+    // A etiqueta e o padrão são duas fontes da mesma decisão; divergindo, o
+    // menu recomenda uma coisa e o aplicativo roda outra.
+    const recomendado = NOISE_SUPPRESSION_MODES.find((mode) =>
+      mode.label.toLowerCase().includes("recomendado"),
+    );
+    expect(recomendado?.value).toBe(DEFAULT_NOISE_SUPPRESSION);
+  });
+});
+
+describe("uma pipeline por vez", () => {
+  it("não monta nada nos modos sem modelo", async () => {
+    // "desligada" e "padrão do sistema" publicam a track crua; quem chama
+    // conta com `null` para saber disso.
+    const track = {} as MediaStreamTrack;
+    expect(await createMicPipeline(track, "off")).toBeNull();
+    expect(await createMicPipeline(track, "browser")).toBeNull();
+  });
+
+  it("não deixa montagem viva depois de um modo sem modelo", async () => {
+    // Trocar para "desligada" tem que derrubar o worklet que estava rodando,
+    // e não só parar de usá-lo.
+    await createMicPipeline({} as MediaStreamTrack, "off");
+    expect(livePipelineCount()).toBe(0);
+  });
+
+  it("desmontar é idempotente", async () => {
+    await stopMicPipeline();
+    await stopMicPipeline();
+    expect(livePipelineCount()).toBe(0);
   });
 });

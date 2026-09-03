@@ -206,7 +206,9 @@ test("o preset escolhido chega à captura e ao encoder", async ({ browser }) => 
     expect(padrao!.settings.width).toBe(1280);
     expect(padrao!.settings.frameRate).toBe(60);
     expect(padrao!.encoding.maxFramerate).toBe(60);
-    expect(padrao!.encoding.maxBitrate).toBe(2_300_000);
+    // 2,2 Mb/s: o 720p60 já estava bom e o que se via eram picos, então a
+    // redução foi mínima de propósito — resolução e quadros intocados.
+    expect(padrao!.encoding.maxBitrate).toBe(2_200_000);
     expect(padrao!.degradationPreference).toBe("maintain-framerate");
     expect(padrao!.outbound, "há estatísticas de saída").not.toBeNull();
     expect(padrao!.outbound!.framesEncoded).toBeGreaterThan(0);
@@ -225,6 +227,26 @@ test("o preset escolhido chega à captura e ao encoder", async ({ browser }) => 
     const trocado = await screenSenderReport(pageA);
     console.log("TROCADO", JSON.stringify(trocado, null, 2));
     expect(trocado!.encoding.maxBitrate).toBe(2_500_000);
+
+    // --- 1080p60: o modo que engasgava, e o que **não** pode acontecer com ele
+    await pageA.getByLabel("Qualidade do compartilhamento").click();
+    await pageA.getByRole("menuitemradio", { name: "60 fps" }).click();
+    await expect
+      .poll(
+        async () => (await screenSenderReport(pageA))?.encoding.maxBitrate,
+        { timeout: 30_000 },
+      )
+      .toBe(3_500_000);
+    const alta = await screenSenderReport(pageA);
+    console.log("1080P60", JSON.stringify(alta, null, 2));
+    // A correção do engasgo foi no orçamento de bits. Derrubar os quadros
+    // resolveria o número da banda e estragaria justamente o que se está
+    // transmitindo — jogo, vídeo e animação são lidos pela fluidez.
+    expect(alta!.encoding.maxFramerate).toBe(60);
+    expect(alta!.settings.frameRate).toBe(60);
+    expect(alta!.settings.height).toBe(1080);
+    expect(alta!.settings.width).toBe(1920);
+    expect(alta!.degradationPreference).toBe("maintain-framerate");
 
     // --- O outro cliente recebe, e a chamada dele continua de pé ---
     const recebido = await pageB.evaluate(async () => {

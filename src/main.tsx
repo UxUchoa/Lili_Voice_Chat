@@ -45,6 +45,7 @@ import { Select, type SelectOption } from "./ui/Select";
 import {
   captureConstraints,
   createMicPipeline,
+  stopMicPipeline,
   NOISE_SUPPRESSION_MODES,
   type MicPipeline,
   type NoiseSuppressionMode,
@@ -66,7 +67,10 @@ import type {
   Server,
   ServerMember,
 } from "./domain/types";
-import { useMessages } from "./hooks/useMessages";
+import {
+  useMessages,
+  type MessageThreadController,
+} from "./hooks/useMessages";
 import { useMentionTargets } from "./hooks/useMentionTargets";
 import { groupMembers, nameColorOf } from "./domain/memberList";
 import {
@@ -3432,35 +3436,60 @@ function MessageText({
   );
 }
 
-function ChatView({
+/**
+ * A conversa: histórico, composição, e tudo o que se faz com uma mensagem.
+ *
+ * Existia duas vezes. A conversa cheia montava isto; o painel de chat da
+ * chamada tinha uma segunda implementação, curta, que renderizava
+ * `message.text` e nada mais. Quem mandava uma imagem ou um GIF durante a
+ * chamada via a mensagem aparecer sem a mídia — e ela voltava inteira ao sair
+ * da chamada, o que fazia parecer problema de sincronização.
+ *
+ * Não era. A mensagem sempre chegou, com anexo e tudo: o painel da chamada
+ * simplesmente não tinha `MessageAttachment`, nem reações, nem resposta, nem
+ * menção, nem markdown. O tempo real dos dois lados é o mesmo `useMessages`, e
+ * ele nunca esteve quebrado. O que faltava era a metade da renderização.
+ *
+ * Por isso a correção não é acrescentar anexos ao painel: é não existir um
+ * segundo painel. Este componente é a conversa, e os dois lugares onde ela
+ * aparece diferem no que os envolve — cabeçalho, largura, fixadas — e no
+ * `variant`, que muda espaçamento e esconde a faixa de boas-vindas num painel
+ * de 360px. A próxima capacidade nova nasce nos dois lugares sem ninguém
+ * precisar lembrar do segundo.
+ *
+ * A consulta vem de fora, em `thread`, e não de um `useMessages` daqui: quem
+ * envolve este componente também precisa das mensagens — para contar, para
+ * listar as fixadas — e duas montagens do mesmo hook abririam duas assinaturas
+ * de tempo real com o mesmo nome de canal no Supabase.
+ */
+function MessageThread({
   channel,
-  onCall,
-  callInProgress = false,
-  onSearch,
-  onToggleMembers,
-  membersVisible,
+  thread,
+  variant = "full",
+  visible = true,
   onProfilePreview,
 }: {
   channel: Channel;
-  onCall?: (withVideo: boolean) => void;
-  /** Já existe alguém na chamada deste canal. */
-  callInProgress?: boolean;
-  onSearch: () => void;
-  onToggleMembers: () => void;
-  membersVisible: boolean;
+  thread: MessageThreadController;
+  /** `compact` é o painel estreito de dentro da chamada. */
+  variant?: "full" | "compact";
+  /**
+   * Se esta conversa está de fato na tela.
+   *
+   * A chamada continua montada quando se navega para outro canal — é o que
+   * mantém a voz no ar — e o painel de chat dela vai junto, escondido. Sem
+   * esta distinção, ele marcaria o canal da chamada como lido enquanto a
+   * pessoa lê outro lugar, e as mensagens novas perderiam o marcador sem
+   * ninguém ter visto nada.
+   */
+  visible?: boolean;
   onProfilePreview: (userId: string) => void;
 }) {
   const profiles = useAppStore((state) => state.profiles);
   const mentionTargets = useMentionTargets(channel);
   const currentUserId = useAppStore((state) => state.currentUserId);
   const markChannelRead = useAppStore((state) => state.markChannelRead);
-  const notificationSettings = useAppStore(
-    (state) => state.notificationSettings,
-  );
   const readStates = useAppStore((state) => state.readStates);
-  const setNotificationSetting = useAppStore(
-    (state) => state.setNotificationSetting,
-  );
   const { ask: askConfirm, confirmDialog } = useConfirm();
   const messageMenu = useContextMenu();
   const [replyToId, setReplyToId] = useState<string | undefined>(),
@@ -3468,8 +3497,6 @@ function ChatView({
     // o Chromium do Electron simplesmente não implementa: no desktop o botão
     // de editar não abria nada e não dava erro nenhum.
     [editing, setEditing] = useState<{ id: string; text: string } | null>(null),
-    [pinsOpen, setPinsOpen] = useState(false),
-    [groupSettingsOpen, setGroupSettingsOpen] = useState(false),
     [sendError, setSendError] = useState(""),
     [reactingTo, setReactingTo] = useState<string | null>(null),
     [unreadBoundary, setUnreadBoundary] = useState(() => ({
@@ -3493,7 +3520,7 @@ function ChatView({
     remove,
     pin,
     react,
-  } = useMessages(channel.id);
+  } = thread;
   const { typingUsers, announceTyping } = useTyping(channel.id, currentUserId);
   const latestMessageId = messages.at(-1)?.id;
   const personFor = (id: string) =>
@@ -3528,7 +3555,10 @@ function ChatView({
   }, [channel.id, currentUserId]);
   useEffect(() => {
     const persistVisibleRead = () => {
-      if (!latestMessageId || document.visibilityState !== "visible") return;
+      // Duas visibilidades diferentes, e as duas contam: a da janela (o
+      // aplicativo em segundo plano) e a desta conversa dentro dela.
+      if (!visible || !latestMessageId || document.visibilityState !== "visible")
+        return;
       markChannelRead(channel.id, latestMessageId);
       void markOnlineChannelRead(channel.id, latestMessageId).catch((caught) =>
         reportRuntimeError("Falha ao persistir estado de leitura", caught),
@@ -3538,7 +3568,7 @@ function ChatView({
     document.addEventListener("visibilitychange", persistVisibleRead);
     return () =>
       document.removeEventListener("visibilitychange", persistVisibleRead);
-  }, [channel.id, latestMessageId, markChannelRead]);
+  }, [channel.id, latestMessageId, markChannelRead, visible]);
   const firstUnreadMessageId =
     unreadBoundary.channelId === channel.id
       ? messages.find(
@@ -3633,36 +3663,6 @@ function ChatView({
         error instanceof Error ? error.message : "Falha ao abrir anexo.",
       );
     }
-  };
-  const pinnedMessages = messages.filter((message) => message.pinned);
-  const channelNotification = notificationSettings.find(
-      (item) =>
-        item.userId === currentUserId &&
-        item.scopeType === "CHANNEL" &&
-        item.scopeId === channel.id,
-    ),
-    notificationMode = channelNotification?.mode ?? "ALL";
-  const cycleNotifications = () => {
-    const mode =
-      notificationMode === "ALL"
-        ? "MENTIONS"
-        : notificationMode === "MENTIONS"
-          ? "NONE"
-          : "ALL";
-    setNotificationSetting({
-      scopeType: "CHANNEL",
-      scopeId: channel.id,
-      mode,
-      suppressEveryone: channelNotification?.suppressEveryone ?? false,
-      suppressRoles: channelNotification?.suppressRoles ?? false,
-    });
-    if (
-      mode === "ALL" &&
-      !window.janjaDesktop &&
-      "Notification" in window &&
-      Notification.permission === "default"
-    )
-      void Notification.requestPermission();
   };
   /**
    * Abre o campo de reação. A validação de verdade mora em `reactionError`,
@@ -3846,7 +3846,7 @@ function ChatView({
     );
   };
   return (
-    <main className="conversation">
+    <>
       {confirmDialog}
       {messageMenu.menu && (
         <ContextMenu state={messageMenu.menu} onClose={messageMenu.close} />
@@ -3857,158 +3857,36 @@ function ChatView({
           onClose={() => setReactingTo(null)}
         />
       )}
-      <div className="conversation-header">
-        <div className="conversation-title">
-          {channel.kind === "gdm" && channel.iconUrl ? (
-            <img
-              className="conversation-channel-icon"
-              src={channel.iconUrl}
-              alt=""
-            />
-          ) : (
-            <span className="channel-symbol">
-              {channel.kind === "dm" ? (
-                "@"
-              ) : channel.kind === "gdm" ? (
-                <IconUsers size={16} />
-              ) : (
-                "#"
-              )}
-            </span>
-          )}
-          <div>
-            <h1>{channel.name}</h1>
-            <span>{messages.length} mensagens sincronizadas</span>
-          </div>
-        </div>
-        <div className="conversation-tools">
-          {onCall && (
-            <>
-              <button
-                className={callInProgress ? "call-live" : ""}
-                title={
-                  callInProgress
-                    ? "Entrar na chamada em andamento"
-                    : "Iniciar chamada de voz"
-                }
-                aria-label={
-                  callInProgress
-                    ? "Entrar na chamada em andamento"
-                    : "Iniciar chamada de voz"
-                }
-                onClick={() => onCall(false)}
-              >
-                <IconPhone size={20} />
-              </button>
-              <button
-                className={callInProgress ? "call-live" : ""}
-                title={
-                  callInProgress
-                    ? "Entrar na chamada com vídeo"
-                    : "Iniciar chamada de vídeo"
-                }
-                aria-label={
-                  callInProgress
-                    ? "Entrar na chamada com vídeo"
-                    : "Iniciar chamada de vídeo"
-                }
-                onClick={() => onCall(true)}
-              >
-                <IconVideo size={20} />
-              </button>
-            </>
-          )}
-          {channel.kind === "gdm" && (
-            <button
-              title="Configurar grupo"
-              aria-label="Configurar grupo"
-              onClick={() => setGroupSettingsOpen(true)}
-            >
-              <IconSettings size={20} />
-            </button>
-          )}
-          <button
-            title={`Notificações: ${notificationMode.toLowerCase()}`}
-            aria-label={`Notificações do canal: ${notificationMode}`}
-            className={notificationMode !== "ALL" ? "active" : ""}
-            onClick={cycleNotifications}
-          >
-            {notificationMode === "NONE" ? (
-              <IconBellOff size={20} />
-            ) : (
-              <IconBell size={20} />
-            )}
-          </button>
-          <button
-            title="Mensagens fixadas"
-            aria-label="Mensagens fixadas"
-            className={pinsOpen ? "active" : ""}
-            onClick={() => setPinsOpen(!pinsOpen)}
-          >
-            <IconPin size={20} />
-          </button>
-          <button
-            title="Membros"
-            aria-label="Alternar lista de membros"
-            aria-pressed={membersVisible}
-            className={membersVisible ? "active" : ""}
-            onClick={onToggleMembers}
-          >
-            <IconUsers size={20} />
-          </button>
-          <button title="Pesquisar" aria-label="Pesquisar" onClick={onSearch}>
-            <IconSearch size={20} />
-          </button>
-        </div>
-      </div>
-      {pinsOpen && (
-        <aside className="pins-panel">
-          <div>
-            <b>Mensagens fixadas</b>
-            <button
-              aria-label="Fechar fixadas"
-              onClick={() => setPinsOpen(false)}
-            >
-              <IconX size={18} />
-            </button>
-          </div>
-          {pinnedMessages.map((message) => (
-            <button
-              key={message.id}
-              onClick={() =>
-                document
-                  .getElementById(`message-${message.id}`)
-                  ?.scrollIntoView({ behavior: "smooth", block: "center" })
-              }
-            >
-              <b>{personFor(message.authorId).displayName}</b>
-              <span>
-                {message.text || `${message.attachments.length} anexo(s)`}
-              </span>
-            </button>
-          ))}
-          {pinnedMessages.length === 0 && <p>Nenhuma mensagem fixada.</p>}
-        </aside>
-      )}
       <div
-        className="message-list"
+        className={`message-list ${variant === "compact" ? "message-list-compact" : ""}`}
         ref={listRef}
         onScroll={rememberScrollAnchor}
       >
-        <div className="welcome-message">
-          <div className="welcome-icon">
-            {channel.kind === "dm" ? "@" : "#"}
+        {/* Num painel de 360px, dentro de uma chamada em andamento, a faixa
+            de boas-vindas empurraria a conversa para fora da tela para dizer
+            algo que quem já está na chamada acabou de ler. */}
+        {variant === "full" && (
+          <div className="welcome-message">
+            <div className="welcome-icon">
+              {channel.kind === "dm" ? "@" : "#"}
+            </div>
+            <h2>
+              {channel.kind === "dm"
+                ? `Conversa com ${channel.name}`
+                : `Bem-vindo ao #${channel.name}!`}
+            </h2>
+            <p>
+              Só quem participa desta conversa tem acesso às mensagens.
+            </p>
           </div>
-          <h2>
-            {channel.kind === "dm"
-              ? `Conversa com ${channel.name}`
-              : `Bem-vindo ao #${channel.name}!`}
-          </h2>
-          <p>
-            Só quem participa desta conversa tem acesso às mensagens.
-          </p>
-        </div>
+        )}
         {isLoading && <p className="loading-copy">Carregando mensagens…</p>}
+        {/* A conversa cheia tem a faixa de boas-vindas ocupando este lugar; o
+            painel da chamada não, e sem isto uma conversa nova ficava
+            completamente em branco acima do compositor. */}
+        {variant === "compact" && !isLoading && messages.length === 0 && (
+          <p className="empty-copy">Inicie a conversa desta sala.</p>
+        )}
         {messagesFailed && (
           <p className="composer-error" role="alert">
             Não foi possível sincronizar as mensagens
@@ -4332,6 +4210,221 @@ function ChatView({
           }}
         />
       )}
+    </>
+  );
+}
+
+function ChatView({
+  channel,
+  onCall,
+  callInProgress = false,
+  onSearch,
+  onToggleMembers,
+  membersVisible,
+  onProfilePreview,
+}: {
+  channel: Channel;
+  onCall?: (withVideo: boolean) => void;
+  /** Já existe alguém na chamada deste canal. */
+  callInProgress?: boolean;
+  onSearch: () => void;
+  onToggleMembers: () => void;
+  membersVisible: boolean;
+  onProfilePreview: (userId: string) => void;
+}) {
+  const profiles = useAppStore((state) => state.profiles);
+  const currentUserId = useAppStore((state) => state.currentUserId);
+  const notificationSettings = useAppStore(
+    (state) => state.notificationSettings,
+  );
+  const setNotificationSetting = useAppStore(
+    (state) => state.setNotificationSetting,
+  );
+  const [pinsOpen, setPinsOpen] = useState(false),
+    [groupSettingsOpen, setGroupSettingsOpen] = useState(false);
+  /**
+   * A consulta nasce aqui e desce para o `MessageThread`.
+   *
+   * O cabeçalho conta as mensagens e o painel de fixadas as lista, então este
+   * componente precisa delas de qualquer jeito. Montar `useMessages` dos dois
+   * lados abriria duas assinaturas de tempo real com o mesmo nome de canal no
+   * Supabase — o segundo `subscribe` no mesmo tópico é justamente o tipo de
+   * coisa que funciona até a hora em que não funciona.
+   */
+  const thread = useMessages(channel.id);
+  const messages = thread.data ?? [];
+  const personFor = (id: string) =>
+    profiles.find((profile) => profile.id === id) ?? unknownPerson(id);
+  const pinnedMessages = messages.filter((message) => message.pinned);
+  const channelNotification = notificationSettings.find(
+      (item) =>
+        item.userId === currentUserId &&
+        item.scopeType === "CHANNEL" &&
+        item.scopeId === channel.id,
+    ),
+    notificationMode = channelNotification?.mode ?? "ALL";
+  const cycleNotifications = () => {
+    const mode =
+      notificationMode === "ALL"
+        ? "MENTIONS"
+        : notificationMode === "MENTIONS"
+          ? "NONE"
+          : "ALL";
+    setNotificationSetting({
+      scopeType: "CHANNEL",
+      scopeId: channel.id,
+      mode,
+      suppressEveryone: channelNotification?.suppressEveryone ?? false,
+      suppressRoles: channelNotification?.suppressRoles ?? false,
+    });
+    if (
+      mode === "ALL" &&
+      !window.janjaDesktop &&
+      "Notification" in window &&
+      Notification.permission === "default"
+    )
+      void Notification.requestPermission();
+  };
+  return (
+    <main className="conversation">
+      <div className="conversation-header">
+        <div className="conversation-title">
+          {channel.kind === "gdm" && channel.iconUrl ? (
+            <img
+              className="conversation-channel-icon"
+              src={channel.iconUrl}
+              alt=""
+            />
+          ) : (
+            <span className="channel-symbol">
+              {channel.kind === "dm" ? (
+                "@"
+              ) : channel.kind === "gdm" ? (
+                <IconUsers size={16} />
+              ) : (
+                "#"
+              )}
+            </span>
+          )}
+          <div>
+            <h1>{channel.name}</h1>
+            <span>{messages.length} mensagens sincronizadas</span>
+          </div>
+        </div>
+        <div className="conversation-tools">
+          {onCall && (
+            <>
+              <button
+                className={callInProgress ? "call-live" : ""}
+                title={
+                  callInProgress
+                    ? "Entrar na chamada em andamento"
+                    : "Iniciar chamada de voz"
+                }
+                aria-label={
+                  callInProgress
+                    ? "Entrar na chamada em andamento"
+                    : "Iniciar chamada de voz"
+                }
+                onClick={() => onCall(false)}
+              >
+                <IconPhone size={20} />
+              </button>
+              <button
+                className={callInProgress ? "call-live" : ""}
+                title={
+                  callInProgress
+                    ? "Entrar na chamada com vídeo"
+                    : "Iniciar chamada de vídeo"
+                }
+                aria-label={
+                  callInProgress
+                    ? "Entrar na chamada com vídeo"
+                    : "Iniciar chamada de vídeo"
+                }
+                onClick={() => onCall(true)}
+              >
+                <IconVideo size={20} />
+              </button>
+            </>
+          )}
+          {channel.kind === "gdm" && (
+            <button
+              title="Configurar grupo"
+              aria-label="Configurar grupo"
+              onClick={() => setGroupSettingsOpen(true)}
+            >
+              <IconSettings size={20} />
+            </button>
+          )}
+          <button
+            title={`Notificações: ${notificationMode.toLowerCase()}`}
+            aria-label={`Notificações do canal: ${notificationMode}`}
+            className={notificationMode !== "ALL" ? "active" : ""}
+            onClick={cycleNotifications}
+          >
+            {notificationMode === "NONE" ? (
+              <IconBellOff size={20} />
+            ) : (
+              <IconBell size={20} />
+            )}
+          </button>
+          <button
+            title="Mensagens fixadas"
+            aria-label="Mensagens fixadas"
+            className={pinsOpen ? "active" : ""}
+            onClick={() => setPinsOpen(!pinsOpen)}
+          >
+            <IconPin size={20} />
+          </button>
+          <button
+            title="Membros"
+            aria-label="Alternar lista de membros"
+            aria-pressed={membersVisible}
+            className={membersVisible ? "active" : ""}
+            onClick={onToggleMembers}
+          >
+            <IconUsers size={20} />
+          </button>
+          <button title="Pesquisar" aria-label="Pesquisar" onClick={onSearch}>
+            <IconSearch size={20} />
+          </button>
+        </div>
+      </div>
+      {pinsOpen && (
+        <aside className="pins-panel">
+          <div>
+            <b>Mensagens fixadas</b>
+            <button
+              aria-label="Fechar fixadas"
+              onClick={() => setPinsOpen(false)}
+            >
+              <IconX size={18} />
+            </button>
+          </div>
+          {pinnedMessages.map((message) => (
+            <button
+              key={message.id}
+              onClick={() =>
+                document
+                  .getElementById(`message-${message.id}`)
+                  ?.scrollIntoView({ behavior: "smooth", block: "center" })
+              }
+            >
+              <b>{personFor(message.authorId).displayName}</b>
+              <span>
+                {message.text || `${message.attachments.length} anexo(s)`}
+              </span>
+            </button>
+          ))}
+          {pinnedMessages.length === 0 && <p>Nenhuma mensagem fixada.</p>}
+        </aside>
+      )}
+      <MessageThread
+        channel={channel}
+        thread={thread}
+        onProfilePreview={onProfilePreview}
+      />
       {groupSettingsOpen && (
         <GroupDmSettingsPanel
           channel={channel}
@@ -4341,7 +4434,6 @@ function ChatView({
     </main>
   );
 }
-
 function GroupDmSettingsPanel({
   channel,
   onClose,
@@ -4636,9 +4728,12 @@ function CallView({
   startWithVideo = false,
   hidden = false,
   onControls,
+  onProfilePreview,
 }: {
   channel: Channel;
   onLeave: () => void;
+  /** Abre o perfil de quem escreveu, a partir do chat da chamada. */
+  onProfilePreview: (userId: string) => void;
   startWithVideo?: boolean;
   /**
    * Publica estado e controles da chamada para a barra lateral.
@@ -4717,17 +4812,51 @@ function CallView({
     setLocalTrackMuted,
     connectionState,
     connectionError,
+    shareStats,
     leaveRoom,
   } = useRtc(channel.id);
   const stopStream = (stream: MediaStream | null) =>
     stream?.getTracks().forEach((track) => track.stop());
+  /**
+   * Uma operação de mídia local por vez.
+   *
+   * Ligar o microfone significa `getUserMedia`, baixar o WebAssembly do
+   * supressor e subir o worklet — centenas de milissegundos em que o botão
+   * continua mostrando "silenciado", porque `micMuted` só muda no fim. Quem
+   * clica de novo nesse intervalo — e clicar de novo é o reflexo certo diante
+   * de um botão que não reagiu — disparava uma segunda captura inteira.
+   *
+   * O resultado eram duas tracks do mesmo microfone publicadas ao mesmo tempo,
+   * defasadas pelo tanto que a segunda demorou a subir. Somadas no outro lado,
+   * davam as duas queixas de uma vez: a voz repetida alguns milissegundos
+   * depois e o timbre metálico — sinal mais cópia atrasada de si mesmo é um
+   * filtro pente.
+   *
+   * Mesmo padrão da `publishQueueRef` em `useLiveKitRtc`, e pelo mesmo motivo:
+   * lá era a reconexão competindo com o toggle, aqui é o clique competindo com
+   * ele mesmo. Uma falha não trava a fila — o `then(run, run)` segue para a
+   * próxima operação de qualquer jeito.
+   */
+  const mediaQueueRef = useRef<Promise<unknown>>(Promise.resolve());
+  const queueMedia = <T,>(run: () => Promise<T>): Promise<T> => {
+    const next = mediaQueueRef.current.then(run, run);
+    mediaQueueRef.current = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    return next;
+  };
   /** Fecha o worklet e libera o microfone físico. */
   const stopMicSource = async () => {
     const current = micSourceRef.current;
-    if (!current) return;
     micSourceRef.current = null;
-    await current.pipeline?.stop();
-    current.raw.stop();
+    await current?.pipeline?.stop();
+    // Rede de segurança da terceira camada: se por qualquer caminho tiver
+    // sobrado um contexto de áudio sem dono, ele morre aqui. Sem isto um
+    // AudioContext órfão continua rodando o worklet — CPU queimando e, se a
+    // track dele ainda estiver publicada, a voz duplicada de volta.
+    await stopMicPipeline();
+    current?.raw.stop();
   };
   const errorName = (error: unknown) =>
     error instanceof DOMException ? error.name : "";
@@ -4806,6 +4935,28 @@ function CallView({
         }
       }
       if (!localStreamRef.current) localStreamRef.current = new MediaStream();
+      /**
+       * O stream local carrega no máximo uma track de cada tipo.
+       *
+       * Era `addTrack` direto, e `addTrack` acumula: cada caminho que capturava
+       * de novo — trocar de dispositivo, trocar o supressor, trocar a
+       * resolução, um clique repetido — dependia de ter lembrado de remover a
+       * anterior antes. Bastava um caminho esquecer para o outro lado receber
+       * duas cópias do mesmo microfone.
+       *
+       * A regra passa a valer aqui, no único lugar por onde toda captura passa,
+       * em vez de ser repetida em cada um deles. Quem chama continua livre para
+       * parar tracks antes, e para quem já foi parada isto é inofensivo.
+       */
+      const stale = (
+        kind === "audio"
+          ? localStreamRef.current.getAudioTracks()
+          : localStreamRef.current.getVideoTracks()
+      ).filter((track) => !published.includes(track));
+      stale.forEach((track) => {
+        localStreamRef.current?.removeTrack(track);
+        track.stop();
+      });
       published.forEach((track) => localStreamRef.current?.addTrack(track));
       setMediaRevision((revision) => revision + 1);
       const videoSettings =
@@ -4840,53 +4991,52 @@ function CallView({
       return null;
     }
   };
-  const replaceMediaDevice = async (
-    kind: "audio" | "video",
-    deviceId: string,
-  ) => {
-    const tracks =
-      kind === "audio"
-        ? localStreamRef.current?.getAudioTracks()
-        : localStreamRef.current?.getVideoTracks();
-    tracks?.forEach((track) => {
-      localStreamRef.current?.removeTrack(track);
-      track.stop();
+  const replaceMediaDevice = (kind: "audio" | "video", deviceId: string) =>
+    queueMedia(async () => {
+      const tracks =
+        kind === "audio"
+          ? localStreamRef.current?.getAudioTracks()
+          : localStreamRef.current?.getVideoTracks();
+      tracks?.forEach((track) => {
+        localStreamRef.current?.removeTrack(track);
+        track.stop();
+      });
+      if (kind === "audio") await stopMicSource();
+      if (kind === "audio") setAudioInputId(deviceId);
+      else setVideoInputId(deviceId);
+      // A câmera desligada não deve ser reacendida só por trocar o dispositivo
+      // preferido; a nova escolha vale na próxima ativação.
+      if (kind === "video" && !video) {
+        setMediaRevision((revision) => revision + 1);
+        return;
+      }
+      const track = await getMediaDevice(kind, deviceId);
+      if (track) {
+        if (kind === "audio") track.enabled = !micMuted;
+        setMediaRevision((revision) => revision + 1);
+      }
     });
-    if (kind === "audio") await stopMicSource();
-    if (kind === "audio") setAudioInputId(deviceId);
-    else setVideoInputId(deviceId);
-    // A câmera desligada não deve ser reacendida só por trocar o dispositivo
-    // preferido; a nova escolha vale na próxima ativação.
-    if (kind === "video" && !video) {
-      setMediaRevision((revision) => revision + 1);
-      return;
-    }
-    const track = await getMediaDevice(kind, deviceId);
-    if (track) {
-      if (kind === "audio") track.enabled = !micMuted;
-      setMediaRevision((revision) => revision + 1);
-    }
-  };
-  const toggleMic = async () => {
-    const track = localStreamRef.current?.getAudioTracks()[0];
-    if (track) {
-      const nextMuted = !micMuted;
-      track.enabled = !nextMuted;
-      setMicMuted(nextMuted);
-      // Sinaliza o mute pela publicação LiveKit para o outro lado exibir o
-      // indicador correto (track.enabled sozinho não gera evento remoto).
-      void setLocalTrackMuted("mic", nextMuted).catch(() => {});
-      setMediaNotice(
-        nextMuted ? "Microfone silenciado." : "Microfone ativado.",
-      );
-      if (!nextMuted && deafened) setDeafened(false);
-      return;
-    }
-    if (await getMediaDevice("audio")) {
-      setMicMuted(false);
-      if (deafened) setDeafened(false);
-    }
-  };
+  const toggleMic = () =>
+    queueMedia(async () => {
+      const track = localStreamRef.current?.getAudioTracks()[0];
+      if (track) {
+        const nextMuted = !micMuted;
+        track.enabled = !nextMuted;
+        setMicMuted(nextMuted);
+        // Sinaliza o mute pela publicação LiveKit para o outro lado exibir o
+        // indicador correto (track.enabled sozinho não gera evento remoto).
+        void setLocalTrackMuted("mic", nextMuted).catch(() => {});
+        setMediaNotice(
+          nextMuted ? "Microfone silenciado." : "Microfone ativado.",
+        );
+        if (!nextMuted && deafened) setDeafened(false);
+        return;
+      }
+      if (await getMediaDevice("audio")) {
+        setMicMuted(false);
+        if (deafened) setDeafened(false);
+      }
+    });
   const toggleDeafen = () => {
     const nextDeafened = !deafened;
     setDeafened(nextDeafened);
@@ -4898,22 +5048,23 @@ function CallView({
       void setLocalTrackMuted("mic", true).catch(() => {});
     }
   };
-  const toggleVideo = async () => {
-    const tracks = localStreamRef.current?.getVideoTracks() ?? [];
-    if (video && tracks.length) {
-      // Desligar a câmera libera o dispositivo e despublica a track; o outro
-      // lado volta a exibir o avatar em vez de um quadro congelado.
-      tracks.forEach((track) => {
-        localStreamRef.current?.removeTrack(track);
-        track.stop();
-      });
-      setVideo(false);
-      setMediaRevision((revision) => revision + 1);
-      setMediaNotice("Câmera desativada.");
-      return;
-    }
-    if (await getMediaDevice("video")) setVideo(true);
-  };
+  const toggleVideo = () =>
+    queueMedia(async () => {
+      const tracks = localStreamRef.current?.getVideoTracks() ?? [];
+      if (video && tracks.length) {
+        // Desligar a câmera libera o dispositivo e despublica a track; o outro
+        // lado volta a exibir o avatar em vez de um quadro congelado.
+        tracks.forEach((track) => {
+          localStreamRef.current?.removeTrack(track);
+          track.stop();
+        });
+        setVideo(false);
+        setMediaRevision((revision) => revision + 1);
+        setMediaNotice("Câmera desativada.");
+        return;
+      }
+      if (await getMediaDevice("video")) setVideo(true);
+    });
   const stopSharing = () => {
     stopStream(displayStreamRef.current);
     displayStreamRef.current = null;
@@ -4921,27 +5072,28 @@ function CallView({
     setSharing(false);
     setMediaNotice("Compartilhamento encerrado.");
   };
-  const applyCameraQuality = async (resolution: CameraResolution) => {
-    setCameraQualityState(resolution);
-    localStorage.setItem("janja.camera.quality", String(resolution));
-    setCameraQuality(resolution);
-    if (!video) return;
-    // A resolução é fixada no momento da captura: para valer agora, a track
-    // precisa ser recriada e republicada com o novo orçamento de bits.
-    const tracks = localStreamRef.current?.getVideoTracks() ?? [];
-    tracks.forEach((track) => {
-      localStreamRef.current?.removeTrack(track);
-      track.stop();
+  const applyCameraQuality = (resolution: CameraResolution) =>
+    queueMedia(async () => {
+      setCameraQualityState(resolution);
+      localStorage.setItem("janja.camera.quality", String(resolution));
+      setCameraQuality(resolution);
+      if (!video) return;
+      // A resolução é fixada no momento da captura: para valer agora, a track
+      // precisa ser recriada e republicada com o novo orçamento de bits.
+      const tracks = localStreamRef.current?.getVideoTracks() ?? [];
+      tracks.forEach((track) => {
+        localStreamRef.current?.removeTrack(track);
+        track.stop();
+      });
+      setMediaRevision((revision) => revision + 1);
+      const track = await getMediaDevice("video", videoInputId, resolution);
+      if (track) {
+        const settings = track.getSettings();
+        setMediaNotice(
+          `Câmera em ${settings.width ?? "?"}×${settings.height ?? "?"}.`,
+        );
+      }
     });
-    setMediaRevision((revision) => revision + 1);
-    const track = await getMediaDevice("video", videoInputId, resolution);
-    if (track) {
-      const settings = track.getSettings();
-      setMediaNotice(
-        `Câmera em ${settings.width ?? "?"}×${settings.height ?? "?"}.`,
-      );
-    }
-  };
   const toggleSharing = () => {
     setOpenMenu(null);
     if (sharing) return stopSharing();
@@ -5003,13 +5155,16 @@ function CallView({
         },
         selfBrowserSurface: "exclude",
         surfaceSwitching: "include",
-        // `exclude` sempre, mesmo com o áudio ligado. É o que separa o som da
-        // **superfície escolhida** do som do computador inteiro: escolhendo
-        // uma aba, o navegador entrega o áudio daquela aba e de mais nada;
-        // escolhendo uma janela ou um monitor, não entrega áudio algum. Com
-        // `include`, compartilhar um jogo levava junto Spotify, Discord e
-        // qualquer notificação — e a pessoa não tinha como saber.
-        systemAudio: "exclude",
+        /**
+         * Segue a escolha da pessoa, e o padrão dela agora é levar o som.
+         *
+         * O que muda entre os dois valores é só o monitor e a janela: uma aba
+         * entrega o áudio dela mesma nos dois casos, que é o caminho preferido
+         * — som da fonte escolhida e de mais nada. `exclude` fixo era uma
+         * decisão defensável enquanto o áudio vinha desligado; com ele ligado,
+         * significaria oferecer uma opção e não cumprir.
+         */
+        systemAudio: withSystemAudio ? "include" : "exclude",
       } as DisplayMediaStreamOptions);
     /**
      * Captura pelo id do desktopCapturer, com o áudio do sistema junto.
@@ -5079,7 +5234,22 @@ function CallView({
         // Cobre também o "parar de compartilhar" do próprio navegador.
         ?.addEventListener("ended", stopSharing, { once: true });
       setSharing(true);
-      const audioShared = stream.getAudioTracks().length > 0;
+      /**
+       * O aviso conta o que existe, não o que foi pedido.
+       *
+       * A caixa marcada não é prova de nada: a fonte pode não entregar áudio,
+       * a placa pode não ter loopback, o driver pode recusar. Quem compartilha
+       * é a única pessoa que não ouve o resultado, então a única chance de
+       * descobrir que foi mudo é aqui.
+       */
+      const audioTracks = stream.getAudioTracks();
+      // `music` diz ao Opus para não tratar isto como voz. O padrão assume
+      // fala e corta a banda alta — num jogo ou num vídeo, é o que chega do
+      // outro lado como som abafado e sem graves.
+      audioTracks.forEach((track) => {
+        track.contentHint = "music";
+      });
+      const audioShared = audioTracks.length > 0;
       setMediaNotice(
         `Compartilhando ${selection.sourceName ?? "sua tela"} em ${preset.label}` +
           (audioShared
@@ -5087,7 +5257,7 @@ function CallView({
               ? " · com o som do computador inteiro."
               : " · com o som da aba escolhida."
             : withSystemAudio
-              ? " · sem áudio (esta fonte não entrega som)."
+              ? " · sem áudio: esta fonte não entrega som. Uma aba do navegador entrega."
               : " · sem áudio."),
       );
     } catch (error) {
@@ -5101,9 +5271,14 @@ function CallView({
   const leaveCall = async () => {
     try {
       await leaveRoom();
-      stopStream(localStreamRef.current);
-      stopStream(displayStreamRef.current);
-      await stopMicSource();
+      // Pela fila: uma captura ainda em voo terminaria **depois** desta
+      // limpeza e reabriria o microfone numa chamada que já acabou — luz da
+      // webcam acesa e dispositivo preso até fechar o aplicativo.
+      await queueMedia(async () => {
+        stopStream(localStreamRef.current);
+        stopStream(displayStreamRef.current);
+        await stopMicSource();
+      });
       onLeave();
     } catch (caught) {
       setMediaNotice(
@@ -5618,6 +5793,48 @@ function CallView({
               <dt>Estado</dt>
               <dd>{connectionState}</dd>
             </div>
+            {/* Só aparece com uma tela no ar, e é a medida real: o que o
+                encoder está entregando, não o que o menu pediu. Um 1080p60
+                que virou 1280×720 por falta de banda é indistinguível de um
+                720p60 sem este par escrito aqui. */}
+            {shareStats && (
+              <>
+                <div>
+                  <dt>Transmissão</dt>
+                  <dd>
+                    {shareStats.width}×{shareStats.height} · {shareStats.fps}{" "}
+                    fps · {shareStats.kbps} kb/s · {shareStats.codec}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Limitada por</dt>
+                  <dd>
+                    {shareStats.limitedBy === "none"
+                      ? "nada"
+                      : shareStats.limitedBy === "cpu"
+                        ? "CPU do encoder"
+                        : shareStats.limitedBy === "bandwidth"
+                          ? "banda disponível"
+                          : shareStats.limitedBy}
+                    {shareStats.encodeMsPerFrame !== null
+                      ? ` · ${shareStats.encodeMsPerFrame} ms/quadro`
+                      : ""}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Rede</dt>
+                  <dd>
+                    {shareStats.rttMs !== null ? `RTT ${shareStats.rttMs} ms` : "RTT —"}
+                    {shareStats.jitterMs !== null
+                      ? ` · jitter ${shareStats.jitterMs} ms`
+                      : ""}
+                    {shareStats.lostPercent !== null
+                      ? ` · ${shareStats.lostPercent}% perdidos`
+                      : ""}
+                  </dd>
+                </div>
+              </>
+            )}
           </dl>
           <div className="call-privacy-participants">
             <b>Participantes verificados na sala</b>
@@ -5669,7 +5886,12 @@ function CallView({
         )}
       </div>
       {chatOpen && (
-        <VoiceTextPanel channel={channel} onClose={() => setChatOpen(false)} />
+        <VoiceTextPanel
+          channel={channel}
+          onClose={() => setChatOpen(false)}
+          visible={!hidden}
+          onProfilePreview={onProfilePreview}
+        />
       )}
       <div className="call-controls">
         <div className="control-cluster">
@@ -5972,20 +6194,31 @@ function CallView({
   );
 }
 
+/**
+ * O chat da conversa, aberto por cima da chamada.
+ *
+ * O que ele acrescenta é a moldura: um cabeçalho com o nome do canal, o botão
+ * de fechar e uma coluna estreita à direita do palco. A conversa em si é o
+ * mesmo `MessageThread` da tela cheia.
+ *
+ * Antes era uma segunda implementação — avatar, nome e `message.text`. Quem
+ * mandava um GIF durante a chamada via a linha aparecer vazia e a mídia
+ * voltar sozinha ao sair da chamada. Nada estava sendo perdido: metade do
+ * renderizador é que não existia deste lado.
+ */
 function VoiceTextPanel({
   channel,
   onClose,
+  visible,
+  onProfilePreview,
 }: {
   channel: Channel;
   onClose: () => void;
+  /** A chamada está na tela, e não apenas montada em segundo plano. */
+  visible: boolean;
+  onProfilePreview: (userId: string) => void;
 }) {
-  const mentionTargets = useMentionTargets(channel);
-  const profiles = useAppStore((state) => state.profiles),
-    currentUserId = useAppStore((state) => state.currentUserId),
-    { data: messages = [], send } = useMessages(channel.id),
-    { typingUsers, announceTyping } = useTyping(channel.id, currentUserId);
-  const personFor = (id: string) =>
-    profiles.find((profile) => profile.id === id) ?? unknownPerson(id);
+  const thread = useMessages(channel.id);
   return (
     <aside className="voice-text-panel">
       <header>
@@ -5997,35 +6230,12 @@ function VoiceTextPanel({
           <IconX size={18} />
         </button>
       </header>
-      <div className="voice-message-list">
-        {messages.slice(-50).map((message) => {
-          const author = personFor(message.authorId);
-          return (
-            <article key={message.id}>
-              <Avatar person={author} size="sm" />
-              <div>
-                <b>{author.displayName}</b>
-                <p>{message.text}</p>
-              </div>
-            </article>
-          );
-        })}
-        {messages.length === 0 && (
-          <p className="empty-copy">Inicie a conversa desta sala.</p>
-        )}
-      </div>
-      {typingUsers.length > 0 && (
-        <div className="typing-indicator">Alguém está digitando…</div>
-      )}
-      <Composer
-        channelId={channel.id}
-        channelName={channel.name}
-        mentionTargets={mentionTargets}
-        onTyping={announceTyping}
-        disabled={send.isPending}
-        onSend={(text, files, spoilerNames) =>
-          send.mutate({ authorId: currentUserId, text, files, spoilerNames })
-        }
+      <MessageThread
+        channel={channel}
+        thread={thread}
+        variant="compact"
+        visible={visible}
+        onProfilePreview={onProfilePreview}
       />
     </aside>
   );
@@ -10049,12 +10259,19 @@ function ProfilePanel({
                   setVoice({ shareSystemAudio: event.target.checked })
                 }
               />
-              Compartilhar o áudio do computador junto com a tela
+              Levar o áudio junto ao compartilhar a tela
             </label>
             <small>
-              O filtro roda nesta máquina, em WebAssembly: nenhum áudio é
-              enviado a serviço nenhum para ser processado. Trocar o modo
-              durante uma chamada recaptura o microfone.
+              Vem ligado: um jogo ou um vídeo compartilhado sem som chega pela
+              metade, e quem compartilha é justamente quem não percebe. No
+              Windows o que o sistema entrega é o som da saída inteira — vai
+              junto música e notificação. Compartilhando uma aba do navegador,
+              vai só o som daquela aba.
+            </small>
+            <small>
+              A supressão de ruído roda nesta máquina, em WebAssembly: nenhum
+              áudio é enviado a serviço nenhum para ser processado. Trocar o
+              modo durante uma chamada recaptura o microfone.
             </small>
           </div>
         </details>
@@ -10165,15 +10382,17 @@ function ProfilePanel({
                   actions={
                     updateState.status === "available" ? (
                       <button
+                        className="primary-button"
                         onClick={() => {
                           window.janjaDesktop?.downloadUpdate();
                           setUpdateNotesOpen(false);
                         }}
                       >
-                        Baixar agora
+                        Baixar e instalar
                       </button>
                     ) : updateState.status === "ready" ? (
                       <button
+                        className="primary-button"
                         onClick={() => window.janjaDesktop?.installUpdate()}
                       >
                         Reiniciar e instalar
@@ -11270,6 +11489,7 @@ function App({
             startWithVideo={activeCall.withVideo}
             hidden={activeChannel?.id !== activeCall.channelId}
             onControls={setVoiceControls}
+            onProfilePreview={setPreviewUserId}
             onLeave={() => void leaveCall()}
           />
         )}
@@ -12199,15 +12419,19 @@ function DesktopUpdateNotice() {
           actions={
             updateState.status === "available" ? (
               <button
+                className="primary-button"
                 onClick={() => {
                   window.janjaDesktop?.downloadUpdate();
                   setNotesOpen(false);
                 }}
               >
-                Baixar agora
+                Baixar e instalar
               </button>
             ) : updateState.status === "ready" ? (
-              <button onClick={() => window.janjaDesktop?.installUpdate()}>
+              <button
+                className="primary-button"
+                onClick={() => window.janjaDesktop?.installUpdate()}
+              >
                 Reiniciar e instalar
               </button>
             ) : undefined
@@ -12216,9 +12440,20 @@ function DesktopUpdateNotice() {
       )}
     </>
   );
-  /** O "o que mudou" só aparece quando a release trouxe notas. */
+  /**
+   * O "o que mudou" só aparece quando a release trouxe notas.
+   *
+   * `outline-button` e não um `<button>` cru: o reset desta interface deixa
+   * todo botão transparente, então as ações secundárias do aviso eram texto
+   * clicável ao lado de um botão vermelho. Quem lê um aviso de atualização lê
+   * o botão preenchido e ignora o resto — "Ver o que mudou" e "Depois"
+   * existiam e não eram encontrados. Continuam secundários de propósito: só
+   * uma das três ações é a recomendada.
+   */
   const notesButton = updateState?.notes ? (
-    <button onClick={() => setNotesOpen(true)}>Ver o que mudou</button>
+    <button className="outline-button" onClick={() => setNotesOpen(true)}>
+      Ver o que mudou
+    </button>
   ) : null;
 
   if (updateState?.status === "available" && postponed !== updateState.version)
@@ -12230,16 +12465,20 @@ function DesktopUpdateNotice() {
             {updateState.notes ? "" : " Baixe quando quiser."}
           </span>
           <div className="update-banner-actions">
-            <button onClick={() => window.janjaDesktop?.downloadUpdate()}>
-              Baixar agora
+            <button
+              className="primary-button"
+              onClick={() => window.janjaDesktop?.downloadUpdate()}
+            >
+              Baixar e instalar
             </button>
             {notesButton}
             <button
+              className="outline-button"
               aria-label="Adiar atualização"
               onClick={() => {
-                  setPostponed(updateState.version);
-                  writeStored(DESKTOP_POSTPONED_VERSION_KEY, updateState.version);
-                }}
+                setPostponed(updateState.version);
+                writeStored(DESKTOP_POSTPONED_VERSION_KEY, updateState.version);
+              }}
             >
               Depois
             </button>
@@ -12273,11 +12512,15 @@ function DesktopUpdateNotice() {
             {/* As notas vêm empacotadas: depois de instalar, o atualizador não
                 tem mais o que dizer sobre a versão que já chegou. */}
             {__LILI_RELEASE_NOTES__ && (
-              <button onClick={() => setNotesOpen(true)}>
+              <button
+                className="outline-button"
+                onClick={() => setNotesOpen(true)}
+              >
                 Ver o que mudou
               </button>
             )}
             <button
+              className="update-banner-close"
               aria-label="Fechar aviso de atualização"
               onClick={() => setJustUpdatedFrom(null)}
             >
@@ -12303,11 +12546,15 @@ function DesktopUpdateNotice() {
             Versão {updateState.version} pronta. Reinicie para atualizar.
           </span>
           <div className="update-banner-actions">
-            <button onClick={() => window.janjaDesktop?.installUpdate()}>
+            <button
+              className="primary-button"
+              onClick={() => window.janjaDesktop?.installUpdate()}
+            >
               Reiniciar e instalar
             </button>
             {notesButton}
             <button
+              className="outline-button"
               aria-label="Adiar atualização"
               onClick={() => setDismissedReady(true)}
             >
