@@ -6,6 +6,16 @@ Uma seção por versão publicada. O texto daqui é o corpo da release no GitHub
 publicação de propósito — release sem notas é release que ninguém sabe o que
 mudou.
 
+## 0.2.3
+
+### Novidades
+
+- **Volume próprio para cada live.** Ao lado do nome da transmissão, a cápsula
+  de áudio permite reduzir o som de 100% até o silêncio sem alterar a voz de
+  quem está compartilhando. O ajuste continua ao focar a live, abrir em tela
+  cheia ou reiniciar o compartilhamento durante a chamada. Disponível na web
+  e no aplicativo Windows.
+
 ## 0.2.2
 
 ### Correções

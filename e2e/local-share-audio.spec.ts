@@ -123,8 +123,8 @@ const setShareAudioMode = (page: Page, mode: ShareAudioMode) =>
 const meterLevel = (page: Page) =>
   page
     .locator(".share-audio-track > i")
-    .evaluate(
-      (bar) => Number(/scaleX\(([\d.]+)\)/.exec(bar.style.transform)?.[1] ?? 0),
+    .evaluate((bar) =>
+      Number(/scaleX\(([\d.]+)\)/.exec(bar.style.transform)?.[1] ?? 0),
     );
 
 async function login(page: Page, email: string, password: string) {
@@ -147,16 +147,17 @@ async function enterLounge(page: Page) {
 
 /** Conta as faixas de um elemento de mídia por tipo. */
 const trackCount = (page: Page, selector: string, kind: "audio" | "video") =>
-  page.locator(selector).first().evaluate(
-    (video, wanted) => {
-      const stream = (video as HTMLVideoElement).srcObject as MediaStream | null;
+  page
+    .locator(selector)
+    .first()
+    .evaluate((video, wanted) => {
+      const stream = (video as HTMLVideoElement)
+        .srcObject as MediaStream | null;
       if (!stream) return 0;
       return wanted === "audio"
         ? stream.getAudioTracks().length
         : stream.getVideoTracks().length;
-    },
-    kind,
-  );
+    }, kind);
 
 test("o áudio do compartilhamento chega junto do microfone", async ({
   browser,
@@ -245,10 +246,9 @@ test("o áudio do compartilhamento chega junto do microfone", async ({
     await login(memberPage, memberEmail, password);
     await openServer(memberPage, serverId);
     await enterLounge(memberPage);
-    await expect(memberPage.locator(".participant-tile.camera-tile")).toHaveCount(
-      2,
-      { timeout: 30_000 },
-    );
+    await expect(
+      memberPage.locator(".participant-tile.camera-tile"),
+    ).toHaveCount(2, { timeout: 30_000 });
 
     // O microfone entra primeiro: o compartilhamento não pode substituí-lo.
     await ownerPage
@@ -257,7 +257,12 @@ test("o áudio do compartilhamento chega junto do microfone", async ({
       .click();
     await expect
       .poll(
-        () => trackCount(memberPage, "video.remote-video, video.remote-audio", "audio"),
+        () =>
+          trackCount(
+            memberPage,
+            "video.remote-video, video.remote-audio",
+            "audio",
+          ),
         { timeout: 30_000 },
       )
       .toBe(1);
@@ -294,24 +299,102 @@ test("o áudio do compartilhamento chega junto do microfone", async ({
 
     // A tela chega com vídeo…
     await expect
-      .poll(() => trackCount(memberPage, "video.remote-screen-video", "video"), {
-        timeout: 30_000,
-      })
+      .poll(
+        () => trackCount(memberPage, "video.remote-screen-video", "video"),
+        {
+          timeout: 30_000,
+        },
+      )
       .toBe(1);
     // …e com áudio, que é o que faltava.
     await expect
-      .poll(() => trackCount(memberPage, "video.remote-screen-video", "audio"), {
-        timeout: 30_000,
-        message: "a tela chegou muda do outro lado",
-      })
+      .poll(
+        () => trackCount(memberPage, "video.remote-screen-video", "audio"),
+        {
+          timeout: 30_000,
+          message: "a tela chegou muda do outro lado",
+        },
+      )
       .toBe(1);
     // E o microfone continua lá, numa faixa separada: um não substitui o outro.
     await expect
       .poll(
-        () => trackCount(memberPage, "video.remote-video, video.remote-audio", "audio"),
+        () =>
+          trackCount(
+            memberPage,
+            "video.remote-video, video.remote-audio",
+            "audio",
+          ),
         { timeout: 30_000, message: "o compartilhamento comeu o microfone" },
       )
       .toBe(1);
+
+    // O ouvinte ajusta a live e a voz separadamente, inclusive quando o tile
+    // muda de lugar. O volume é conferido no elemento que reproduz a track.
+    const screenTile = memberPage.locator(".screen-tile");
+    const screenVideo = memberPage.locator("video.remote-screen-video");
+    const voiceVideo = memberPage.locator(
+      "video.remote-video, video.remote-audio",
+    );
+    const liveVolume = memberPage.getByRole("slider", {
+      name: /Volume da live de/,
+    });
+    await expect(liveVolume).toBeVisible();
+    await expect(ownerPage.locator(".screen-volume")).toHaveCount(0);
+    await liveVolume.fill("0.25");
+    await expect(screenVideo).toHaveJSProperty("volume", 0.25);
+    await expect(voiceVideo).toHaveJSProperty("volume", 1);
+    await expect(screenTile).toHaveAttribute("aria-pressed", "false");
+    await liveVolume.press("Home");
+    await expect(screenVideo).toHaveJSProperty("volume", 0);
+    await liveVolume.press("ArrowRight");
+    await expect(screenVideo).toHaveJSProperty("volume", 0.05);
+    await liveVolume.fill("0.25");
+    await screenTile.click();
+    await expect(screenTile).toHaveAttribute("aria-pressed", "true");
+    await expect(screenVideo).toHaveJSProperty("volume", 0.25);
+    await screenTile.getByRole("button", { name: "Ver em tela cheia" }).click();
+    await expect
+      .poll(() => memberPage.evaluate(() => !!document.fullscreenElement))
+      .toBe(true);
+    await liveVolume.fill("0.3");
+    await expect(screenVideo).toHaveJSProperty("volume", 0.3);
+    await memberPage.evaluate(() => document.exitFullscreen());
+    await screenTile.click();
+    const voiceTile = memberPage
+      .locator(".camera-tile")
+      .filter({ has: voiceVideo });
+    await voiceTile.hover();
+    await voiceTile.getByRole("slider").fill("0.5");
+    await expect(voiceVideo).toHaveJSProperty("volume", 0.5);
+    await expect(screenVideo).toHaveJSProperty("volume", 0.3);
+    await voiceTile.click();
+    await expect(screenTile).toHaveClass(/compact/);
+    await expect(liveVolume).toBeVisible();
+    await liveVolume.fill("0.2");
+    await expect(screenVideo).toHaveJSProperty("volume", 0.2);
+    await expect(voiceTile).toHaveAttribute("aria-pressed", "true");
+    await memberPage
+      .locator(".call-controls")
+      .getByRole("button", { name: "Ensurdecer", exact: true })
+      .click();
+    await expect(screenVideo).toHaveJSProperty("muted", true);
+    await expect(voiceVideo).toHaveJSProperty("muted", true);
+    await memberPage
+      .locator(".call-controls")
+      .getByRole("button", { name: "Voltar a ouvir", exact: true })
+      .click();
+    await expect(screenVideo).toHaveJSProperty("muted", false);
+    await expect(voiceVideo).toHaveJSProperty("muted", false);
+    await expect(screenVideo).toHaveJSProperty("volume", 0.2);
+    await expect(voiceVideo).toHaveJSProperty("volume", 0.5);
+    await memberPage.screenshot({
+      path: "test-results/live-volume-compact.png",
+    });
+    await screenTile.click();
+    await memberPage.screenshot({
+      path: "test-results/live-volume-focused.png",
+    });
 
     // Parar o compartilhamento leva as duas faixas da tela embora, e deixa a
     // voz onde estava.
@@ -326,7 +409,12 @@ test("o áudio do compartilhamento chega junto do microfone", async ({
       .toBe(0);
     await expect
       .poll(
-        () => trackCount(memberPage, "video.remote-video, video.remote-audio", "audio"),
+        () =>
+          trackCount(
+            memberPage,
+            "video.remote-video, video.remote-audio",
+            "audio",
+          ),
         { timeout: 30_000 },
       )
       .toBe(1);
@@ -337,15 +425,24 @@ test("o áudio do compartilhamento chega junto do microfone", async ({
       .getByRole("button", { name: "Compartilhar sua tela" })
       .click();
     await expect
-      .poll(() => trackCount(memberPage, "video.remote-screen-video", "audio"), {
-        timeout: 30_000,
-      })
+      .poll(
+        () => trackCount(memberPage, "video.remote-screen-video", "audio"),
+        {
+          timeout: 30_000,
+        },
+      )
       .toBe(1);
     await expect
-      .poll(() => trackCount(memberPage, "video.remote-screen-video", "video"), {
-        timeout: 30_000,
-      })
+      .poll(
+        () => trackCount(memberPage, "video.remote-screen-video", "video"),
+        {
+          timeout: 30_000,
+        },
+      )
       .toBe(1);
+
+    await expect(screenVideo).toHaveJSProperty("volume", 0.2);
+    await expect(voiceVideo).toHaveJSProperty("volume", 0.5);
 
     const share = () =>
       ownerPage
@@ -369,9 +466,12 @@ test("o áudio do compartilhamento chega junto do microfone", async ({
     await stopShare();
     await setShareAudioMode(ownerPage, "mudo");
     await share();
-    await expect(ownerPage.locator(".share-audio-badge")).toHaveText("SEM SOM", {
-      timeout: 30_000,
-    });
+    await expect(ownerPage.locator(".share-audio-badge")).toHaveText(
+      "SEM SOM",
+      {
+        timeout: 30_000,
+      },
+    );
 
     // A segunda é a falta da faixa. Aviso diferente de propósito: aqui o
     // conserto está no som do Windows, não na fonte escolhida.

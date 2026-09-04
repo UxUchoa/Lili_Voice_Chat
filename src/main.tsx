@@ -4694,14 +4694,16 @@ function StreamVideo({
   useEffect(() => {
     if (!videoRef.current) return;
     videoRef.current.srcObject = stream;
-    videoRef.current.volume = volume;
     const mediaElement = videoRef.current as HTMLVideoElement & {
       setSinkId?: (id: string) => Promise<void>;
     };
     if (sinkId && mediaElement.setSinkId)
       void mediaElement.setSinkId(sinkId).catch(() => {});
     void videoRef.current.play().catch(() => {});
-  }, [sinkId, stream, volume]);
+  }, [sinkId, stream]);
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.volume = volume;
+  }, [volume]);
   return (
     <video
       ref={videoRef}
@@ -4854,7 +4856,8 @@ function CallView({
     [openMenu, setOpenMenu] = useState<"audio" | "video" | "share" | null>(
       null,
     ),
-    [peerVolumes, setPeerVolumes] = useState<Record<string, number>>({});
+    [peerVolumes, setPeerVolumes] = useState<Record<string, number>>({}),
+    [screenVolumes, setScreenVolumes] = useState<Record<string, number>>({});
   const localStreamRef = useRef<MediaStream | null>(null),
     displayStreamRef = useRef<MediaStream | null>(null),
     localVideoRef = useRef<HTMLVideoElement | null>(null),
@@ -5823,7 +5826,7 @@ function CallView({
             stream={tile.peer.screenStream}
             className="tile-video screen-video remote-screen-video"
             muted={deafened}
-            volume={peerVolumes[tile.peerId] ?? 1}
+            volume={screenVolumes[tile.peerId] ?? 1}
             sinkId={audioOutputId}
           />
         )}
@@ -5878,6 +5881,30 @@ function CallView({
                 ? `${tile.name} (você)`
                 : tile.name}
           </span>
+          {tile.type === "screen" && !tile.self && (
+            <label
+              className="peer-volume screen-volume"
+              title={`Volume da live: ${Math.round((screenVolumes[tile.peerId] ?? 1) * 100)}%`}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <IconVolume size={14} />
+              <input
+                aria-label={`Volume da live de ${tile.name}`}
+                aria-valuetext={`${Math.round((screenVolumes[tile.peerId] ?? 1) * 100)}%`}
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={screenVolumes[tile.peerId] ?? 1}
+                onChange={(event) =>
+                  setScreenVolumes((current) => ({
+                    ...current,
+                    [tile.peerId]: Number(event.target.value),
+                  }))
+                }
+              />
+            </label>
+          )}
           {/* Só no tile de quem compartilha: os outros ouvem o resultado e não
               precisam de prova nenhuma. Quem compartilha é a única pessoa que
               não ouve, e era a única sem como saber que estava indo mudo. */}

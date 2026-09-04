@@ -4840,6 +4840,19 @@ a:focus-visible,
   width: 74px;
   accent-color: var(--brand);
 }
+.tile-overlay .screen-volume {
+  position: static;
+  display: inline-flex;
+  flex: none;
+  pointer-events: auto;
+}
+.screen-tile .tile-overlay {
+  flex-wrap: wrap;
+}
+.screen-volume:focus-within {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
 /* Barra de controles no padrão do Discord: botões quadrados arredondados
    agrupados em clusters, com chevron de dispositivos anexado ao microfone e
    à câmera. */
