@@ -181,6 +181,46 @@ export const SCREEN_DEGRADATION: RTCDegradationPreference =
 export const SCREEN_CONTENT_HINT = "motion";
 
 /**
+ * Carimba a dica de conteúdo na track — que é o único lugar onde ela existe.
+ *
+ * Esta linha é a correção de um defeito que estava escondido em plena vista:
+ * `contentHint` foi escrito nas opções de publicação, e o LiveKit **só lê esse
+ * campo quando é ele quem captura a tela** (`createScreenTracks`). Este
+ * aplicativo captura por conta própria e chama `publishTrack`, e nesse caminho
+ * o campo é ignorado em silêncio — a mesma armadilha do `videoEncoding` contra
+ * `screenShareEncoding`, no mesmo objeto, um ano depois.
+ *
+ * O que rodava no lugar era o padrão do Chromium para captura de tela, que é
+ * `is_screencast = true` — o modo de conteúdo estático. E esse modo desliga o
+ * adaptador de resolução: quando a banda não dá, ele **não** reduz o quadro;
+ * segura 1920×1080 e joga quadros fora.
+ *
+ * Medido nesta versão, 1080p60 pedindo 3,5 Mb/s por um link de 1,2:
+ *
+ *     sem dica (o que rodava)   1920×1080 · 20 fps de média, com zeros
+ *     `motion`                  640×360   · 56 fps de média, mínimo 47
+ *
+ * São os quinze quadros de novo, pela porta dos fundos: a correção da 0.2.1
+ * trocou a `degradationPreference`, mas a dica de conteúdo — que é quem manda
+ * nessa decisão — nunca saiu do lugar. `detail` e `maintain-framerate` juntos
+ * ainda dão vinte quadros; a preferência não tem como reduzir uma resolução que
+ * o modo de tela congelou.
+ *
+ * O preço de `motion` é o encoder reduzir a resolução quando o conteúdo pede
+ * mais bits do que cabem. É exatamente a ordem de prioridade escolhida:
+ * estabilidade e fluidez antes de densidade de pixels.
+ *
+ * O que isto **não** conserta, e é importante não confundir: os picos de bits
+ * na mudança brusca de tela. Medido com dois clientes de verdade, a dica não
+ * mudou o pico (5655 kb/s sem ela, 5504 com ela, para um teto de 3,5 Mb/s). O
+ * pico é do controlador de taxa no quadro de transição — ver `hugeFramesSent`
+ * em `screenShareStats`, que é onde ele aparece com nome.
+ */
+export function applyScreenContentHint(track: MediaStreamTrack): void {
+  if ("contentHint" in track) track.contentHint = SCREEN_CONTENT_HINT;
+}
+
+/**
  * As opções de publicação de uma track de tela.
  *
  * O nome do campo é o ponto: para uma track de tela o LiveKit lê
@@ -193,6 +233,11 @@ export const SCREEN_CONTENT_HINT = "motion";
  *
  * Existe como função para poder ser conferida por teste. O erro anterior não
  * era de valor, era de nome de campo, e nenhum tipo o pegava.
+ *
+ * `contentHint` **não** entra aqui, e a ausência é deliberada: ele já esteve
+ * neste objeto e nunca chegou ao encoder, porque `publishTrack` não olha esse
+ * campo. Quem o aplica é `applyScreenContentHint`, na própria track. Deixá-lo
+ * escrito aqui era pior que não ter: dava a impressão de configurado.
  */
 export function screenPublishOptions(quality: ShareQuality) {
   return {
@@ -203,6 +248,5 @@ export function screenPublishOptions(quality: ShareQuality) {
     },
     degradationPreference: SCREEN_DEGRADATION,
     simulcast: false,
-    contentHint: SCREEN_CONTENT_HINT,
   };
 }

@@ -262,6 +262,7 @@ import {
 } from "./ui/ServerProfileFields";
 import {
   inviteCodeFromHash,
+  inviteCodeFromLocation,
   inviteUrl,
   locationHash,
   parseLocationHash,
@@ -2763,14 +2764,12 @@ function Composer({
   mentionTargets,
   onSend,
   onTyping,
-  disabled,
 }: {
   channelId: string;
   channelName: string;
   mentionTargets: MentionTarget[];
   onSend: (text: string, files: File[], spoilerNames: Set<string>) => void;
   onTyping: () => void;
-  disabled?: boolean;
 }) {
   const [value, setValue] = useState(""),
     [files, setFiles] = useState<File[]>([]),
@@ -2784,6 +2783,17 @@ function Composer({
     [, setClock] = useState(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  /**
+   * O aviso de digitação, sempre o da conversa aberta agora.
+   *
+   * O ouvinte de "digitar para focar" vive fora do render e é religado só
+   * quando `blocked` muda, então ele seguraria para sempre o callback do
+   * primeiro canal — e anunciaria digitação na conversa anterior depois de
+   * cada troca. `announceTyping` vem de `useTyping(channel.id)`, ou seja muda
+   * junto com o canal.
+   */
+  const onTypingRef = useRef(onTyping);
+  onTypingRef.current = onTyping;
   /**
    * Acrescenta anexos recusando o que passa do teto.
    *
@@ -2913,7 +2923,22 @@ function Composer({
   const remaining = bypassSlowmode
       ? 0
       : Math.max(0, Math.ceil((nextAllowedAt - Date.now()) / 1_000)),
-    blocked = Boolean(disabled || !canSend || timedOut || remaining > 0);
+    /**
+     * Bloqueado é quem **não pode** escrever: sem permissão, de castigo ou em
+     * slowmode. Um envio em curso não entra mais nesta conta.
+     *
+     * Entrava, e era o que comia os primeiros caracteres da mensagem seguinte.
+     * `disabled={send.isPending}` ficava verdadeiro durante toda a ida ao
+     * servidor — que inclui o upload dos anexos — e nesse intervalo o campo
+     * ficava `disabled`, perdia o foco e o ouvinte de "digitar para focar" se
+     * desligava. Quem mandava uma mensagem e já ia escrever a próxima, ou
+     * trocava de conversa e começava a digitar, escrevia contra uma caixa
+     * morta: as teclas não iam para lugar nenhum e sumiam sem aviso.
+     *
+     * Não há o que proteger com isso: `submit` limpa o texto na hora, então
+     * apertar Enter duas vezes já não mandava a mesma mensagem duas vezes.
+     */
+    blocked = Boolean(!canSend || timedOut || remaining > 0);
   useEffect(() => {
     if (nextAllowedAt <= Date.now()) return;
     const timer = window.setInterval(() => setClock((value) => value + 1), 500);
@@ -2938,6 +2963,22 @@ function Composer({
    * num modal, num campo de formulario ou usar um atalho nao pode ser
    * sequestrado. Por isso so passa tecla imprimivel de um unico caractere, sem
    * Ctrl/Meta/Alt, e com o foco em nenhum campo editavel.
+   *
+   * ---
+   *
+   * A letra é escrita aqui, e não deixada para o navegador.
+   *
+   * Antes o efeito só chamava `focus()` e contava com o comportamento de que
+   * uma tecla pressionada durante o `keydown` vai parar no elemento que acabou
+   * de receber o foco. Isso vale quando o campo já está montado e parado —
+   * mas não quando ele acabou de aparecer. Ao trocar de conversa, o compositor
+   * remonta: entre a tecla e o campo pronto existe um intervalo, e nele a
+   * letra caía no documento e sumia. É a "engolida" dos primeiros caracteres,
+   * e ela é intermitente justamente porque depende de onde a tecla pegou o
+   * ciclo de render.
+   *
+   * Escrevendo o caractere na mão e cancelando o evento, o resultado deixa de
+   * depender de tempo: a tecla vai para o texto, na posição do cursor, sempre.
    */
   useEffect(() => {
     if (blocked) return;
@@ -2949,6 +2990,8 @@ function Composer({
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.ctrlKey || event.metaKey || event.altKey) return;
+      // Composição de acento ou de IME pertence ao teclado, não a nós.
+      if (event.isComposing) return;
       // Uma tecla imprimivel tem `key` de um caractere; "Enter", "Tab",
       // "ArrowUp" e companhia tem nome e ficam de fora.
       if (event.key.length !== 1) return;
@@ -2957,7 +3000,27 @@ function Composer({
       if (typingTarget(document.activeElement)) return;
       // Um modal aberto tem o foco preso nele; nao roubamos a tecla.
       if (document.querySelector(".modal-backdrop, [role='dialog']")) return;
+      // A partir daqui a tecla é nossa: cancelar evita que ela também seja
+      // inserida pelo navegador e apareça duplicada.
+      event.preventDefault();
       node.focus();
+      const typed = event.key;
+      const start = node.selectionStart ?? node.value.length;
+      const end = node.selectionEnd ?? start;
+      setValue((current) => {
+        const from = Math.min(start, current.length);
+        const to = Math.min(Math.max(end, from), current.length);
+        const next = `${current.slice(0, from)}${typed}${current.slice(to)}`;
+        window.requestAnimationFrame(() => {
+          const caret = from + typed.length;
+          node.setSelectionRange(caret, caret);
+          // Um `@` que abre a conversa é um caso real: sem isto a lista de
+          // menções só apareceria na segunda tecla.
+          syncMentionQuery(node);
+        });
+        return next;
+      });
+      onTypingRef.current();
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
@@ -4194,7 +4257,6 @@ function MessageThread({
           }
           mentionTargets={mentionTargets}
           onTyping={announceTyping}
-          disabled={send.isPending}
           onSend={(text, files, spoilerNames) => {
             // A própria mensagem sempre traz o chat de volta ao fim, mesmo
             // que a pessoa estivesse lendo history acima.
@@ -5149,6 +5211,60 @@ function CallView({
     // própria aba do Lili e permitir trocar de fonte sem reiniciar.
     const withSystemAudio = voiceRef.current.shareSystemAudio;
     setSharingWithAudio(withSystemAudio);
+    /**
+     * As restrições de áudio de um compartilhamento — e a que mata o eco.
+     *
+     * O tratamento de voz **precisa** ficar desligado: um jogo ou um vídeo
+     * passando por cancelamento de eco e ganho automático chega do outro lado
+     * abafado e com o volume oscilando.
+     *
+     * `restrictOwnAudio` é a linha nova, e é a correção do laço de realimentação.
+     * O loopback do Windows captura a saída inteira, o próprio Lili incluído:
+     * a voz de quem está na chamada saía pelos alto-falantes, voltava pela
+     * captura, subia de novo no compartilhamento e era reproduzida outra vez —
+     * eco crescente, e crescente de verdade, porque cada volta somava.
+     *
+     * A restrição é do padrão de captura de tela e o Chromium a implementa
+     * trocando o dispositivo por um loopback que exclui a árvore de processos
+     * de quem está capturando. Medido nesta versão, com um tom de 1 kHz tocando
+     * no próprio aplicativo e outro de 1,5 kHz num processo separado:
+     *
+     *     sem a restrição    próprio −26 dB · externo −22 dB
+     *     com a restrição    próprio −82 dB · externo −22 dB
+     *
+     * Ou seja: o Lili some, e o resto — jogo, navegador, player — continua
+     * exatamente no mesmo nível. É exclusão na origem, não cancelamento depois;
+     * o cancelamento de eco continua onde sempre esteve, no microfone, como
+     * proteção de quem está sem fone, e não como remendo deste laço.
+     *
+     * Vale nos dois caminhos. No desktop ela se soma ao loopback por processo
+     * que o processo principal escolhe para uma janela — e, medido, não o
+     * atropela: com uma janela alvo o dispositivo continua sendo o do processo
+     * dela. No navegador é a única defesa que existe, e é o que impede a aba do
+     * Lili de entrar no `systemAudio` do Chrome.
+     */
+    const shareAudioConstraints = {
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+      restrictOwnAudio: true,
+    };
+    /**
+     * De onde o som vai vir, quando vier.
+     *
+     * Só o caminho do desktop consegue restringir a um aplicativo, e mesmo lá
+     * depende de o processo dono da janela ter sido identificado. O seletor do
+     * navegador não oferece essa escolha: é sempre a saída do computador (ou o
+     * som da aba, que o próprio Chrome já isola). `system` é o padrão porque é
+     * o que vale em todo caminho que não seja uma janela reconhecida.
+     *
+     * Num objeto e não numa variável solta: quem escreve é a captura, que é uma
+     * closure, e o TypeScript estreitaria uma `let` ao tipo do valor inicial e
+     * depois recusaria a comparação com os outros dois.
+     */
+    const shareAudio: { mode: "application" | "system" | "none" } = {
+      mode: "system",
+    };
     const captureViaBrowserPicker = (withAudio: boolean) =>
       navigator.mediaDevices.getDisplayMedia({
         video: {
@@ -5158,16 +5274,7 @@ function CallView({
           // mudar de ideia daria um resultado diferente de começar assim.
           ...screenTrackConstraints(selection),
         },
-        // O tratamento de voz **precisa** ficar fora daqui: um jogo ou um
-        // vídeo passando por cancelamento de eco e ganho automático chega do
-        // outro lado abafado e com o volume oscilando.
-        audio: withAudio
-          ? {
-              echoCancellation: false,
-              noiseSuppression: false,
-              autoGainControl: false,
-            }
-          : false,
+        audio: withAudio ? shareAudioConstraints : false,
         selfBrowserSurface: "exclude",
         surfaceSwitching: "include",
         /**
@@ -5193,7 +5300,13 @@ function CallView({
      *
      * Agora quem decide a fonte é o processo principal, pelo
      * `setDisplayMediaRequestHandler`: o seletor marca a escolha, o
-     * `getDisplayMedia` abaixo a consome, e o áudio vem como `loopback`.
+     * `getDisplayMedia` abaixo a consome, e o áudio vem do dispositivo que o
+     * processo principal escolheu — o loopback do processo dono da janela,
+     * quando é uma janela; a saída inteira do Windows, quando é um monitor.
+     *
+     * `audioMode` diz qual dos dois saiu, e é guardado porque só ele permite
+     * escrever um aviso honesto: "o som deste aplicativo" e "o som do
+     * computador inteiro" são promessas diferentes.
      *
      * As restrições de tamanho e quadros continuam aqui — o handler diz *o
      * quê* capturar, não *como*.
@@ -5202,18 +5315,11 @@ function CallView({
       const desktop = window.janjaDesktop;
       if (!desktop?.prepareScreenShare)
         throw new Error("Esta versão do aplicativo não sabe capturar a tela.");
-      await desktop.prepareScreenShare(sourceId, withAudio);
+      const prepared = await desktop.prepareScreenShare(sourceId, withAudio);
+      shareAudio.mode = prepared?.audioMode ?? "none";
       return navigator.mediaDevices.getDisplayMedia({
         video: { ...screenTrackConstraints(selection) },
-        // O tratamento de voz fica fora: um jogo ou um vídeo passando por
-        // cancelamento de eco e ganho automático chega abafado do outro lado.
-        audio: withAudio
-          ? {
-              echoCancellation: false,
-              noiseSuppression: false,
-              autoGainControl: false,
-            }
-          : false,
+        audio: withAudio ? shareAudioConstraints : false,
       } as DisplayMediaStreamOptions);
     };
     try {
@@ -5273,6 +5379,20 @@ function CallView({
         ?.addEventListener("ended", stopSharing, { once: true });
       setSharing(true);
       /**
+       * Em que a transmissão vai ser codificada, registrado uma vez por sessão.
+       *
+       * `encoderImplementation` do `getStats()` diz qual encoder ficou, mas só
+       * depois de a transmissão existir. Isto responde o *porquê*: quando o
+       * Chromium está com o encode de vídeo desabilitado, nenhum ajuste de
+       * bitrate vai reduzir o tempo de codificação, porque o caminho de
+       * hardware nem foi cogitado. Já perdemos tempo procurando na rede um
+       * engasgo que era isto.
+       */
+      void window.janjaDesktop
+        ?.mediaCapabilities?.()
+        .then((caps) => caps && console.debug("[share] gpu", caps))
+        .catch(() => undefined);
+      /**
        * O aviso conta o que existe, não o que foi pedido.
        *
        * A caixa marcada não é prova de nada: a fonte pode não entregar áudio,
@@ -5305,13 +5425,24 @@ function CallView({
           : audioFailure
             ? ` · sem áudio: ${errorName(audioFailure)}.`
             : " · sem áudio: esta fonte não entrega som. Uma aba do navegador entrega.");
+      /**
+       * Com som, o aviso diz de *qual* som se trata.
+       *
+       * "Computador inteiro" e "só deste aplicativo" são promessas diferentes,
+       * e quem compartilha decide o que fazer a seguir com base nisso — deixar
+       * uma música tocando, atender outra conversa. Antes as duas frases não
+       * existiam porque só havia um caso.
+       */
+      const audioSummary = audioShared
+        ? !withSystemAudio
+          ? " · com o som da aba escolhida."
+          : shareAudio.mode === "application"
+            ? " · com o som deste aplicativo, e só dele."
+            : " · com o som do computador inteiro (sem o do Lili)."
+        : audioProblem || " · sem áudio.";
       setMediaNotice(
         `Compartilhando ${selection.sourceName ?? "sua tela"} em ${preset.label}` +
-          (audioShared
-            ? withSystemAudio
-              ? " · com o som do computador inteiro."
-              : " · com o som da aba escolhida."
-            : audioProblem || " · sem áudio."),
+          audioSummary,
       );
     } catch (error) {
       // O nome e a mensagem do erro vão para a tela, e não só para o console:
@@ -5891,6 +6022,44 @@ function CallView({
                     {shareStats.encodeMsPerFrame !== null
                       ? ` · ${shareStats.encodeMsPerFrame} ms/quadro`
                       : ""}
+                    {shareStats.resolutionChanges
+                      ? ` · ${shareStats.resolutionChanges} trocas de resolução`
+                      : ""}
+                  </dd>
+                </div>
+                {/* Um fallback do encoder de hardware para a CPU eleva o tempo
+                    de codificação, atrasa quadros e vira congestionamento — e
+                    é invisível em qualquer outra medida. */}
+                <div>
+                  <dt>Encoder</dt>
+                  <dd>
+                    {shareStats.encoder ?? "—"}
+                    {shareStats.hardwareEncoder === null
+                      ? ""
+                      : shareStats.hardwareEncoder
+                        ? " · na GPU"
+                        : " · na CPU"}
+                  </dd>
+                </div>
+                {/* O alvo é o que o controlador de taxa pediu ao encoder; a
+                    banda é o teto que ele estima. "Quadros enormes" são os que
+                    passaram de 2,5 vezes a média: é o pico de bits com nome, e
+                    a única medida que o distingue de falta de banda. */}
+                <div>
+                  <dt>Controle de taxa</dt>
+                  <dd>
+                    {shareStats.targetKbps !== null
+                      ? `alvo ${shareStats.targetKbps} kb/s`
+                      : "alvo —"}
+                    {shareStats.availableKbps !== null
+                      ? ` · banda ${shareStats.availableKbps} kb/s`
+                      : ""}
+                    {shareStats.keyFrames
+                      ? ` · ${shareStats.keyFrames} keyframes`
+                      : ""}
+                    {shareStats.hugeFrames
+                      ? ` · ${shareStats.hugeFrames} quadros enormes`
+                      : ""}
                   </dd>
                 </div>
                 <div>
@@ -5903,6 +6072,15 @@ function CallView({
                     {shareStats.lostPercent !== null
                       ? ` · ${shareStats.lostPercent}% perdidos`
                       : ""}
+                    {/* Retransmissão e pedidos de reparo só aparecem quando
+                        existem: uma linha de zeros esconderia a leitura em que
+                        eles saem de zero, que é a única que importa. */}
+                    {shareStats.retransmittedPercent
+                      ? ` · ${shareStats.retransmittedPercent}% retransmitidos`
+                      : ""}
+                    {shareStats.nack ? ` · NACK ${shareStats.nack}` : ""}
+                    {shareStats.pli ? ` · PLI ${shareStats.pli}` : ""}
+                    {shareStats.fir ? ` · FIR ${shareStats.fir}` : ""}
                   </dd>
                 </div>
               </>
@@ -10346,10 +10524,10 @@ function ProfilePanel({
             </label>
             <small>
               Vem ligado: um jogo ou um vídeo compartilhado sem som chega pela
-              metade, e quem compartilha é justamente quem não percebe. No
-              Windows o que o sistema entrega é o som da saída inteira — vai
-              junto música e notificação. Compartilhando uma aba do navegador,
-              vai só o som daquela aba.
+              metade, e quem compartilha é justamente quem não percebe.
+              Escolhendo um aplicativo, vai o som só dele; escolhendo um monitor
+              inteiro, vai o som de tudo o que estiver tocando. O áudio da
+              própria chamada nunca entra — ninguém se ouve de volta.
             </small>
             <small>
               A supressão de ruído roda nesta máquina, em WebAssembly: nenhum
@@ -11228,13 +11406,20 @@ function App({
   // escondido atrás de "adicionar servidor" para colá-lo.
   // ---------------------------------------------------------------
   useEffect(() => {
-    const code = inviteCodeFromHash(window.location.hash);
+    const code = inviteCodeFromLocation(
+      window.location.hash,
+      window.location.pathname,
+    );
     if (!code) return;
     let active = true;
     // Limpa o endereço antes de trocar o código: recarregar no meio do
     // processo tentaria usar de novo um convite que já foi consumido, e o
     // usuário veria "convite inválido" sem entender por quê.
-    history.replaceState(null, "", window.location.pathname);
+    //
+    // O caminho vai junto do fragmento na limpeza. Com o convite morando em
+    // `/invite/<codigo>`, apagar só o fragmento deixaria o código no endereço
+    // — e o recarregar que esta linha existe para proteger voltaria a acontecer.
+    history.replaceState(null, "", "/");
     void (async () => {
       try {
         const serverId = await redeemOnlineInvite(code);
@@ -11311,7 +11496,8 @@ function App({
       if (parseLocationHash(window.location.hash)) return;
       // Um convite pendente ainda não foi trocado; sobrescrever o endereço
       // aqui apagaria o código antes de o efeito acima chegar nele.
-      if (inviteCodeFromHash(window.location.hash)) return;
+      if (inviteCodeFromLocation(window.location.hash, window.location.pathname))
+        return;
     }
     if (window.location.hash !== next) window.location.hash = next;
   }, [

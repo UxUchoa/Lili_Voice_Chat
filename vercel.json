@@ -5,7 +5,14 @@
   "buildCommand": "npm run build:web",
   "outputDirectory": "dist",
   "github": { "silent": true },
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
+  "rewrites": [
+    {
+      "//": "Antes do curinga, senão o convite cairia no index.html e o cartão voltaria a ser o genérico do site.",
+      "source": "/invite/:code",
+      "destination": "/api/invite?code=:code"
+    },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
   "headers": [
     {
       "source": "/(.*)",

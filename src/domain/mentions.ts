@@ -107,12 +107,49 @@ export function applyMention(
   return { text: next, caret: active.start + inserted.length };
 }
 
+/**
+ * A menção já está pronta — não há mais o que sugerir.
+ *
+ * O trecho em curso aceita espaço porque um cargo pode se chamar "Time de
+ * Suporte"; sem isso, a lista fechava na primeira tecla de espaço e o cargo
+ * ficava inalcançável. O efeito colateral era este: depois de escolher alguém,
+ * `applyMention` deixa `@fulano ` com o cursor no fim, e o trecho "fulano "
+ * continuava sendo uma busca em curso. A lista reabria sozinha, com a mesma
+ * pessoa que acabou de ser escolhida.
+ *
+ * Para quem estava escrevendo, isso significava não ter sinal nenhum de que a
+ * menção pegou: escolher não mudava nada na tela — o mesmo nome continuava
+ * flutuando ali, agora sugerindo o que já tinha sido feito. E o texto inserido
+ * é o `username`, que nem sempre é o nome que a lista mostra ("itozo" na
+ * lista, `@ito` no campo), então nem o campo confirmava a escolha.
+ *
+ * A regra é o espaço no fim: `@fulano` ainda pode virar `@fulaninho`, mas
+ * `@fulano ` é uma menção fechada. Um cargo de várias palavras não se fecha por
+ * engano porque "Time de " não é o nome de ninguém.
+ */
+export function mentionIsComplete(
+  query: string,
+  targets: MentionTarget[],
+): boolean {
+  // Sem o espaço no fim ainda se está digitando, e a lista tem que ficar.
+  if (!/\s$/.test(query)) return false;
+  const settled = query.trim().toLowerCase();
+  if (!settled) return false;
+  return (
+    BROADCAST_MENTIONS.some((name) => name === settled) ||
+    targets.some((target) => target.token.toLowerCase() === settled)
+  );
+}
+
 /** Sugestões para o trecho digitado, com os prefixos antes dos miolos. */
 export function suggestMentions(
   query: string,
   targets: MentionTarget[],
   limit = 8,
 ): MentionTarget[] {
+  // Uma menção fechada não abre lista: é aqui que a escolha vira silêncio na
+  // tela, que é o único sinal de "pronto" que o campo de texto sabe dar.
+  if (mentionIsComplete(query, targets)) return [];
   const needle = query.trim().toLowerCase();
   // A pessoa não se sugere; ela está na lista pelo destaque, não pela busca.
   const offered = targets.filter((target) => !target.self);

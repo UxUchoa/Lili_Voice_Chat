@@ -6,6 +6,78 @@ Uma seção por versão publicada. O texto daqui é o corpo da release no GitHub
 publicação de propósito — release sem notas é release que ninguém sabe o que
 mudou.
 
+## 0.2.2
+
+### Correções
+
+- **Compartilhando um aplicativo, vai o som daquele aplicativo — e só dele.**
+  Antes ia o som do computador inteiro, porque era o que sabíamos pedir:
+  notificação, música de outro programa, tudo junto. O Windows sabe capturar
+  áudio por processo desde o 10; o que faltava era descobrir o processo dono da
+  janela escolhida, que nem o Electron nem o seletor de telas entregam. Agora
+  descobrimos, e a captura passa a ser a daquele aplicativo. Quando o processo
+  não é identificado, o som do computador vai no lugar e o aviso diz qual dos
+  dois aconteceu — em vez de prometer uma coisa e mandar outra.
+- **O eco no compartilhamento com som do computador acabou.** O que o Windows
+  entrega como "som da saída" inclui o Lili: a voz de quem estava na chamada
+  saía pelos alto-falantes, voltava pela captura, subia de novo no
+  compartilhamento e era reproduzida outra vez. Cada volta somava, e o
+  resultado era um eco que crescia. Agora a captura exclui a nossa própria
+  árvore de processos, na origem — jogo, navegador e player continuam no mesmo
+  volume, e a chamada simplesmente não entra. Não é cancelamento de eco
+  disfarçado: o som nunca chega a ser capturado.
+- **O compartilhamento voltou a ser tratado como conteúdo em movimento.** A
+  configuração dizia isso desde a 0.2.1, mas nunca chegava ao codificador: o
+  campo estava escrito num objeto que o LiveKit só lê quando é ele quem captura
+  a tela, e publicando uma imagem já capturada ele era ignorado em silêncio — a
+  mesma armadilha do nome de campo que produziu os quinze quadros. Na prática o
+  vídeo rodava em modo de tela parada, que prefere segurar a resolução e jogar
+  quadros fora. Medido, com a banda apertada: 20 quadros por segundo antes,
+  56 depois. É a diferença entre uma transmissão que trava e uma que fica um
+  pouco menos nítida.
+- **A tela de novidades mostrava as etiquetas de HTML em vez do texto.** As
+  notas chegam por dois caminhos: no site, recortadas do changelog em Markdown;
+  no aplicativo instalado, tiradas do feed do GitHub — que entrega o corpo da
+  release **já convertido em HTML**. O painel só sabia Markdown, então imprimia
+  `<h3>`, `<li>` e `<strong>` como se fossem palavras. Agora o HTML é traduzido
+  de volta antes de desenhar, e os dois caminhos terminam igual.
+- **Uma linha cortava ao meio o "NOVIDADES" e o X das novidades.** O painel
+  inteiro rolava — cabeçalho, botão de fechar e ações junto — e a borda de cima
+  fatiava o que passasse por baixo dela. Numa versão de notas longas, que é
+  justamente quando alguém rola, o botão de instalar também sumia da tela.
+  Agora só a lista de notas rola.
+- **A lista de menções continuava aberta depois de escolher a pessoa.** O texto
+  inserido é `@fulano ` com o cursor no fim, e esse trecho continuava contando
+  como busca em curso — a lista reabria sugerindo quem acabou de ser escolhido.
+  Como o que entra no campo é o `username` e a lista mostra o nome de exibição,
+  não sobrava sinal nenhum de que a menção tinha pegado. Agora a lista fecha
+  quando a menção está pronta, e um cargo de várias palavras continua podendo
+  ser escrito inteiro.
+- **Digitar logo depois de enviar comia os primeiros caracteres.** Enquanto a
+  mensagem estava a caminho do servidor — o que inclui o envio dos anexos — a
+  caixa de texto ficava desativada e o atalho de "digitar para focar" se
+  desligava junto. Quem mandava uma mensagem e já ia escrever a próxima, ou
+  trocava de conversa e começava a digitar, escrevia contra uma caixa morta.
+  Agora um envio em curso não trava mais a digitação, e a primeira letra é
+  colocada no texto em vez de depender de a tecla achar o campo a tempo.
+- **O convite agora mostra o servidor onde for colado.** Um link do Lili no
+  Discord, no WhatsApp ou no Slack virava sempre o mesmo cartão, "Lili — Voice
+  Chat" em cima e embaixo, porque o endereço era um fragmento (`#/invite/...`)
+  e fragmento nunca chega ao servidor. Os convites passam a ser
+  `/invite/<codigo>`, e quem desdobra o link recebe o nome do servidor, quantas
+  pessoas já estão lá, em que canal vai cair e o ícone. Convite revogado ou
+  vencido volta ao cartão genérico na hora — e o ícone, que continua num balde
+  privado, deixa de ser legível junto. Os links já copiados por aí continuam
+  funcionando.
+- **O painel de "Privacidade" ganhou o que faltava para diagnosticar um pico.**
+  Além da resolução e dos quadros reais, agora aparecem o codificador em uso e
+  se ele está na GPU ou na CPU, o alvo do controle de taxa, a banda estimada,
+  as trocas de resolução, os keyframes, os "quadros enormes" — os que passam de
+  duas vezes e meia a média, que é a definição exata de um pico — e os pedidos
+  de reparo do outro lado. A leitura passou a ser a cada segundo: num intervalo
+  de dois, um pico entra diluído na média e some justamente da medida feita
+  para encontrá-lo.
+
 ## 0.2.1
 
 ### Correções

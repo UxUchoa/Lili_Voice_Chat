@@ -23,6 +23,7 @@ import {
   type ShareStats,
 } from "./screenShareStats";
 import {
+  applyScreenContentHint,
   DEFAULT_SHARE_QUALITY,
   screenPublishOptions,
   screenShareBitrate,
@@ -142,6 +143,10 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
       );
       for (const { track, origin, slot } of desired.values()) {
         if (published.has(track.id)) continue;
+        // Antes de publicar, e não junto das opções: o LiveKit ignora
+        // `contentHint` em `publishTrack`. O porquê está em `screenShare`.
+        if (origin === "screen" && track.kind === "video")
+          applyScreenContentHint(track);
         await room.localParticipant.publishTrack(track, {
           source:
             slot === "screen"
@@ -170,7 +175,11 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
                   degradationPreference: "maintain-resolution",
                   simulcast: true,
                   videoSimulcastLayers: [VideoPresets.h540],
-                  contentHint: "motion",
+                  // Aqui havia `contentHint: "motion"`, que o `publishTrack`
+                  // também ignorava. Sem efeito nenhum na câmera — uma track de
+                  // `getUserMedia` já nasce em modo de vídeo em movimento —,
+                  // mas escrito parecia configuração. Fica de fora pelo mesmo
+                  // motivo que saiu das opções de tela.
                 }
             : {}),
         });
@@ -530,9 +539,19 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
    * leituras servem porque bitrate e quadros por segundo são taxas — não
    * existem numa amostra só.
    *
-   * Dois segundos entre leituras: `getStats()` percorre a sessão inteira, e
-   * fazer isso a cada quadro seria gastar no diagnóstico a CPU que falta ao
-   * encoder. Só roda enquanto há tela publicada.
+   * Um segundo entre leituras, e não dois. Dois foi escolhido para poupar CPU,
+   * mas um pico de bits dura menos que isso: numa janela de dois segundos ele
+   * entra diluído na média e some justamente da medida feita para encontrá-lo.
+   * Em um segundo ele ainda aparece, e `getStats()` sobre uma sessão desse
+   * tamanho custa da ordem de um milissegundo — não é onde a CPU do encoder
+   * está sendo gasta. Só roda enquanto há tela publicada.
+   *
+   * `sender.getStats()` basta, e não é óbvio: além do `outbound-rtp` do próprio
+   * remetente, o relatório traz tudo o que ele referencia — o `media-source`
+   * com os quadros que a captura entregou, o `remote-inbound-rtp` com o que o
+   * outro lado perdeu e o `candidate-pair` com a estimativa de banda. Trocar
+   * para o `getStats()` da conexão exigiria alcançar as entranhas do LiveKit
+   * para nada.
    */
   useEffect(() => {
     if (connectionState !== "connected") {
@@ -566,7 +585,7 @@ export function useLiveKitRtc(roomId: string, enabled = true) {
     };
     const timer = window.setInterval(
       () => void sample().catch(() => undefined),
-      2_000,
+      1_000,
     );
     return () => {
       cancelled = true;

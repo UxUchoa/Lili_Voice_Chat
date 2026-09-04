@@ -3020,7 +3020,19 @@ a:focus-visible,
     640px,
     calc(100vh - var(--update-banner-safe-top) - 40px)
   );
-  overflow-y: auto;
+  /* Quem rola é a lista de notas, não o painel — e a diferença aparecia na
+     tela. Com a rolagem aqui, o painel era ao mesmo tempo a caixa que corta e
+     a referência do X, que é `position: absolute`. Bastavam vinte pixels de
+     rolagem para o cabeçalho passar por baixo da borda de cima: a linha de 1px
+     cortava ao meio o "NOVIDADES" e o X, e as ações do rodapé sumiam junto,
+     justamente numa versão de notas longas — que é quando alguém rola.
+
+     Em coluna, o cabeçalho e o rodapé ficam parados e só o miolo anda. O X
+     continua alcançável, o botão de instalar continua na tela, e nada mais
+     passa por baixo da borda. */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   /* 30px de respiro nas laterais e embaixo; 26px em cima porque ali existe
      mais uma coisa ocupando espaço — o X, que precisa de distância da borda
      sem empurrar o título para o meio do painel. */
@@ -3047,6 +3059,14 @@ a:focus-visible,
 }
 .release-notes-panel h2 {
   margin: 10px 0 14px;
+}
+/* O miolo é o único que rola. `min-height: 0` porque um filho de flex se recusa
+   a encolher abaixo do próprio conteúdo sem isso, e o painel voltaria a
+   transbordar em vez de rolar por dentro. */
+.release-notes {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 .release-notes h4 {
   margin: 18px 0 8px;
@@ -3089,6 +3109,8 @@ a:focus-visible,
   font-size: 12px;
 }
 .release-notes-actions {
+  /* Não encolhe e não rola: é a linha que tem o botão de instalar. */
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   /* 12px eram o gap de uma linha de texto; com dois alvos de 36px encostados,

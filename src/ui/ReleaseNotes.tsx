@@ -1,4 +1,5 @@
 import { Fragment, type ReactNode } from "react";
+import { normalizeReleaseNotes } from "../domain/releaseNotes";
 import { IconX } from "./icons";
 import { ModalPortal } from "./ModalPortal";
 
@@ -15,6 +16,14 @@ import { ModalPortal } from "./ModalPortal";
  * verdade nem quer ser — o texto vem do nosso próprio repositório, e trazer uma
  * biblioteca inteira para quatro marcações seria peso morto no pacote. Nada
  * disso passa por `dangerouslySetInnerHTML`: cada pedaço vira nó de React.
+ *
+ * O que chega aqui nem sempre é Markdown, e essa era a origem de um defeito
+ * visível: no aplicativo instalado as notas vêm do feed Atom do GitHub, onde o
+ * corpo da release já está convertido em HTML. O painel recebia `<h3>`, `<li>`
+ * e `<strong>`, não reconhecia nenhum e desenhava as etiquetas como texto —
+ * uma parede de HTML cru no lugar das novidades. `normalizeReleaseNotes`
+ * traduz esse HTML de volta para o Markdown que este arquivo já lê, então
+ * daqui para baixo continua existindo um formato só.
  */
 
 const INLINE = /(\*\*[^*\n]+\*\*|`[^`\n]+`)/g;
@@ -56,7 +65,7 @@ export function ReleaseNotes({ notes }: { notes: string }) {
     blocks.push(<p key={`p${blocks.length}`}>{inline(text, `p${blocks.length}`)}</p>);
   };
 
-  for (const raw of notes.split(/\r?\n/)) {
+  for (const raw of normalizeReleaseNotes(notes).split(/\r?\n/)) {
     const line = raw.trimEnd();
     const heading = /^(#{1,6})\s+(.*)$/.exec(line);
     const bullet = /^[-*]\s+(.*)$/.exec(line);

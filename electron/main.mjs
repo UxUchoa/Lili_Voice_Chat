@@ -13,6 +13,7 @@ import {
 } from "electron";
 import electronUpdater from "electron-updater";
 import { createDisplayMediaBridge } from "./displayMedia.mjs";
+import { execFile } from "node:child_process";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -521,10 +522,78 @@ ipcMain.handle("screen:sources", async (event) => {
 });
 
 /**
+ * O processo dono de uma janela, para capturar o áudio só daquele aplicativo.
+ *
+ * O `desktopCapturer` identifica uma janela por `window:<HWND>:0`, e o loopback
+ * por processo do Windows é endereçado por PID — ninguém faz essa tradução por
+ * nós. O Electron não expõe `GetWindowThreadProcessId`, e o projeto não tem
+ * módulo nativo; a saída é uma chamada curta ao PowerShell, que consegue fazer
+ * o P/Invoke. Medido: ~400 ms, e cobre também as janelas secundárias de um
+ * aplicativo (a segunda janela do Chrome, uma pasta do Explorador), que uma
+ * varredura por `MainWindowHandle` deixaria de fora.
+ *
+ * Os 400 ms saem de graça porque isto roda no `screen:share`, que o renderer já
+ * espera antes de pedir a captura.
+ *
+ * O identificador vai por variável de ambiente, e não interpolado no script: a
+ * lista de fontes é nossa, mas montar linha de comando com texto que veio do
+ * renderer é o tipo de coisa que só precisa dar errado uma vez.
+ */
+const WINDOW_PID_SCRIPT = `
+Add-Type -TypeDefinition 'using System;using System.Runtime.InteropServices;public static class LiliWin{[DllImport("user32.dll")]public static extern uint GetWindowThreadProcessId(IntPtr h,out uint p);}';
+$owner = 0;
+[void][LiliWin]::GetWindowThreadProcessId([IntPtr][int64]$env:LILI_WINDOW_HANDLE, [ref]$owner);
+$owner
+`;
+/** HWND já traduzido. Um HWND pode ser reciclado, então a resposta expira. */
+const windowPidCache = new Map();
+const WINDOW_PID_TTL_MS = 60_000;
+
+async function resolveWindowPid(sourceId) {
+  if (process.platform !== "win32") return null;
+  const handle = /^window:(\d+):/.exec(sourceId)?.[1];
+  if (!handle) return null;
+  const cached = windowPidCache.get(handle);
+  if (cached && Date.now() - cached.at < WINDOW_PID_TTL_MS) return cached.pid;
+  const pid = await new Promise((resolve) => {
+    execFile(
+      "powershell",
+      ["-NoProfile", "-NonInteractive", "-Command", WINDOW_PID_SCRIPT],
+      {
+        timeout: 5_000,
+        windowsHide: true,
+        env: { ...process.env, LILI_WINDOW_HANDLE: handle },
+      },
+      (error, stdout) => {
+        if (error) {
+          console.warn("[shell] não foi possível achar o processo da janela", error);
+          resolve(null);
+          return;
+        }
+        const parsed = Number.parseInt(String(stdout).trim(), 10);
+        // O próprio Lili é recusado de propósito: capturar a nossa árvore é
+        // exatamente o laço de eco que este trabalho todo existe para evitar.
+        resolve(
+          Number.isInteger(parsed) && parsed > 0 && parsed !== process.pid
+            ? parsed
+            : null,
+        );
+      },
+    );
+  });
+  windowPidCache.set(handle, { pid, at: Date.now() });
+  return pid;
+}
+
+/**
  * A ponte de captura de tela. A lógica e o porquê estão em `displayMedia.mjs`,
  * que fica fora daqui para poder ser exercitada por um Electron de teste.
  */
-const displayMedia = createDisplayMediaBridge({ desktopCapturer, session });
+const displayMedia = createDisplayMediaBridge({
+  desktopCapturer,
+  session,
+  resolveWindowPid,
+});
 
 /** Só o quadro principal da janela da aplicação pode capturar a tela. */
 const isMainFrameRequest = (request) =>
@@ -533,6 +602,25 @@ const isMainFrameRequest = (request) =>
 ipcMain.handle("screen:share", (event, input) => {
   if (event.sender !== mainWindow?.webContents) throw new Error("Acesso negado.");
   return displayMedia.select(input?.sourceId, input?.audio);
+});
+
+/**
+ * Se o Chromium está codificando vídeo na GPU ou na CPU.
+ *
+ * `encoderImplementation` do `getStats()` diz qual encoder saiu escolhido, mas
+ * só depois de a transmissão existir e só quando alguma permissão de mídia foi
+ * concedida. Isto aqui responde antes e sempre, e responde o *porquê*: quando o
+ * `video_encode` vem em `disabled_*`, nenhum ajuste de bitrate vai consertar o
+ * tempo de codificação — o caminho de hardware nem está disponível.
+ */
+ipcMain.handle("media:capabilities", (event) => {
+  if (event.sender !== mainWindow?.webContents) return null;
+  const status = app.getGPUFeatureStatus();
+  return {
+    videoEncode: status.video_encode,
+    videoDecode: status.video_decode,
+    gpuCompositing: status.gpu_compositing,
+  };
 });
 
 ipcMain.handle("secret:status", (event) => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyScreenContentHint,
   DEFAULT_SHARE_QUALITY,
   SCREEN_CONTENT_HINT,
   SCREEN_DEGRADATION,
@@ -173,9 +174,37 @@ describe("as opções de publicação da tela", () => {
       ).toBeGreaterThanOrEqual(30);
   });
 
-  it("preservam fluidez e tratam o conteúdo como movimento", () => {
+  it("preservam fluidez: cede resolução antes de ceder quadros", () => {
     const options = screenPublishOptions(DEFAULT_SHARE_QUALITY);
     expect(options.degradationPreference).toBe("maintain-framerate");
-    expect(options.contentHint).toBe("motion");
+  });
+
+  /**
+   * A asserção que teria pego o defeito, e que não existia porque o teste
+   * antigo lia o campo do lugar errado.
+   *
+   * `contentHint` estava escrito nas opções de publicação e o teste conferia
+   * que estava — mas o LiveKit só olha esse campo quando é ele quem captura a
+   * tela. Publicando uma track já pronta, ele é ignorado em silêncio: o teste
+   * passava, e o encoder rodava em modo de conteúdo estático desde sempre.
+   *
+   * Agora o teste olha para onde o encoder olha, que é a própria track.
+   */
+  it("não carregam contentHint nas opções, porque lá ele é ignorado", () => {
+    expect(screenPublishOptions(DEFAULT_SHARE_QUALITY)).not.toHaveProperty(
+      "contentHint",
+    );
+  });
+
+  it("carimbam a dica de movimento na track, que é onde ela vale", () => {
+    const track = { contentHint: "" } as MediaStreamTrack;
+    applyScreenContentHint(track);
+    expect(track.contentHint).toBe("motion");
+  });
+
+  it("não quebram numa track sem suporte a contentHint", () => {
+    const track = {} as MediaStreamTrack;
+    expect(() => applyScreenContentHint(track)).not.toThrow();
+    expect(track.contentHint).toBeUndefined();
   });
 });

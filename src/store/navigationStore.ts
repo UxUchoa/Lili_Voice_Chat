@@ -151,6 +151,14 @@ export function parseLocationHash(hash: string): NavigationLocation | null {
   };
 }
 
+/** Um código de convite tem 12 caracteres de base64url; nada além disso entra. */
+const INVITE_CODE = /^[A-Za-z0-9_-]{4,64}$/;
+
+const codeFromParts = (parts: string[]) =>
+  parts[0] === "invite" && parts[1] && INVITE_CODE.test(parts[1])
+    ? parts[1]
+    : "";
+
 /**
  * `#/invite/<codigo>` → `<codigo>`.
  *
@@ -158,8 +166,29 @@ export function parseLocationHash(hash: string): NavigationLocation | null {
  * para onde ele leva: o servidor só é conhecido depois que o código é trocado.
  */
 export function inviteCodeFromHash(hash: string): string {
-  const parts = hash.replace(/^#/, "").split("/").filter(Boolean);
-  return parts[0] === "invite" && parts[1] ? parts[1] : "";
+  return codeFromParts(hash.replace(/^#/, "").split("/").filter(Boolean));
+}
+
+/**
+ * O código do convite, venha ele no caminho ou no fragmento.
+ *
+ * As duas formas existem por um motivo, e não por indecisão. O fragmento nunca
+ * chega ao servidor — é isso que ele é —, então um endereço `#/invite/CODE`
+ * chega ao Discord, ao WhatsApp e a qualquer coisa que desdobre links como se
+ * fosse a página inicial do site. Era por isso que todo convite virava o mesmo
+ * cartão "Lili — Voice Chat", sem dizer para qual servidor chamava.
+ *
+ * O caminho `/invite/CODE` chega. Os links novos são assim, e é o que permite
+ * responder com o nome e o ícone do servidor antes de qualquer login.
+ *
+ * O fragmento continua sendo lido porque os convites já copiados por aí não
+ * deixam de existir quando o formato muda.
+ */
+export function inviteCodeFromLocation(hash: string, pathname: string): string {
+  return (
+    inviteCodeFromHash(hash) ||
+    codeFromParts(pathname.split("/").filter(Boolean))
+  );
 }
 
 /**
@@ -171,7 +200,7 @@ export function inviteCodeFromHash(hash: string): string {
  */
 export function inviteUrl(code: string): string {
   const base = onlineConfig.siteUrl || window.location.origin;
-  return `${base}/#/invite/${code}`;
+  return `${base}/invite/${code}`;
 }
 
 /** Estado → endereço. */

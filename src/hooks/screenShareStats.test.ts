@@ -124,4 +124,120 @@ describe("summarizeOutboundVideo", () => {
       ),
     ).toBeNull();
   });
+
+  /**
+   * Os contadores que explicam um pico.
+   *
+   * Um pico de bits não se explica pelo bitrate médio — ele já passou quando a
+   * média fecha. O que sobra dele são os rastros: a troca de resolução que o
+   * causou, o keyframe que a troca exigiu, os pacotes que não couberam e o
+   * pedido de reparo que veio em seguida. Sem esses números, ajustar bitrate é
+   * palpite; era assim que se estava trabalhando.
+   */
+  it("conta trocas de resolução, keyframes e reparos do intervalo", () => {
+    const antes = [
+      base({
+        keyFramesEncoded: 10,
+        hugeFramesSent: 2,
+        qualityLimitationResolutionChanges: 3,
+        nackCount: 100,
+        pliCount: 5,
+        firCount: 1,
+        retransmittedPacketsSent: 40,
+      }),
+    ];
+    const agora = [
+      base({
+        timestamp: 1000,
+        packetsSent: 1000,
+        keyFramesEncoded: 12,
+        hugeFramesSent: 5,
+        qualityLimitationResolutionChanges: 5,
+        nackCount: 130,
+        pliCount: 7,
+        firCount: 1,
+        retransmittedPacketsSent: 65,
+      }),
+      codec,
+    ];
+    const stats = summarizeOutboundVideo(agora, antes)!;
+    expect(stats.keyFrames).toBe(2);
+    // O pico com nome: três quadros passaram de 2,5 vezes a média no intervalo.
+    expect(stats.hugeFrames).toBe(3);
+    expect(stats.resolutionChanges).toBe(2);
+    expect(stats.nack).toBe(30);
+    expect(stats.pli).toBe(2);
+    // O contador que não andou não vira ruído na linha.
+    expect(stats.fir).toBe(0);
+    expect(stats.retransmittedPercent).toBe(2.5);
+    const linha = describeShareStats(stats);
+    expect(linha).toContain("2 trocas de resolução");
+    expect(linha).toContain("3 quadros enormes");
+    expect(linha).toContain("NACK 30");
+    expect(linha).not.toContain("FIR");
+  });
+
+  it("separa o que a captura entregou do que o encoder deu conta de mandar", () => {
+    // Sessenta quadros capturados e trinta enviados é encoder; trinta
+    // capturados e trinta enviados é a tela que não mudou. Sem os dois números
+    // as duas situações são a mesma linha.
+    const media = (over: Partial<OutboundSample>) =>
+      ({ type: "media-source", kind: "video", ...over }) as OutboundSample;
+    const stats = summarizeOutboundVideo(
+      [
+        base({ timestamp: 1000, framesSent: 30 }),
+        media({ frames: 60, framesDropped: 5 }),
+        codec,
+      ],
+      [base({ framesSent: 0 }), media({ frames: 0, framesDropped: 0 })],
+    )!;
+    expect(stats.captureFps).toBe(60);
+    expect(stats.fps).toBe(30);
+    expect(stats.droppedFps).toBe(5);
+    expect(describeShareStats(stats)).toContain("captura 60 fps");
+  });
+
+  /**
+   * Um fallback do encoder de hardware para a CPU é a causa que nenhuma outra
+   * medida revela: o tempo de codificação sobe, os quadros atrasam, a fila
+   * cresce e o sintoma chega como congestionamento de rede. Registrar qual
+   * encoder está rodando é a diferença entre achar isso e mexer no bitrate à
+   * toa.
+   */
+  it("registra qual encoder está rodando e se ele é o de hardware", () => {
+    const stats = summarizeOutboundVideo(
+      [
+        base({
+          timestamp: 1000,
+          encoderImplementation: "libvpx",
+          powerEfficientEncoder: false,
+          targetBitrate: 2_200_000,
+        }),
+        {
+          type: "candidate-pair",
+          availableOutgoingBitrate: 3_100_000,
+        } as OutboundSample,
+        codec,
+      ],
+      [base()],
+    )!;
+    expect(stats.encoder).toBe("libvpx");
+    expect(stats.hardwareEncoder).toBe(false);
+    expect(stats.targetKbps).toBe(2200);
+    expect(stats.availableKbps).toBe(3100);
+    expect(describeShareStats(stats)).toContain("libvpx (CPU)");
+  });
+
+  it("não afirma nada sobre o encoder quando o navegador não conta", () => {
+    // O Chromium só expõe esses dois campos com alguma permissão de mídia
+    // concedida. Inventar "CPU" na ausência deles seria pior que o traço.
+    const stats = summarizeOutboundVideo(
+      [base({ timestamp: 1000 }), codec],
+      [base()],
+    )!;
+    expect(stats.encoder).toBeNull();
+    expect(stats.hardwareEncoder).toBeNull();
+    expect(stats.availableKbps).toBeNull();
+    expect(describeShareStats(stats)).not.toContain("CPU");
+  });
 });

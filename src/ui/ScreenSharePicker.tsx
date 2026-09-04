@@ -174,7 +174,11 @@ export function ScreenSharePicker({
             <b>Personalizada</b>
             <span>
               {sharePreset(quality).label} ·{" "}
-              {systemAudio ? "com o som do computador" : "sem áudio"}
+              {!systemAudio
+                ? "sem áudio"
+                : tab === "window"
+                  ? "com o som do aplicativo"
+                  : "com o som do computador"}
             </span>
           </div>
           <button
@@ -230,17 +234,19 @@ export function ScreenSharePicker({
                   className={systemAudio ? "active" : ""}
                   onClick={() => onSystemAudioChange(true)}
                 >
-                  Computador inteiro
+                  Levar o som
                 </button>
               </div>
-              {/* O nome da opção diz o que ela faz porque o sistema não
-                  oferece melhor: o loopback do Windows é da saída de áudio,
-                  não da janela. Chamá-la de "incluir áudio" fazia parecer que
-                  o som viria do que está sendo compartilhado. */}
+              {/* O texto muda com a aba porque o comportamento muda: numa
+                  janela o som capturado é o do processo dono dela, num monitor
+                  é a saída inteira. A opção chamava-se "Computador inteiro"
+                  quando essa era a única coisa que sabíamos fazer. */}
               <p className="share-quality-hint">
-                {systemAudio
-                  ? "Vai o som de tudo o que estiver tocando no computador — inclusive música, notificações e outras conversas. O Windows não separa o áudio por janela. Se estiver no alto-falante, quem está na chamada vai se ouvir de volta."
-                  : "Só a imagem. Um jogo ou um vídeo chega mudo do outro lado, e você não tem como perceber daqui."}
+                {!systemAudio
+                  ? "Só a imagem. Um jogo ou um vídeo chega mudo do outro lado, e você não tem como perceber daqui."
+                  : tab === "window"
+                    ? "Vai o som do aplicativo escolhido, e só dele — nada de notificações, música de outro programa ou da chamada. Se o Windows não deixar identificar o processo da janela, o som do computador vai no lugar."
+                    : "Vai o som de tudo o que estiver tocando no computador: jogo, navegador, player, notificações. A chamada em si fica de fora, então ninguém se ouve de volta."}
               </p>
             </div>
           )}

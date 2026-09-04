@@ -15,6 +15,10 @@ contextBridge.exposeInMainWorld(
     // seguinte a consome; e o principal que decide o que sera capturado.
     prepareScreenShare: (sourceId, audio) =>
       ipcRenderer.invoke("screen:share", { sourceId, audio }),
+    // Se o video esta sendo codificado na GPU ou na CPU. Um fallback para
+    // software eleva o tempo de codificacao e e a primeira coisa a conferir
+    // quando a transmissao engasga.
+    mediaCapabilities: () => ipcRenderer.invoke("media:capabilities"),
     secretStatus: () => ipcRenderer.invoke("secret:status"),
     wrapSecret: (plaintext) => ipcRenderer.invoke("secret:wrap", plaintext),
     unwrapSecret: (wrapped) => ipcRenderer.invoke("secret:unwrap", wrapped),

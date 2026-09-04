@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   activeMentionQuery,
+  mentionIsComplete,
   applyMention,
   containsMention,
   segmentMentions,
@@ -242,5 +243,62 @@ describe("cache de ordenação", () => {
     ];
     const primeira = segmentMentions("oi @anapaula", alvos);
     expect(segmentMentions("oi @anapaula", alvos)).toEqual(primeira);
+  });
+});
+
+/**
+ * A lista tinha que sumir depois da escolha, e não sumia.
+ *
+ * `applyMention` deixa `@fulano ` com o cursor no fim; o trecho "fulano "
+ * continuava contando como busca em curso e a lista reabria com a mesma pessoa.
+ * Quem escrevia não tinha sinal nenhum de que a menção pegou — ainda mais
+ * quando o que entra no campo é o `username` e a lista mostra o nome de
+ * exibição ("itozo" na lista, `@ito` no campo).
+ */
+describe("menção fechada não sugere mais nada", () => {
+  const alvos = [
+    { id: "1", token: "ito", label: "itozo", hint: "@ito", kind: "user" as const },
+    { id: "2", token: "itozinho", label: "Ito Jr.", kind: "user" as const },
+    { id: "3", token: "Time de Suporte", label: "Time de Suporte", kind: "role" as const },
+  ];
+
+  it("fecha a lista depois de escolher alguém", () => {
+    const depois = applyMention("@ito", 4, alvos[0]);
+    expect(depois.text).toBe("@ito ");
+    const ativo = activeMentionQuery(depois.text, depois.caret)!;
+    expect(suggestMentions(ativo.query, alvos)).toEqual([]);
+  });
+
+  it("continua sugerindo enquanto não há espaço, porque ainda dá para crescer", () => {
+    // `@ito` ainda pode virar `@itozinho`: fechar aqui esconderia a segunda.
+    expect(suggestMentions("ito", alvos).map((alvo) => alvo.token)).toEqual([
+      "ito",
+      "itozinho",
+    ]);
+  });
+
+  it("não fecha um cargo de várias palavras pela metade", () => {
+    expect(mentionIsComplete("Time de ", alvos)).toBe(false);
+    expect(suggestMentions("Time de ", alvos).map((alvo) => alvo.token)).toEqual([
+      "Time de Suporte",
+    ]);
+  });
+
+  it("fecha quando o cargo inteiro foi escrito", () => {
+    expect(mentionIsComplete("Time de Suporte ", alvos)).toBe(true);
+  });
+
+  it("fecha nas menções de alcance amplo", () => {
+    expect(mentionIsComplete("everyone ", alvos)).toBe(true);
+    expect(mentionIsComplete("here ", alvos)).toBe(true);
+  });
+
+  it("um espaço sozinho não fecha nada", () => {
+    expect(mentionIsComplete(" ", alvos)).toBe(false);
+  });
+
+  it("não confunde um nome parecido com o escolhido", () => {
+    // "itoz " não é o token de ninguém: continua sendo busca em curso.
+    expect(mentionIsComplete("itoz ", alvos)).toBe(false);
   });
 });

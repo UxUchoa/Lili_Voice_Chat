@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { locationHash, parseLocationHash } from "./navigationStore";
+import {
+  inviteCodeFromHash,
+  inviteCodeFromLocation,
+  locationHash,
+  parseLocationHash,
+} from "./navigationStore";
 
 describe("endereço da navegação", () => {
   it("lê a Home, as solicitações e uma conversa direta", () => {
@@ -115,5 +120,42 @@ describe("endereço da navegação", () => {
         dmChannelId: "",
       }),
     ).toBe("#/channels/@me");
+  });
+});
+
+/**
+ * O convite mudou de forma por um motivo de fora do aplicativo: um fragmento
+ * (`#/invite/CODE`) nunca chega ao servidor, então todo link colado no Discord
+ * ou no WhatsApp pedia a página inicial e virava o mesmo cartão genérico. O
+ * caminho (`/invite/CODE`) chega, e é o que permite responder com o nome e o
+ * ícone do servidor.
+ */
+describe("código de convite no endereço", () => {
+  it("lê o caminho, que é a forma nova", () => {
+    expect(inviteCodeFromLocation("", "/invite/AEA2WKTa5Aln")).toBe(
+      "AEA2WKTa5Aln",
+    );
+  });
+
+  it("continua lendo o fragmento, porque os links antigos não somem", () => {
+    expect(inviteCodeFromLocation("#/invite/AEA2WKTa5Aln", "/")).toBe(
+      "AEA2WKTa5Aln",
+    );
+    expect(inviteCodeFromHash("#/invite/AEA2WKTa5Aln")).toBe("AEA2WKTa5Aln");
+  });
+
+  it("não confunde outra rota com convite", () => {
+    expect(inviteCodeFromLocation("#/channels/@me", "/")).toBe("");
+    expect(inviteCodeFromLocation("", "/channels/servidor-1")).toBe("");
+    expect(inviteCodeFromLocation("", "/")).toBe("");
+  });
+
+  /**
+   * O código vai para dentro de uma chamada ao banco e de um endereço; o que
+   * não parece um código não pode chegar em nenhum dos dois.
+   */
+  it("recusa um código com formato estranho", () => {
+    expect(inviteCodeFromLocation("", "/invite/<script>")).toBe("");
+    expect(inviteCodeFromLocation("#/invite/a", "/")).toBe("");
   });
 });

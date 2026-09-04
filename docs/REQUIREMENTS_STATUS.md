@@ -92,6 +92,19 @@ testes executados contra Supabase, Realtime, OpenMLS e LiveKit/TURN locais.
 ## Parcial — precisa de refinamento
 
 - Web Push: fila, preferências e dispatcher têm testes locais; ainda falta aceite externo com o aplicativo fechado e um endpoint push público real. A notificação foreground/desktop multi-sessão já possui E2E local.
+- **Aviso no ícone do aplicativo** (04/09/2026, pedido de usuário na própria
+  conversa): a notificação aparece, mas o ícone na barra de tarefas não muda —
+  quem está acostumado com o Discord procura o contador ali primeiro. Falta o
+  `setBadgeCount`/`setOverlayIcon` no Electron e o `navigator.setAppBadge` na
+  web, alimentados pelo mesmo total de não lidas que a barra de servidores já
+  calcula.
+- **Avatar de quem enviou na notificação** (04/09/2026, mesmo pedido): as três
+  vias mostram o logo do Lili, e não a pessoa. O desktop fixa
+  `logo-vetorizada.png` em `notification:show`, a web chama `new Notification`
+  sem `icon` e o service worker fixa o mesmo logo em `icon` e `badge`. Com
+  várias conversas abertas, todas as notificações ficam idênticas — o remetente
+  só aparece no texto. O avatar já está no perfil carregado; falta levá-lo até
+  as três chamadas.
 - Dispositivos: revogação persiste imediatamente; a remoção OpenMLS ocorre quando o dispositivo fundador volta a sincronizar o grupo. QR e recovery pack E2EE opcional não existem.
 - Voz/vídeo: os controles estão automatizados no Edge com dispositivos virtuais e captura de tela do navegador; ainda falta aceitação manual com hardware físico, múltiplos monitores e redes reais distintas.
 - Responsividade e animações: a navegação principal funciona em desktop e 390 px; telas administrativas densas ainda precisam de uma revisão visual dedicada em aparelhos pequenos.

@@ -16,13 +16,27 @@ interface Window {
     listScreenSources: () => Promise<LiliScreenSource[]>;
     /**
      * Registra no processo principal a fonte que será capturada em seguida.
-     * Devolve se o áudio do sistema estará disponível — só o Windows tem
-     * loopback.
+     *
+     * Devolve se haverá som e de onde ele virá: `application` é o loopback do
+     * processo dono da janela escolhida — o som daquele aplicativo e de mais
+     * nada; `system` é a saída inteira do Windows, que é o que sobra quando a
+     * fonte é um monitor ou quando o processo da janela não foi identificado.
+     * Quem compartilha é a única pessoa que não ouve o resultado, então a
+     * diferença precisa chegar à tela.
      */
     prepareScreenShare: (
       sourceId: string,
       audio: boolean,
-    ) => Promise<{ audioAvailable: boolean }>;
+    ) => Promise<{
+      audioAvailable: boolean;
+      audioMode: "application" | "system" | "none";
+    }>;
+    /** Se o Chromium codifica vídeo na GPU ou caiu para a CPU. */
+    mediaCapabilities: () => Promise<{
+      videoEncode: string;
+      videoDecode: string;
+      gpuCompositing: string;
+    } | null>;
     secretStatus: () => Promise<{ available: boolean; backend: string }>;
     wrapSecret: (plaintext: string) => Promise<string>;
     unwrapSecret: (wrapped: string) => Promise<string>;
