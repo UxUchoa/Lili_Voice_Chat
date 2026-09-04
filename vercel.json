@@ -6,11 +6,7 @@
   "outputDirectory": "dist",
   "github": { "silent": true },
   "rewrites": [
-    {
-      "//": "Antes do curinga, senão o convite cairia no index.html e o cartão voltaria a ser o genérico do site.",
-      "source": "/invite/:code",
-      "destination": "/api/invite?code=:code"
-    },
+    { "source": "/invite/:code", "destination": "/api/invite?code=:code" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [

@@ -24,3 +24,7 @@ supabase/snippets/
 supabase/functions/
 .github/
 playwright.config.ts
+# `api/*.js` são funções serverless de verdade e precisam ir; o teste ao
+# lado não exporta handler nenhum e o Vercel trataria o arquivo como uma
+# função quebrada.
+api/*.test.js
